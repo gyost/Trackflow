@@ -128,9 +128,9 @@ const ProjectTrackingView = ({
   return (
     <div className="flex flex-col w-full h-full bg-[#F7F6F2] text-[#1A1A1A] overflow-hidden">
       {/* Sleek Header & Metric Row */}
-      <div className="bg-[#F7F6F2] border-b border-[#1A1A1A]/10 px-4 sm:px-8 py-6 sm:py-10 flex flex-col lg:flex-row gap-6 sm:gap-10 lg:items-end justify-between">
+      <div className="bg-[#F7F6F2] border-b border-[#1A1A1A]/5 px-4 sm:px-8 py-4 sm:py-10 flex flex-col lg:flex-row gap-6 sm:gap-10 lg:items-end justify-between pt-6 sm:pt-10">
         <div>
-          <h2 className="text-3xl sm:text-4xl font-serif italic tracking-tight mb-4">项目跟踪</h2>
+          <h2 className="text-3xl sm:text-4xl font-serif italic tracking-tight mb-4 text-[#1A1A1A]">项目跟踪</h2>
           <div className="flex gap-4 text-xs font-mono uppercase tracking-widest opacity-60">
              <div className="flex items-center gap-2 border-b border-[#1A1A1A]/20 pb-1 cursor-pointer hover:opacity-100 transition-opacity">
                 <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="bg-transparent outline-none cursor-pointer appearance-none">
@@ -159,10 +159,10 @@ const ProjectTrackingView = ({
              </div>
            </div>
            
-           <div className="flex overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory pb-2 -mb-2 w-[calc(100vw-32px)] sm:w-full">
-             <div className="flex gap-4 sm:gap-8 shrink-0 pb-2">
+           <div className="flex overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory pb-4 -mb-4 w-[calc(100vw-32px)] sm:w-full -mx-4 sm:mx-0 px-4 sm:px-0">
+             <div className="flex gap-4 sm:gap-6 shrink-0 pb-2">
                {statusCounts.map(item => (
-                  <div key={item.status} onClick={() => setFilterStatus(filterStatus === item.status ? 'all' : item.status)} className={`shrink-0 snap-center cursor-pointer transition-opacity ${filterStatus !== 'all' && filterStatus !== item.status ? 'opacity-30' : 'opacity-100'}`}>
+                  <div key={item.status} onClick={() => setFilterStatus(filterStatus === item.status ? 'all' : item.status)} className={`bg-white/60 backdrop-blur-md rounded-2xl p-4 min-w-[120px] shrink-0 snap-start cursor-pointer hover:shadow-sm transition-all ${filterStatus === item.status ? 'shadow-[0_2px_10px_rgb(0,0,0,0.06)] border border-[#1A1A1A]/10 opacity-100 scale-105' : filterStatus !== 'all' ? 'opacity-30 border border-transparent scale-95' : 'opacity-100 border border-[#1A1A1A]/5'}`}>
                       <div className="text-[10px] uppercase font-bold tracking-widest opacity-50 mb-1.5 flex items-center lg:justify-end gap-1.5">
                          {statusLabels[item.status]}
                          <span className={`w-1.5 h-1.5 rounded-full ${statusColors[item.status]}`}></span>
@@ -179,13 +179,16 @@ const ProjectTrackingView = ({
       <div className="flex-1 p-4 sm:p-8 max-w-7xl mx-auto w-full flex flex-col min-h-0">
         {/* Tool Bar */}
         <div className="flex flex-col xl:flex-row gap-4 sm:gap-6 mb-6 sm:mb-8 items-start xl:items-center justify-between shrink-0">
-          <div className="relative w-full xl:w-[320px]">
-            <input 
-              placeholder="搜索客户、产品、负责人..." 
-              value={searchTerm} 
-              onChange={(e) => setSearchTerm(e.target.value)} 
-              className="bg-transparent border-b border-[#1A1A1A]/30 py-2 text-[13px] w-full outline-none focus:border-[#1A1A1A] transition-colors placeholder:opacity-50" 
-            />
+          <div className="w-full xl:w-[320px]">
+            <div className="flex items-center bg-black/5 rounded-xl px-3 py-2 w-full">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-40"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input 
+                placeholder="搜索项目与客户..." 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+                className="bg-transparent border-none text-[14px] w-full outline-none px-2 placeholder:text-[#1A1A1A]/30 text-[#1A1A1A] font-medium" 
+              />
+            </div>
           </div>
           
           <div className="flex flex-col xl:flex-row xl:flex-wrap items-start xl:items-center gap-4 sm:gap-6 text-[11px] sm:text-[13px] w-full xl:w-auto mt-2 xl:mt-0">
@@ -223,7 +226,7 @@ const ProjectTrackingView = ({
              </button>
 
              {/* Mobile Add Project FAB */}
-             <button onClick={onAdd} className="sm:hidden fixed bottom-[calc(85px+env(safe-area-inset-bottom))] right-4 z-40 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_8px_30px_rgb(37,99,235,0.3)] flex items-center justify-center active:scale-95 transition-transform">
+             <button onClick={onAdd} className="sm:hidden fixed bottom-[calc(90px+env(safe-area-inset-bottom))] right-4 z-40 bg-zinc-800 text-white w-14 h-14 rounded-[22px] shadow-[0_8px_30px_rgb(0,0,0,0.2)] flex items-center justify-center active:scale-95 transition-transform">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
              </button>
              
@@ -378,7 +381,7 @@ const ProjectTrackingView = ({
                </div>
                
                {/* Mobile Card Layout */}
-               <div className="md:hidden flex flex-col gap-4 pb-[calc(100px+env(safe-area-inset-bottom))]">
+               <div className="md:hidden flex flex-col gap-4 pb-[calc(120px+env(safe-area-inset-bottom))]">
                  {filtered.map((t, i) => (
                    <div key={t.id} className="bg-white/80 backdrop-blur-xl border border-black/5 rounded-[24px] p-5 flex flex-col gap-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden active:scale-[0.98] transition-transform" onClick={() => handleAction(t.id, 'details', () => onViewDetails(t))}>
                      {/* Header */}
@@ -2769,17 +2772,17 @@ export default function App() {
           )}
           {currentView === 'dashboard' && (
             <div className="flex-1 w-full space-y-10">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-baseline mb-6 gap-2 sm:gap-0 border-b border-[#1A1A1A]/20 pb-4">
-                <div className="flex items-center gap-4">
-                  <h2 className="text-xl sm:text-2xl font-serif italic text-[#1A1A1A]">全局综合数据看板</h2>
-                  <span className="text-[10px] font-mono tracking-widest bg-black text-white px-2 py-1">DATABOARD . V1</span>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-baseline mb-6 gap-2 sm:gap-0 sm:border-b border-[#1A1A1A]/20 pb-2 sm:pb-4 px-4 sm:px-0 mt-4 sm:mt-0">
+                <div className="flex flex-col gap-1">
+                  <h2 className="text-2xl sm:text-3xl font-serif italic text-[#1A1A1A]">全局看板</h2>
+                  <p className="text-[11px] font-sans text-[#1A1A1A]/50 uppercase tracking-widest hidden sm:block">DATABOARD . V1</p>
                 </div>
               </div>
 
 
               {/* Digital Metrics Board */}
               <div className="flex flex-col gap-4 mb-2">
-                <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory pb-4">
+                <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 px-4 sm:px-0 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory scroll-smooth pb-4 -mx-4 sm:mx-0">
                   
                   {/* 1. Year to Date Profit */}
                   {(() => {
@@ -2807,11 +2810,11 @@ export default function App() {
                     }
 
                     return (
-                      <div className="bg-white border border-[#1A1A1A]/10 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-[#1A1A1A]/20 transition-all min-w-[280px] sm:min-w-0 w-full shrink-0 snap-center rounded-2xl sm:rounded-none">
+                      <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[300px] sm:min-w-0 w-full shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
                         <div className="absolute -top-4 -right-4 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                           <span className="text-8xl font-serif">¥</span>
                         </div>
-                        <span className="text-[10px] uppercase tracking-widest font-bold opacity-60 text-[#1A1A1A] relative z-10 w-[85%] leading-tight">本年度累计利润 (万) / 目标: {annualTargetProfit}</span>
+                        <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A] relative z-10 w-[85%] leading-tight">本年度累计利润 (万) / 目标: {annualTargetProfit}</span>
                         <div className="flex items-baseline gap-2 relative z-10">
                           <span className={`text-4xl font-serif italic ${textColor}`}>{currentYearActualProfit}</span>
                           <span className={`text-[10px] font-mono ${textColor} ${badgeBg} px-1.5 py-0.5 rounded-sm`}>
@@ -2860,11 +2863,11 @@ export default function App() {
                     }
                     
                     return (
-                      <div className="bg-white border border-[#1A1A1A]/10 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-[#1A1A1A]/20 transition-all min-w-[280px] sm:min-w-0 w-full shrink-0 snap-center rounded-2xl sm:rounded-none">
+                      <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[300px] sm:min-w-0 w-full shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
                         <div className="absolute -top-4 -right-4 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                           <span className="text-8xl font-serif">¥</span>
                         </div>
-                        <span className="text-[10px] uppercase tracking-widest font-bold opacity-60 text-[#1A1A1A] relative z-10 leading-tight">当月利润目标 / 实际 (万)</span>
+                        <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A] relative z-10 leading-tight">当月利润目标 / 实际 (万)</span>
                         <div className="flex items-baseline gap-2 relative z-10 mt-2">
                           <span className={`text-3xl font-serif italic ${textColor}`}>{currentMonthActualProfit}</span>
                           <span className="text-[10px] font-mono text-[#1A1A1A]/40 uppercase">/ {currentMonthTargetProfit}</span>
@@ -2914,11 +2917,11 @@ export default function App() {
                     }
                     
                     return (
-                      <div className="bg-white border border-[#1A1A1A]/10 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-[#1A1A1A]/20 transition-all min-w-[280px] sm:min-w-0 w-full shrink-0 snap-center rounded-2xl sm:rounded-none">
+                      <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[300px] sm:min-w-0 w-full shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
                         <div className="absolute -top-4 -right-4 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                           <span className="text-8xl font-serif">¥</span>
                         </div>
-                        <span className="text-[10px] uppercase tracking-widest font-bold opacity-60 text-[#1A1A1A] relative z-10 leading-tight">当月合同目标 / 实际 (万)</span>
+                        <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A] relative z-10 leading-tight">当月合同目标 / 实际 (万)</span>
                         <div className="flex items-baseline gap-2 relative z-10 mt-2">
                           <span className={`text-3xl font-serif italic ${textColor}`}>{currentMonthActualContract}</span>
                           <span className="text-[10px] font-mono text-[#1A1A1A]/40 uppercase">/ {currentMonthTargetContract}</span>
@@ -2939,8 +2942,8 @@ export default function App() {
                   })()}
 
                   {/* 4. Combined Month Collection */}
-                  <div className="bg-white border border-[#1A1A1A]/10 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-[#1A1A1A]/20 transition-all min-w-[280px] sm:min-w-0 w-full shrink-0 snap-center rounded-2xl sm:rounded-none">
-                    <span className="text-[10px] uppercase tracking-widest font-bold opacity-60 text-[#1A1A1A] relative z-10 w-[85%] leading-tight">当月回款目标 / 实际 (万)</span>
+                  <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[300px] sm:min-w-0 w-full shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
+                    <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A] relative z-10 w-[85%] leading-tight">当月回款目标 / 实际 (万)</span>
                     <div className="flex items-baseline gap-2 relative z-10 mt-2">
                        <span className="text-3xl font-serif italic text-[#1A1A1A]">{currentMonthActualCollection}</span>
                        <span className="text-[10px] font-mono text-[#1A1A1A]/40 uppercase">/ {currentMonthTargetCollection}</span>
@@ -2983,33 +2986,33 @@ export default function App() {
                 </div>
 
                 {/* Client Stats Row */}
-                <div className="flex sm:grid sm:grid-cols-2 md:grid-cols-4 gap-4 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory pb-4">
-                  <div className="bg-white border border-[#1A1A1A]/10 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-[#1A1A1A]/30 hover:shadow-md transition-all min-w-[240px] sm:min-w-0 shrink-0 snap-center rounded-2xl sm:rounded-sm">
-                    <span className="text-[10px] uppercase tracking-widest opacity-60 text-[#1A1A1A]">潜在客户库 (年度累计)</span>
+                <div className="flex sm:grid sm:grid-cols-2 md:grid-cols-4 gap-4 px-4 sm:px-0 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory scroll-smooth pb-4 -mx-4 sm:mx-0">
+                  <div className="bg-white/80 backdrop-blur-md border border-black/5 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[260px] sm:min-w-0 shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
+                    <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A]">潜在客户库 (年度累计)</span>
                     <div className="flex items-baseline gap-2 mt-2">
                       <span className="text-3xl font-serif italic text-[#1A1A1A]">{yearLeadClients}</span>
                       <span className="text-[9px] font-mono text-[#1A1A1A]/40 uppercase">Total / {yearTargetLeadClients}</span>
                     </div>
                   </div>
                   
-                  <div className="bg-white border border-[#1A1A1A]/10 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-[#1A1A1A]/30 hover:shadow-md transition-all min-w-[240px] sm:min-w-0 shrink-0 snap-center rounded-2xl sm:rounded-sm">
-                    <span className="text-[10px] uppercase tracking-widest opacity-60 text-[#1A1A1A]">已开发推进中 (年度累计)</span>
+                  <div className="bg-white/80 backdrop-blur-md border border-black/5 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[260px] sm:min-w-0 shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
+                    <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A]">已开发推进中 (年度累计)</span>
                     <div className="flex items-baseline gap-2 mt-2">
                       <span className="text-3xl font-serif italic text-[#16a34a]">{yearActiveClients}</span>
                       <span className="text-[9px] font-mono text-[#1A1A1A]/40 uppercase">Active / {yearTargetActiveClients}</span>
                     </div>
                   </div>
 
-                  <div className="bg-white border border-[#1A1A1A]/10 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-[#1A1A1A]/30 hover:shadow-md transition-all min-w-[240px] sm:min-w-0 shrink-0 snap-center rounded-2xl sm:rounded-sm">
-                    <span className="text-[10px] uppercase tracking-widest font-bold opacity-80 text-[#1A1A1A]">已签约成交 (年度累计)</span>
+                  <div className="bg-white/80 backdrop-blur-md border border-black/5 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[260px] sm:min-w-0 shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
+                    <span className="text-[12px] sm:text-[10px] font-semibold opacity-80 text-[#1A1A1A]">已签约成交 (年度累计)</span>
                     <div className="flex items-baseline gap-2 mt-2">
                       <span className="text-3xl font-serif italic text-[#1A1A1A]">{yearSignedClients}</span>
                       <span className="text-[9px] font-mono text-[#1A1A1A]/40 uppercase">Signed / {yearTargetSignedClients}</span>
                     </div>
                   </div>
 
-                  <div className="bg-white border border-[#1A1A1A]/10 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-[#1A1A1A]/30 hover:shadow-md transition-all min-w-[240px] sm:min-w-0 shrink-0 snap-center rounded-2xl sm:rounded-sm">
-                    <span className="text-[10px] uppercase tracking-widest opacity-60 text-[#1A1A1A]">客户流失 (年度累计)</span>
+                  <div className="bg-white/80 backdrop-blur-md border border-black/5 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[260px] sm:min-w-0 shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
+                    <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A]">客户流失 (年度累计)</span>
                     <div className="flex items-baseline gap-2 mt-2">
                       <span className="text-3xl font-serif italic text-red-600">{yearLostClients}</span>
                       <span className="text-[9px] font-mono text-[#1A1A1A]/40 uppercase">Lost / {yearTargetLostClients}</span>
@@ -3018,9 +3021,9 @@ export default function App() {
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 px-4 sm:px-0 mb-8 sm:mb-0">
                 {/* Chart 1: 月度目标完成趋势 (Area Chart) */}
-                <div className="bg-white border border-[#1A1A1A]/10 p-6 shadow-sm hover:shadow-md transition-shadow">
+                <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 rounded-[24px] sm:rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
                   <h3 id="chart-profit-title" className="text-[11px] uppercase tracking-widest font-bold mb-6 opacity-80 flex items-center gap-2">
                     <span className="w-2 h-2 bg-[#1A1A1A]" aria-hidden="true"></span> 月度利润趋势分析 ({CURRENT_YEAR}年 / 万)
                   </h3>
@@ -3039,7 +3042,7 @@ export default function App() {
                 </div>
 
                 {/* Chart 2: 研发推进 & 任务分布 (Pie Chart) */}
-                <div className="bg-white border border-[#1A1A1A]/10 p-6 shadow-sm hover:shadow-md transition-shadow">
+                <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 rounded-[24px] sm:rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
                   <h3 id="chart-task-title" className="text-[11px] uppercase tracking-widest font-bold mb-6 opacity-80 flex items-center gap-2">
                     <span className="w-2 h-2 bg-[#1A1A1A]" aria-hidden="true"></span> 月度需求统计
                   </h3>
@@ -3075,7 +3078,7 @@ export default function App() {
                 </div>
 
                 {/* Chart 3: 月度利润统计 (Bar Chart) */}
-                <div className="bg-white border border-[#1A1A1A]/10 p-6 lg:col-span-2 shadow-sm hover:shadow-md transition-shadow">
+                <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 lg:col-span-2 rounded-[24px] sm:rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
                   <h3 id="chart-outcome-title" className="text-[11px] uppercase tracking-widest font-bold mb-6 opacity-80 flex items-center gap-2">
                     <span className="w-2 h-2 bg-[#1A1A1A]" aria-hidden="true"></span> 月度利润统计 ({CURRENT_YEAR}年 / 万)
                   </h3>
@@ -3101,11 +3104,11 @@ export default function App() {
       </main>
 
       {/* Mobile Bottom Navigation (Apple Style) */}
-      <nav className="md:hidden fixed bottom-0 left-0 w-full bg-[#F7F6F2]/90 backdrop-blur-md border-t border-[#1A1A1A]/10 z-40 pb-[env(safe-area-inset-bottom)] px-2 h-[calc(60px+env(safe-area-inset-bottom))] flex items-center justify-around shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
+      <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white/70 backdrop-blur-2xl border-t border-black/5 z-40 pb-[env(safe-area-inset-bottom)] px-2 h-[calc(70px+env(safe-area-inset-bottom))] flex items-center justify-around shadow-[0_-10px_40px_rgba(0,0,0,0.04)] before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-white/40">
         
         <button 
           onClick={() => setCurrentView('dashboard')}
-          className={`flex flex-col items-center justify-center w-16 h-12 gap-1 rounded-xl transition-all ${currentView === 'dashboard' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
+          className={`flex flex-col items-center justify-center w-16 h-14 gap-1 rounded-xl transition-all pt-1 ${currentView === 'dashboard' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
         >
            <LayoutDashboard className={`w-5 h-5 transition-transform ${currentView === 'dashboard' ? 'scale-110' : ''}`} strokeWidth={currentView === 'dashboard' ? 2.5 : 2} />
            <span className={`text-[9px] font-bold tracking-wider ${currentView === 'dashboard' ? 'opacity-100' : 'opacity-80'}`}>全局</span>
@@ -3114,7 +3117,7 @@ export default function App() {
         {(currentUser.roles.includes('项目经理') || currentUser.department === 'admin') && (
           <button 
             onClick={() => setCurrentView('tracking')}
-            className={`flex flex-col items-center justify-center w-16 h-12 gap-1 rounded-xl transition-all ${currentView === 'tracking' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
+            className={`flex flex-col items-center justify-center w-16 h-14 gap-1 rounded-xl transition-all pt-1 ${currentView === 'tracking' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
           >
              <Target className={`w-5 h-5 transition-transform ${currentView === 'tracking' ? 'scale-110' : ''}`} strokeWidth={currentView === 'tracking' ? 2.5 : 2} />
              <span className={`text-[9px] font-bold tracking-wider ${currentView === 'tracking' ? 'opacity-100' : 'opacity-80'}`}>跟踪</span>
@@ -3124,7 +3127,7 @@ export default function App() {
         {(currentUser.department === 'admin' || currentUser.department === 'marketing') && (
           <button 
             onClick={() => setCurrentView('marketing')}
-            className={`flex flex-col items-center justify-center w-16 h-12 gap-1 rounded-xl transition-all ${currentView === 'marketing' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
+            className={`flex flex-col items-center justify-center w-16 h-14 gap-1 rounded-xl transition-all pt-1 ${currentView === 'marketing' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
           >
              <TrendingUp className={`w-5 h-5 transition-transform ${currentView === 'marketing' ? 'scale-110' : ''}`} strokeWidth={currentView === 'marketing' ? 2.5 : 2} />
              <span className={`text-[9px] font-bold tracking-wider ${currentView === 'marketing' ? 'opacity-100' : 'opacity-80'}`}>市场</span>
@@ -3134,7 +3137,7 @@ export default function App() {
         {(currentUser.department === 'admin' || currentUser.department === 'rnd') && (
           <button 
             onClick={() => setCurrentView('rnd')}
-            className={`flex flex-col items-center justify-center w-16 h-12 gap-1 rounded-xl transition-all ${currentView === 'rnd' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
+            className={`flex flex-col items-center justify-center w-16 h-14 gap-1 rounded-xl transition-all pt-1 ${currentView === 'rnd' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
           >
              <Code2 className={`w-5 h-5 transition-transform ${currentView === 'rnd' ? 'scale-110' : ''}`} strokeWidth={currentView === 'rnd' ? 2.5 : 2} />
              <span className={`text-[9px] font-bold tracking-wider ${currentView === 'rnd' ? 'opacity-100' : 'opacity-80'}`}>研发</span>
@@ -3143,7 +3146,7 @@ export default function App() {
 
         <button 
           onClick={() => setCurrentView('requirements')}
-          className={`flex flex-col items-center justify-center w-16 h-12 gap-1 rounded-xl transition-all ${currentView === 'requirements' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
+          className={`flex flex-col items-center justify-center w-16 h-14 gap-1 rounded-xl transition-all pt-1 ${currentView === 'requirements' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
         >
            <ClipboardList className={`w-5 h-5 transition-transform ${currentView === 'requirements' ? 'scale-110' : ''}`} strokeWidth={currentView === 'requirements' ? 2.5 : 2} />
            <span className={`text-[9px] font-bold tracking-wider ${currentView === 'requirements' ? 'opacity-100' : 'opacity-80'}`}>需求</span>

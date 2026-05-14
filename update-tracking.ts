@@ -2,96 +2,61 @@ import fs from 'fs';
 
 let code = fs.readFileSync('src/App.tsx', 'utf-8');
 
-const oldTable = `<div className="overflow-x-auto">
-                 <table className="w-full text-sm text-left whitespace-nowrap">`;
+// Modernize tracking view header
+let trackViewHeaderOld = `<div className="bg-[#F7F6F2] border-b border-[#1A1A1A]/10 px-4 sm:px-8 py-6 sm:py-10 flex flex-col lg:flex-row gap-6 sm:gap-10 lg:items-end justify-between">`;
+let trackViewHeaderNew = `<div className="bg-[#F7F6F2] border-b border-[#1A1A1A]/5 px-4 sm:px-8 py-4 sm:py-10 flex flex-col lg:flex-row gap-6 sm:gap-10 lg:items-end justify-between pt-6 sm:pt-10">`;
+code = code.replace(trackViewHeaderOld, trackViewHeaderNew);
 
-const replaceTable = `               {/* Desktop Table */}
-               <div className="hidden md:block overflow-x-auto">
-                 <table className="w-full text-sm text-left whitespace-nowrap">`;
+// Make the metric cards Apple style
+let trackMetricsOld = `<div className="flex overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory pb-2 -mb-2 w-[calc(100vw-32px)] sm:w-full">
+             <div className="flex gap-4 sm:gap-8 shrink-0 pb-2">
+               {statusCounts.map(item => (
+                  <div key={item.status} onClick={() => setFilterStatus(filterStatus === item.status ? 'all' : item.status)} className={\`shrink-0 snap-center cursor-pointer transition-opacity \${filterStatus !== 'all' && filterStatus !== item.status ? 'opacity-30' : 'opacity-100'}\`}>`;
 
-code = code.replace(oldTable, replaceTable);
+let trackMetricsNew = `<div className="flex overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory pb-4 -mb-4 w-[calc(100vw-32px)] sm:w-full -mx-4 sm:mx-0 px-4 sm:px-0">
+             <div className="flex gap-4 sm:gap-6 shrink-0 pb-2">
+               {statusCounts.map(item => (
+                  <div key={item.status} onClick={() => setFilterStatus(filterStatus === item.status ? 'all' : item.status)} className={\`bg-white/60 backdrop-blur-md rounded-2xl p-4 min-w-[120px] shrink-0 snap-start cursor-pointer hover:shadow-sm transition-all \${filterStatus === item.status ? 'shadow-[0_2px_10px_rgb(0,0,0,0.06)] border border-[#1A1A1A]/10 opacity-100 scale-105' : filterStatus !== 'all' ? 'opacity-30 border border-transparent scale-95' : 'opacity-100 border border-[#1A1A1A]/5'}\`}>`;
 
-const closeTable = `                   </tbody>
-                 </table>
-               </div>`;
+code = code.replace(trackMetricsOld, trackMetricsNew);
 
-const replaceCloseTable = `                   </tbody>
-                 </table>
-               </div>
-               
-               {/* Mobile Card Layout */}
-               <div className="md:hidden flex flex-col gap-4 pb-20">
-                 {filtered.map((t, i) => (
-                   <div key={t.id} className="bg-white border border-[#1A1A1A]/10 rounded-2xl p-5 flex flex-col gap-4 shadow-sm relative overflow-hidden group active:scale-[0.98] transition-transform" onClick={() => handleAction(t.id, 'details', () => onViewDetails(t))}>
-                     {/* Header */}
-                     <div className="flex justify-between items-start">
-                       <div className="pr-12">
-                         <div className="text-[10px] font-mono opacity-50 mb-1">#{i + 1} &middot; {t.lastFollowupDate || '无跟进记录'}</div>
-                         <h3 className="font-bold text-[15px] text-[#1A1A1A] leading-tight flex items-center">
-                           <span className="truncate">{t.customerName}</span>
-                         </h3>
-                       </div>
-                       
-                       {/* Status pill in absolute top right */}
-                       <div className="absolute top-5 right-5">
-                          <span className={\`px-2.5 py-1 rounded-full text-[10px] font-bold border 
-                            \${t.status === 'followup' ? 'border-amber-400 text-amber-600 bg-amber-50' : 
-                              t.status === 'implementing' ? 'border-blue-400 text-blue-600 bg-blue-50' : 
-                              t.status === 'accepting' ? 'border-green-400 text-green-600 bg-green-50' : 
-                              t.status === 'quoted' ? 'border-purple-400 text-purple-600 bg-purple-50' : 
-                              t.status === 'archived' ? 'border-stone-400 text-stone-600 bg-stone-50' :
-                              'border-gray-300 text-gray-500 bg-gray-50'}\`}
-                          >
-                             {statusLabels[t.status]}
-                          </span>
-                       </div>
-                     </div>
-                     
-                     {/* Information Grid */}
-                     <div className="grid grid-cols-2 gap-y-3 gap-x-4 border-t border-[#1A1A1A]/5 pt-4">
-                       <div>
-                         <div className="text-[10px] uppercase font-bold tracking-widest opacity-40 mb-0.5">产品/意向</div>
-                         <div className="text-[11px] font-semibold">{t.product || '—'}</div>
-                       </div>
-                       <div>
-                         <div className="text-[10px] uppercase font-bold tracking-widest opacity-40 mb-0.5">联系人</div>
-                         <div className="text-[11px] font-semibold">{t.contactName || '—'}</div>
-                       </div>
-                       <div>
-                         <div className="text-[10px] uppercase font-bold tracking-widest opacity-40 mb-0.5">负责人</div>
-                         <div className="text-[11px] font-semibold">{(t.cityManager || t.projectManager) ? \`\${t.cityManager || ''} \${t.projectManager || ''}\`.trim() : '—'}</div>
-                       </div>
-                       <div>
-                         <div className="text-[10px] uppercase font-bold tracking-widest opacity-40 mb-0.5">预期/达成</div>
-                         <div className="text-[11px] font-mono font-bold">
-                           <span className="opacity-60">{t.expectedContractAmount > 0 ? (t.expectedContractAmount / 10000).toFixed(0) : '0'}</span>
-                           <span className="opacity-40 mx-1">/</span>
-                           <span className="text-emerald-600">{t.actualContractAmount > 0 ? (t.actualContractAmount / 10000).toFixed(0) : '0'}万</span>
-                         </div>
-                       </div>
-                     </div>
-                     
-                     {/* Actions (Stop propagation to prevent card click) */}
-                     <div className="flex gap-2 mt-2 pt-4 border-t border-[#1A1A1A]/5" onClick={e => e.stopPropagation()}>
-                        <button 
-                          onClick={() => handleAction(t.id, 'followup', () => onAddFollowup(t))}
-                          disabled={t.status === 'terminated' || t.status === 'archived'}
-                          className="flex-1 bg-[#1A1A1A] text-white py-2.5 rounded-xl text-[11px] font-bold tracking-widest uppercase active:scale-95 transition-transform disabled:opacity-30 flex justify-center items-center"
-                        >
-                          写跟进
-                        </button>
-                        <button 
-                          onClick={() => handleAction(t.id, 'edit', () => onEdit(t))}
-                          disabled={t.status === 'terminated' || t.status === 'archived'}
-                          className="flex-1 bg-[#1A1A1A]/5 text-[#1A1A1A] py-2.5 rounded-xl text-[11px] font-bold tracking-widest uppercase active:scale-95 transition-transform disabled:opacity-30 flex justify-center items-center"
-                        >
-                          修改
-                        </button>
-                     </div>
-                   </div>
-                 ))}
-               </div>`;
+// Increase readability of tracking title
+code = code.replace('<h2 className="text-3xl sm:text-4xl font-serif italic tracking-tight mb-4">项目跟踪</h2>', '<h2 className="text-3xl sm:text-4xl font-serif italic tracking-tight mb-4 text-[#1A1A1A]">项目跟踪</h2>');
 
-code = code.replace(closeTable, replaceCloseTable);
+// Adjust the search bar format
+let searchOld = `<input 
+              placeholder="搜索客户、产品、负责人..." 
+              value={searchTerm} 
+              onChange={(e) => setSearchTerm(e.target.value)} 
+              className="bg-transparent border-b border-[#1A1A1A]/30 py-2 text-[13px] w-full outline-none focus:border-[#1A1A1A] transition-colors placeholder:opacity-50" 
+            />`;
+let searchNew = `<div className="flex items-center bg-black/5 rounded-xl px-3 py-2 w-full">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-40"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input 
+                placeholder="搜索项目与客户..." 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+                className="bg-transparent border-none text-[14px] w-full outline-none px-2 placeholder:text-[#1A1A1A]/30 text-[#1A1A1A] font-medium" 
+              />
+            </div>`;
+code = code.replace(searchOld, searchNew);
+
+// Remove the relative enclosing for search bar so we can have rounded corners cleanly without affecting flex width heavily
+code = code.replace(
+  '<div className="relative w-full xl:w-[320px]">\n            <div className="flex items-center',
+  '<div className="w-full xl:w-[320px]">\n            <div className="flex items-center'
+);
+
+// We should fix the mobile card padding of project tracking view
+code = code.replace(
+  '<div className="md:hidden flex flex-col gap-4 pb-[calc(100px+env(safe-area-inset-bottom))]">',
+  '<div className="md:hidden flex flex-col gap-4 pb-[calc(120px+env(safe-area-inset-bottom))]">'
+);
+
+// Tweak the tracking view fab to have larger shadow standard Apple
+code = code.replace(
+  'bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_8px_30px_rgb(37,99,235,0.3)] flex items-center justify-center active:scale-95 transition-transform',
+  'bg-zinc-800 text-white w-14 h-14 rounded-[22px] shadow-[0_8px_30px_rgb(0,0,0,0.2)] flex items-center justify-center active:scale-95 transition-transform'
+);
 
 fs.writeFileSync('src/App.tsx', code);
