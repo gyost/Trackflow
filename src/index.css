@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=JetBrains+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
+  }
+  .hide-number-arrows::-webkit-outer-spin-button,
+  .hide-number-arrows::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .hide-number-arrows[type=number] {
+    -moz-appearance: textfield;
+  }
+  .hide-scrollbar-on-mobile::-webkit-scrollbar {
+    display: none;
+  }
+  .hide-scrollbar-on-mobile {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Tiptap Placeholder */
+  .tiptap p.is-editor-empty:first-child::before {
+    color: #94a3b8;
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+
+  .bg-dynamic-minimal {
+    background-color: #FAFAF9;
+    background-image: radial-gradient(at 0% 0%, #E7E5E4 0px, transparent 50%),
+                      radial-gradient(at 100% 100%, #D6D3D1 0px, transparent 50%);
+    background-size: 200% 200%;
+    animation: move-background 15s ease infinite alternate;
+  }
+  @keyframes move-background {
+    0% { background-position: 0% 0%; }
+    100% { background-position: 100% 100%; }
+  }
+}

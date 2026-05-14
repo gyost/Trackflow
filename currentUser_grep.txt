@@ -1,0 +1,240 @@
+80-
+81-export default function App() {
+82:  const [currentUser, setCurrentUser] = useState<Member | null>(null);
+83:  const [currentUserLoaded, setCurrentUserLoaded] = useState(false);
+84-  const [currentView, setCurrentView] = useState<string>('dashboard');
+85-  const [plans, setPlans] = useState<Plan[]>(initialPlans);
+--
+328-
+329-  useEffect(() => {
+330:    if (currentUser?.id) {
+331:      const updatedMember = members.find(m => m.id === currentUser.id);
+332-      if (updatedMember) {
+333-        if (
+334:          updatedMember.department !== currentUser.department ||
+335:          updatedMember.role !== currentUser.role ||
+336:          updatedMember.groupId !== currentUser.groupId
+337-        ) {
+338-          const newUser = {
+339:            ...currentUser,
+340-            department: updatedMember.department,
+341-            role: updatedMember.role,
+--
+343-          };
+344-          setCurrentUser(newUser);
+345:          localStorage.setItem('currentUser', JSON.stringify(newUser));
+346-        }
+347-      }
+348-    }
+349:  }, [members, currentUser]);
+350-
+351-  useEffect(() => {
+352:    const savedUser = localStorage.getItem('currentUser');
+353-    if (savedUser) {
+354-      setCurrentUser(JSON.parse(savedUser));
+--
+365-        };
+366-        setCurrentUser(user);
+367:        localStorage.setItem('currentUser', JSON.stringify(user));
+368-      }
+369-    }
+--
+373-  const handleLogin = (user: Member) => {
+374-    setCurrentUser(user);
+375:    localStorage.setItem('currentUser', JSON.stringify(user));
+376-  };
+377-
+378-  const handleLogout = () => {
+379-    setCurrentUser(null);
+380:    localStorage.removeItem('currentUser');
+381-  };
+382-
+383-  const handleAccountSetupComplete = (account: string, pass: string) => {
+384:    if (!currentUser) return;
+385:    const updatedUser = { ...currentUser, account, password: pass };
+386-    setCurrentUser(updatedUser);
+387:    localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+388-    localStorage.setItem('has_setup_account', 'true');
+389-    
+390:    setMembers(prev => prev.map(m => m.id === currentUser.id ? { ...m, account, password: pass } : m));
+391-  };
+392-
+393:  if (!currentUserLoaded) {
+394-    return <div className="h-screen w-full bg-[#F7F6F2]"></div>;
+395-  }
+396-
+397:  if (!currentUser) {
+398-    return <Login onLogin={handleLogin} authorizedCompanies={authorizedCompanies} members={members} />;
+399-  }
+400-
+401:  if (!currentUser.account || !currentUser.password) {
+402:    return <AccountSetupModal currentUser={currentUser} onComplete={handleAccountSetupComplete} members={members} />;
+403-  }
+404-
+--
+694-          customerName: requirementForm.source === 'customer' ? requirementForm.customerName : undefined,
+695-          internalSourceDetail: requirementForm.source === 'internal' ? requirementForm.internalSourceDetail : undefined,
+696:          submitterId: currentUser?.id || members[0]?.id || 'admin',
+697-          assigneeId: requirementForm.assigneeId || undefined,
+698-          createdAt: now,
+--
+962-    // 1. Get all groups that belong to this department
+963-    const departmentGroups = groups.filter(g => g.category === department)
+964:      .filter(g => currentUser.department === 'admin' || g.id === currentUser.groupId);
+965-    
+966-    // 2. Find any tasks belonging to this department that have unassigned/unknown group
+--
+976-    ]));
+977-
+978:    if (currentUser.department !== 'admin') {
+979:      allGroupIds = allGroupIds.filter(id => id === currentUser.groupId);
+980-    }
+981-
+--
+996-    let groupMembers = Array.from(new Set([...groupMembersList.map(m => m.id), ...taskMembersIds]));
+997-
+998:    const canViewAllInGroup = currentUser.department === 'admin' || (currentUser.role === '组长' && currentUser.groupId === groupId);
+999-    if (!canViewAllInGroup) {
+1000:      groupMembers = groupMembers.filter(id => id === currentUser.id);
+1001-    }
+1002-
+--
+1062-                        <h5 className="text-[10px] uppercase tracking-widest font-bold opacity-60 mb-4 flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2">
+1063-                          <span className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-[#1A1A1A]"></span> 任务与成果项 (Tasks & Outcomes)</span>
+1064:                          {(currentUser.department === 'admin' || currentUser.id === assigneeId) && (
+1065-                            <button onClick={() => openTaskModal(assigneeId, department)} className="text-[9px] hover:text-[#1A1A1A] hover:font-bold opacity-70 hover:opacity-100 transition-colors border border-transparent hover:border-[#1A1A1A] px-1">+ 添加</button>
+1066-                          )}
+--
+1077-                                        type="checkbox" 
+1078-                                        checked={task.status === 'completed' || task.progress === 100}
+1079:                                        disabled={currentUser.department !== 'admin' && currentUser.id !== assigneeId}
+1080-                                        onChange={(e) => {
+1081:                                          if (currentUser.department !== 'admin' && currentUser.id !== assigneeId) return;
+1082-                                          const checked = e.target.checked;
+1083-                                          const updatedTask: Task = { 
+--
+1150-
+1151-  // R&D Release Stats Calculation
+1152:  const rndVisibleGroupsList = groups.filter(g => g.category === 'rnd' && (currentUser?.department === 'admin' || g.id === currentUser?.groupId));
+1153-  const currentMonthReleaseGoals = releaseGoals.filter(g => g.targetMonth === selectedMonth && rndVisibleGroupsList.some(vg => vg.id === g.groupId));
+1154-  
+--
+1170-    if (r.deleted) return false;
+1171-    if (reqAssigneeFilter && r.assigneeId !== reqAssigneeFilter) return false;
+1172:    if (currentUser) {
+1173:      if (reqTabFilter === 'created' && r.submitterId !== currentUser.id) return false;
+1174:      if (reqTabFilter === 'assigned' && r.assigneeId !== currentUser.id) return false;
+1175-    }
+1176-    return true;
+--
+1194-          {[{id: 'marketing', name: '市场开拓'}, {id: 'rnd', name: '产品研发'}, {id: 'requirements', name: '需求池'}]
+1195-            .filter(dept => {
+1196:              if (currentUser.department === 'admin') return true;
+1197-              if (dept.id === 'requirements') return true;
+1198:              return currentUser.department === dept.id;
+1199-            })
+1200-            .map(dept => (
+--
+1209-          
+1210-          <div className="flex items-center gap-4 border-l border-[#1A1A1A]/20 pl-6 ml-2">
+1211:            <span className="opacity-80 font-mono tracking-wider">{currentUser.name || currentUser.phone}</span>
+1212-            <button 
+1213-              onClick={() => setIsGuideModalOpen(true)}
+--
+1218-              <span>说明</span>
+1219-            </button>
+1220:            {currentUser.department === 'admin' && (
+1221-              <button 
+1222-                onClick={() => setIsSettingsModalOpen(true)}
+--
+1264-                  </div>
+1265-                )}
+1266:                {currentView === 'marketing' && (currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.role === '组长')) && (
+1267-                  <button 
+1268-                    onClick={openGoalModal}
+--
+1401-                      </div>
+1402-                      <div className="w-[40px] flex justify-end shrink-0">
+1403:                        {(currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.role === '组长')) && (
+1404-                          <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
+1405-                        )}
+--
+1421-                      </div>
+1422-                      <div className="w-[40px] flex justify-end shrink-0">
+1423:                        {(currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.role === '组长')) && (
+1424-                          <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
+1425-                        )}
+--
+1441-                      </div>
+1442-                      <div className="w-[40px] flex justify-end shrink-0">
+1443:                        {(currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.role === '组长')) && (
+1444-                          <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
+1445-                        )}
+--
+1461-                      </div>
+1462-                      <div className="w-[40px] flex justify-end shrink-0">
+1463:                        {(currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.role === '组长')) && (
+1464-                          <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
+1465-                        )}
+--
+1481-                      </div>
+1482-                      <div className="w-[40px] flex justify-end shrink-0">
+1483:                        {(currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.role === '组长')) && (
+1484-                          <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
+1485-                        )}
+--
+1501-                      </div>
+1502-                      <div className="w-[40px] flex justify-end shrink-0">
+1503:                        {(currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.role === '组长')) && (
+1504-                          <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
+1505-                        )}
+--
+1518-                    {selectedMonth} 上线产品数据看板
+1519-                  </h3>
+1520:                  {(currentUser.department === 'admin' || (currentUser.department === 'rnd' && currentUser.role === '组长')) && (
+1521-                    <button onClick={() => {
+1522-                      setEditingReleaseGoal(null);
+1523-                      setReleaseGoalForm({
+1524-                        title: '', targetMonth: selectedMonth, targetDate: '', status: 'planned', 
+1525:                        groupId: currentUser.department === 'admin' ? (groups.filter(g => g.category === 'rnd').length > 0 ? groups.filter(g => g.category === 'rnd')[0].id : '') : currentUser.groupId
+1526-                      });
+1527-                      setIsReleaseGoalModalOpen(true);
+--
+1564-
+1565-                <div className="flex flex-col gap-3">
+1566:                  {releaseGoals.filter(g => g.targetMonth === selectedMonth && (currentUser.department === 'admin' || currentUser.groupId === g.groupId)).length > 0 ? (
+1567:                    releaseGoals.filter(g => g.targetMonth === selectedMonth && (currentUser.department === 'admin' || currentUser.groupId === g.groupId)).map(goal => {
+1568-                      const group = groups.find(g => g.id === goal.groupId);
+1569:                      const canEdit = currentUser.department === 'admin' || (currentUser.groupId === goal.groupId && currentUser.role === '组长');
+1570-                      return (
+1571-                        <div key={goal.id} className="border border-[#1A1A1A]/10 p-3 hover:bg-[#1A1A1A]/5 transition-colors group relative cursor-pointer" onClick={() => {
+--
+1776-              <div className="space-y-8">
+1777-              {(currentView === 'dashboard' ? groups : groups.filter(g => g.category === currentView))
+1778:                .filter(g => currentView === 'dashboard' || currentUser.department === 'admin' || currentUser.groupId === g.id)
+1779-                .map(group => {
+1780-                const storageKey = `${group.id}_${currentView === 'dashboard' ? selectedQuarter : selectedMonth}`;
+1781:                const canEditGoal = currentUser.department === 'admin' || (currentUser.role === '组长' && currentUser.groupId === group.id);
+1782-                return (
+1783-                <div key={group.id} className="space-y-3 relative group">
+--
+1936-                              </div>
+1937-                              <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+1938:                                {(currentUser.department === 'admin' || currentUser.id === req.submitterId) && (
+1939-                                  <>
+1940-                                    <button 
+--
+2463-                  className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-1 text-sm font-mono pb-2"
+2464-                  required
+2465:                  disabled={currentUser.department !== 'admin'}
+2466-                >
+2467-                  <option value="" disabled>--请选择小组--</option>
+2468:                  {(currentUser.department === 'admin' ? groups.filter(g => g.category === 'rnd') : groups.filter(g => g.id === currentUser.groupId)).map(g => (
+2469-                    <option key={g.id} value={g.id}>{g.name}</option>
+2470-                  ))}
+--
+3353-            
+3354-            <div className="px-8 py-5 border-t border-[#1A1A1A]/10 bg-gray-50 flex justify-end gap-4 shadow-[0_-4px_10px_rgba(0,0,0,0.02)] relative z-10">
+3355:              {(currentUser?.department === 'admin' || currentUser?.id === selectedRequirement.submitterId) && (
+3356-                <button 
+3357-                  onClick={() => {

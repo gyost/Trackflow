@@ -1,0 +1,6 @@
+{
+  "name": "TrackFlow",
+  "description": "项目管理应用，支持市场与研发项目的季度、月度、周度计划细分，提供进度追踪、成果管理与数据仪表盘。",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Entity Validations
+    function isValidTask(data) {
+      return data.keys().hasAll(['id', 'projectId', 'title', 'assigneeId', 'status', 'endDate'])
+        && data.id is string && isValidId(data.id)
+        && data.title is string && data.title.size() <= 200
+        && data.progress is number && data.progress >= 0 && data.progress <= 100;
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['id', 'title', 'category', 'status'])
+        && data.id is string && isValidId(data.id)
+        && data.title is string && data.title.size() <= 200
+        && data.progress is number && data.progress >= 0 && data.progress <= 100;
+    }
+
+    function isValidPlan(data) {
+      return data.keys().hasAll(['id', 'projectId', 'title', 'level', 'startDate', 'endDate'])
+        && data.id is string && isValidId(data.id)
+        && data.title is string && data.title.size() <= 200;
+    }
+
+    function isValidOutcome(data) {
+      return data.keys().hasAll(['id', 'projectId', 'title', 'submitterId', 'date'])
+        && data.id is string && isValidId(data.id)
+        && data.title is string && data.title.size() <= 200;
+    }
+
+    // Collection matches
+    match /projects/{projectId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidProject(incoming());
+      allow delete: if false; // Only admin can delete
+    }
+
+    match /tasks/{taskId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidTask(incoming());
+      allow update: if isSignedIn() && isValidTask(incoming())
+        && incoming().id == existing().id // Immutable ID
+        && incoming().projectId == existing().projectId;
+      allow delete: if isSignedIn();
+    }
+
+    match /plans/{planId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidPlan(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /outcomes/{outcomeId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidOutcome(incoming());
+      allow delete: if isSignedIn();
+    }
+  }
+}

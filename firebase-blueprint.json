@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "A project in the system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string", "enum": ["marketing", "rnd"] },
+        "status": { "type": "string", "enum": ["not_started", "in_progress", "completed", "delayed"] },
+        "progress": { "type": "number" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "managerId": { "type": "string" }
+      },
+      "required": ["id", "title", "category", "status"]
+    },
+    "Plan": {
+      "title": "Plan",
+      "description": "A goal or plan (quarterly, monthly, or weekly)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "title": { "type": "string" },
+        "level": { "type": "string", "enum": ["quarter", "month", "week"] },
+        "parentId": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "status": { "type": "string" },
+        "progress": { "type": "number" },
+        "metric": { "type": "object" }
+      },
+      "required": ["id", "projectId", "title", "level", "startDate", "endDate"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "An individual action item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "planId": { "type": "string" },
+        "title": { "type": "string" },
+        "assigneeId": { "type": "string" },
+        "status": { "type": "string" },
+        "priority": { "type": "string" },
+        "progress": { "type": "number" },
+        "endDate": { "type": "string", "format": "date" }
+      },
+      "required": ["id", "projectId", "title", "assigneeId", "status", "endDate"]
+    },
+    "Outcome": {
+      "title": "Outcome",
+      "description": "A tangible result or deliverable",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "submitterId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "projectId", "title", "submitterId", "date"]
+    }
+  },
+  "firestore": {
+    "projects": { "schema": "Project", "description": "Collection of projects" },
+    "plans": { "schema": "Plan", "description": "Collection of strategic goals" },
+    "tasks": { "schema": "Task", "description": "Collection of action items" },
+    "outcomes": { "schema": "Outcome", "description": "Collection of achieved results" }
+  }
+}
