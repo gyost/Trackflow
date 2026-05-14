@@ -121,8 +121,9 @@ export default function SettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#F7F6F2] w-full max-w-3xl border border-[#1A1A1A] shadow-2xl relative flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
+      <div className="bg-[#F7F6F2] w-full pt-8 sm:pt-0 max-w-3xl sm:border border-[#1A1A1A] shadow-2xl relative flex flex-col h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[85vh] mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+        <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
         <div className="p-6 border-b border-[#1A1A1A]/10 flex justify-between items-center shrink-0">
           <h3 className="text-2xl font-serif italic">系统设置</h3>
           <button onClick={onClose} className="text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-2xl leading-none">

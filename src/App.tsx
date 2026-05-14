@@ -16,7 +16,7 @@ import {
 } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, LayoutDashboard, Target, TrendingUp, Code2, ClipboardList, User, Settings, LogOut, Search } from 'lucide-react';
 import { mockProjects, mockPlans as initialPlans, mockTasks as initialTasks, mockOutcomes as initialOutcomes, mockMembers, mockGroups, mockRequirements as initialRequirements } from './mockData';
 import { Plan, Task, Outcome, Group, Member, Project, Status, Priority, Requirement, RequirementStatus, RequirementHistory, ReleaseGoal, ProjectTracking, TrackingStatus, FollowupRecord } from './types';
 import { generateId } from './lib/utils';
@@ -128,9 +128,9 @@ const ProjectTrackingView = ({
   return (
     <div className="flex flex-col w-full h-full bg-[#F7F6F2] text-[#1A1A1A] overflow-hidden">
       {/* Sleek Header & Metric Row */}
-      <div className="bg-[#F7F6F2] border-b border-[#1A1A1A]/10 px-8 py-10 flex flex-col lg:flex-row gap-10 lg:items-end justify-between">
+      <div className="bg-[#F7F6F2] border-b border-[#1A1A1A]/10 px-4 sm:px-8 py-6 sm:py-10 flex flex-col lg:flex-row gap-6 sm:gap-10 lg:items-end justify-between">
         <div>
-          <h2 className="text-4xl font-serif italic tracking-tight mb-4">项目跟踪</h2>
+          <h2 className="text-3xl sm:text-4xl font-serif italic tracking-tight mb-4">项目跟踪</h2>
           <div className="flex gap-4 text-xs font-mono uppercase tracking-widest opacity-60">
              <div className="flex items-center gap-2 border-b border-[#1A1A1A]/20 pb-1 cursor-pointer hover:opacity-100 transition-opacity">
                 <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="bg-transparent outline-none cursor-pointer appearance-none">
@@ -147,31 +147,38 @@ const ProjectTrackingView = ({
         </div>
 
         {/* Global Metrics Inline */}
-        <div className="flex flex-wrap lg:flex-nowrap gap-12 text-right">
-           <div>
-              <div className="text-[10px] uppercase font-bold tracking-widest opacity-50 mb-2">客户总数</div>
-              <div className="text-3xl font-serif italic">{filtered.length}</div>
+        <div className="flex flex-col lg:items-end w-full lg:w-auto">
+           <div className="flex flex-wrap lg:flex-nowrap items-baseline gap-6 sm:gap-12 text-left lg:text-right w-full lg:w-auto mb-6 lg:mb-10">
+             <div>
+                <div className="text-[10px] uppercase font-bold tracking-widest opacity-50 mb-2">客户总数</div>
+                <div className="text-4xl sm:text-5xl font-serif italic">{filtered.length}</div>
+             </div>
+             <div className="flex-1 lg:flex-none pt-4 sm:pt-0 lg:pl-12 lg:border-l border-[#1A1A1A]/10">
+                <div className="text-[10px] uppercase font-bold tracking-widest opacity-50 mb-2">已达成转化</div>
+                <div className="text-4xl sm:text-5xl font-serif italic text-emerald-700">¥{totalAmount.toLocaleString()}</div>
+             </div>
            </div>
-           {statusCounts.map(item => (
-              <div key={item.status}>
-                  <div className="text-[10px] uppercase font-bold tracking-widest opacity-50 mb-2 flex items-center justify-end gap-1.5">
-                     {statusLabels[item.status]}
-                     <span className={`w-1.5 h-1.5 rounded-full ${statusColors[item.status]}`}></span>
+           
+           <div className="flex overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory pb-2 -mb-2 w-[calc(100vw-32px)] sm:w-full">
+             <div className="flex gap-4 sm:gap-8 shrink-0 pb-2">
+               {statusCounts.map(item => (
+                  <div key={item.status} onClick={() => setFilterStatus(filterStatus === item.status ? 'all' : item.status)} className={`shrink-0 snap-center cursor-pointer transition-opacity ${filterStatus !== 'all' && filterStatus !== item.status ? 'opacity-30' : 'opacity-100'}`}>
+                      <div className="text-[10px] uppercase font-bold tracking-widest opacity-50 mb-1.5 flex items-center lg:justify-end gap-1.5">
+                         {statusLabels[item.status]}
+                         <span className={`w-1.5 h-1.5 rounded-full ${statusColors[item.status]}`}></span>
+                      </div>
+                      <div className="text-xl sm:text-2xl font-serif italic">{item.count}</div>
                   </div>
-                  <div className="text-3xl font-serif italic">{item.count}</div>
-              </div>
-           ))}
-           <div className="pl-12 border-l border-[#1A1A1A]/10">
-              <div className="text-[10px] uppercase font-bold tracking-widest opacity-50 mb-2">已达成转化</div>
-              <div className="text-3xl font-serif italic">¥{totalAmount.toLocaleString()}</div>
+               ))}
+             </div>
            </div>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 p-8 max-w-7xl mx-auto w-full flex flex-col min-h-0">
+      <div className="flex-1 p-4 sm:p-8 max-w-7xl mx-auto w-full flex flex-col min-h-0">
         {/* Tool Bar */}
-        <div className="flex flex-col xl:flex-row gap-6 mb-8 items-start xl:items-center justify-between shrink-0">
+        <div className="flex flex-col xl:flex-row gap-4 sm:gap-6 mb-6 sm:mb-8 items-start xl:items-center justify-between shrink-0">
           <div className="relative w-full xl:w-[320px]">
             <input 
               placeholder="搜索客户、产品、负责人..." 
@@ -181,28 +188,44 @@ const ProjectTrackingView = ({
             />
           </div>
           
-          <div className="flex flex-wrap items-center gap-6 text-[13px]">
-             <button 
-               onClick={() => setFilterStatus('all')}
-               className={`font-bold transition-colors ${filterStatus === 'all' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]/80'}`}
-             >
-               全部 ({monthTrackings.length})
-             </button>
-             {Object.keys(statusLabels).map(s => {
-               const st = s as TrackingStatus;
-               const count = monthTrackings.filter(t => t.status === st).length;
-               return (
-                 <button 
-                   key={st}
-                   onClick={() => setFilterStatus(st)}
-                   className={`font-bold transition-colors ${filterStatus === st ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]/80'}`}
-                 >
-                   {statusLabels[st]} ({count})
-                 </button>
-               );
-             })}
+          <div className="flex flex-col xl:flex-row xl:flex-wrap items-start xl:items-center gap-4 sm:gap-6 text-[11px] sm:text-[13px] w-full xl:w-auto mt-2 xl:mt-0">
              
-             <div className="w-[1px] h-4 bg-[#1A1A1A]/20 ml-2"></div>
+             {/* Swipeable Tabs for mobile */}
+             <div className="hidden xl:flex w-full xl:w-auto overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory pb-2 -mb-2 gap-4 sm:gap-6 shrink-0">
+               <button 
+                 onClick={() => setFilterStatus('all')}
+                 className={`font-bold whitespace-nowrap shrink-0 snap-start transition-colors ${filterStatus === 'all' ? 'text-[#1A1A1A] border-b-2 border-[#1A1A1A] pb-1' : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]/80 pb-1'}`}
+               >
+                 全部 ({monthTrackings.length})
+               </button>
+               {Object.keys(statusLabels).map(s => {
+                 const st = s as TrackingStatus;
+                 const count = monthTrackings.filter(t => t.status === st).length;
+                 return (
+                   <button 
+                     key={st}
+                     onClick={() => setFilterStatus(st)}
+                     className={`font-bold whitespace-nowrap shrink-0 snap-start transition-colors ${filterStatus === st ? 'text-[#1A1A1A] border-b-2 border-[#1A1A1A] pb-1' : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]/80 pb-1'}`}
+                   >
+                     {statusLabels[st]} ({count})
+                   </button>
+                 );
+               })}
+             </div>
+             
+             <div className="hidden xl:block w-[1px] h-4 bg-[#1A1A1A]/20 ml-2"></div>
+             
+             <div className="flex items-center gap-2 w-full xl:w-auto">
+             
+             {/* Desktop Add Project Button */}
+             <button onClick={onAdd} className="hidden sm:flex bg-[#1A1A1A] text-white px-6 py-2.5 text-[11px] font-bold uppercase tracking-widest hover:bg-black transition-colors shrink-0 items-center gap-2">
+               <span className="text-sm leading-none">+</span> 新增项目
+             </button>
+
+             {/* Mobile Add Project FAB */}
+             <button onClick={onAdd} className="sm:hidden fixed bottom-[calc(85px+env(safe-area-inset-bottom))] right-4 z-40 bg-blue-600 text-white w-14 h-14 rounded-full shadow-[0_8px_30px_rgb(37,99,235,0.3)] flex items-center justify-center active:scale-95 transition-transform">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+             </button>
              
              <button onClick={() => {
                 if (filtered.length === 0) return;
@@ -233,13 +256,12 @@ const ProjectTrackingView = ({
                 link.click();
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
-             }} className="bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-4 py-2 text-[11px] font-bold hover:bg-[#1A1A1A]/5 transition-colors shrink-0 flex items-center gap-1 ml-2">
+             }} className="hidden sm:flex bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-4 py-2 text-[11px] font-bold hover:bg-[#1A1A1A]/5 transition-colors shrink-0 items-center gap-1 ml-2">
                导出数据
              </button>
 
-             <button onClick={onAdd} className="bg-[#1A1A1A] text-white px-6 py-2.5 text-[11px] font-bold uppercase tracking-widest hover:bg-black transition-colors shrink-0 flex items-center gap-2 ml-2">
-               <span className="text-sm leading-none">+</span> 新增项目
-             </button>
+
+             </div>
           </div>
         </div>
 
@@ -252,7 +274,8 @@ const ProjectTrackingView = ({
             </div>
           ) : (
             <div className="animate-in fade-in duration-500">
-               <div className="overflow-x-auto">
+                              {/* Desktop Table */}
+               <div className="hidden md:block overflow-x-auto">
                  <table className="w-full text-sm text-left whitespace-nowrap">
                    <thead className="sticky top-0 bg-[#F7F6F2] z-10">
                      <tr className="border-b-2 border-[#1A1A1A]/20 text-xs font-bold text-[#1A1A1A] h-12">
@@ -352,6 +375,60 @@ const ProjectTrackingView = ({
                      ))}
                    </tbody>
                  </table>
+               </div>
+               
+               {/* Mobile Card Layout */}
+               <div className="md:hidden flex flex-col gap-4 pb-[calc(100px+env(safe-area-inset-bottom))]">
+                 {filtered.map((t, i) => (
+                   <div key={t.id} className="bg-white/80 backdrop-blur-xl border border-black/5 rounded-[24px] p-5 flex flex-col gap-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden active:scale-[0.98] transition-transform" onClick={() => handleAction(t.id, 'details', () => onViewDetails(t))}>
+                     {/* Header */}
+                     <div className="flex flex-col gap-1.5 pr-14">
+                        <div className="flex items-center gap-2">
+                           <span className={`w-2 h-2 rounded-full ${statusColors[t.status]}`}></span>
+                           <span className="text-[10px] font-mono tracking-widest opacity-50 uppercase">{statusLabels[t.status]}</span>
+                        </div>
+                        <h3 className="font-bold text-[17px] text-[#1A1A1A] leading-snug">
+                          {t.customerName}
+                        </h3>
+                     </div>
+                       
+                     {/* Call Action in absolute top right */}
+                     {t.contactPhone && (
+                       <button onClick={(e) => { e.stopPropagation(); window.location.href = `tel:${t.contactPhone}`; }} className="absolute top-5 right-5 w-10 h-10 bg-[#1A1A1A]/5 hover:bg-[#1A1A1A]/10 rounded-full flex items-center justify-center transition-colors">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-[#1A1A1A]"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                       </button>
+                     )}
+                     
+                     {/* Metrics Ribbon */}
+                     <div className="flex bg-[#1A1A1A]/[0.03] rounded-2xl p-4 gap-4">
+                        <div className="flex-1">
+                           <div className="text-[10px] opacity-40 mb-1 font-bold tracking-widest">预期 (万)</div>
+                           <div className="font-mono text-lg font-medium opacity-80">{t.expectedContractAmount > 0 ? (t.expectedContractAmount / 10000).toFixed(0) : '0'}</div>
+                        </div>
+                        <div className="w-[1px] bg-black/5"></div>
+                        <div className="flex-1">
+                           <div className="text-[10px] opacity-40 mb-1 font-bold tracking-widest">达成 (万)</div>
+                           <div className="font-mono text-lg font-bold text-emerald-600">{t.actualContractAmount > 0 ? (t.actualContractAmount / 10000).toFixed(0) : '0'}</div>
+                        </div>
+                     </div>
+                     
+                     {/* Footer Info */}
+                     <div className="flex items-center justify-between mt-1">
+                        <div className="flex items-center gap-1.5 opacity-40">
+                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                           <span className="text-[11px] font-mono font-medium">{t.lastFollowupDate || '无记录'}</span>
+                        </div>
+                        <div className="text-[11px] font-bold opacity-60">
+                           {(t.cityManager || t.projectManager) ? `${t.cityManager || ''} ${t.projectManager || ''}`.trim() : '未指派'}
+                        </div>
+                     </div>
+                     
+                     {/* Floating Actions */}
+                     <div className="absolute bottom-5 right-5 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                       {/* This could be hidden on touch devices and mostly rely on clicking the card. But let's show subtle action buttons. */}
+                     </div>
+                   </div>
+                 ))}
                </div>
             </div>
           )}
@@ -1631,47 +1708,78 @@ export default function App() {
   });
 
   return (
-    <div className="h-screen w-full bg-dynamic-minimal text-[#1A1A1A] font-sans flex flex-col selection:bg-[#1A1A1A] selection:text-[#FAFAF9] overflow-hidden antialiased">
+    <div className="h-[100dvh] w-full bg-dynamic-minimal text-[#1A1A1A] font-sans flex flex-col selection:bg-[#1A1A1A] selection:text-[#FAFAF9] overflow-hidden antialiased">
       {/* Header */}
-      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end px-6 sm:px-10 py-6 border-b border-[#1A1A1A] gap-6 shrink-0">
-        <div className="flex flex-col">
-          <h1 className="text-3xl sm:text-4xl font-serif italic tracking-tight text-[#1A1A1A]">TrackFlow</h1>
-        </div>
-        <div className="flex flex-wrap gap-2 items-center text-[11px] sm:text-[12px] uppercase tracking-widest font-bold">
-          <button 
-            onClick={() => setCurrentView('dashboard')}
-            className={`px-3 py-1.5 rounded-full transition-all duration-200 ${currentView === 'dashboard' ? 'bg-[#1A1A1A] text-white' : 'opacity-60 hover:opacity-100 hover:bg-[#1A1A1A]/5'}`}
-          >
-            全局总览
-          </button>
-          
-          {(currentUser.roles.includes('项目经理') || currentUser.department === 'admin') && (
+      <header className="flex justify-between items-center px-4 sm:px-6 lg:px-10 py-4 sm:py-6 border-b border-[#1A1A1A] shrink-0 z-40 bg-[#F7F6F2]">
+        <div className="flex justify-between items-center w-full md:w-auto">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-serif italic tracking-tight text-[#1A1A1A]">TrackFlow</h1>
+          <div className="flex md:hidden items-center gap-4 text-[11px] font-semibold">
             <button 
-              onClick={() => setCurrentView('tracking')}
-              className={`px-3 py-1.5 rounded-full transition-all duration-200 ${currentView === 'tracking' ? 'bg-[#1A1A1A] text-white' : 'opacity-60 hover:opacity-100 hover:bg-[#1A1A1A]/5'}`}
+              onClick={() => setIsProfileModalOpen(true)}
+              className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center"                
             >
-              项目跟踪
+              <User className="w-5 h-5" />
             </button>
-          )}
-          
-          {[{id: 'marketing', name: '市场开拓'}, {id: 'rnd', name: '产品研发'}, {id: 'requirements', name: '需求池'}]
-            .filter(dept => {
-              if (currentUser.department === 'admin') return true;
-              if (dept.id === 'requirements') return true;
-              return currentUser.department === dept.id;
-            })
-            .map(dept => (
             <button 
-              key={dept.id}
-              onClick={() => setCurrentView(dept.id)}
-              className={`px-3 py-1.5 rounded-full transition-all duration-200 ${currentView === dept.id ? 'bg-[#1A1A1A] text-white' : 'opacity-60 hover:opacity-100 hover:bg-[#1A1A1A]/5'}`}
+              onClick={() => setIsGuideModalOpen(true)}
+              className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center"                
             >
-              {dept.name}
+              <HelpCircle className="w-5 h-5" />
             </button>
-          ))}
+            {currentUser.department === 'admin' && (
+              <button 
+                onClick={() => setIsSettingsModalOpen(true)}
+                className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+            )}
+            <button 
+              onClick={handleLogout}
+              className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         </div>
         
-        <div className="flex items-center gap-6 border-l border-[#1A1A1A]/20 pl-6 ml-2 text-[11px] sm:text-[12px] uppercase tracking-widest font-semibold">
+        <div className="hidden md:flex w-full md:w-auto overflow-x-auto custom-scrollbar pb-1">
+          <div className="flex gap-2 items-center text-[12px] uppercase tracking-widest font-bold whitespace-nowrap min-w-max">
+            <button 
+              onClick={() => setCurrentView('dashboard')}
+              className={`px-3 py-1.5 rounded-full transition-all duration-200 ${currentView === 'dashboard' ? 'bg-[#1A1A1A] text-white shadow-md' : 'opacity-60 hover:opacity-100 hover:bg-[#1A1A1A]/5'}`}
+            >
+              全局总览
+            </button>
+            
+            {(currentUser.roles.includes('项目经理') || currentUser.department === 'admin') && (
+              <button 
+                onClick={() => setCurrentView('tracking')}
+                className={`px-3 py-1.5 rounded-full transition-all duration-200 ${currentView === 'tracking' ? 'bg-[#1A1A1A] text-white shadow-md' : 'opacity-60 hover:opacity-100 hover:bg-[#1A1A1A]/5'}`}
+              >
+                项目跟踪
+              </button>
+            )}
+            
+            {[{id: 'marketing', name: '市场开拓'}, {id: 'rnd', name: '产品研发'}, {id: 'requirements', name: '需求池'}]
+              .filter(dept => {
+                if (currentUser.department === 'admin') return true;
+                if (dept.id === 'requirements') return true;
+                return currentUser.department === dept.id;
+              })
+              .map(dept => (
+              <button 
+                key={dept.id}
+                onClick={() => setCurrentView(dept.id)}
+                className={`px-3 py-1.5 rounded-full transition-all duration-200 ${currentView === dept.id ? 'bg-[#1A1A1A] text-white shadow-md' : 'opacity-60 hover:opacity-100 hover:bg-[#1A1A1A]/5'}`}
+              >
+                {dept.name}
+              </button>
+            ))}
+          </div>
+        </div>
+        
+        <div className="hidden md:flex items-center gap-6 border-l border-[#1A1A1A]/20 pl-6 ml-2 text-[12px] uppercase tracking-widest font-semibold">
           <span className="opacity-60 font-mono tracking-wider cursor-pointer hover:underline" onClick={() => setIsProfileModalOpen(true)}>{currentUser.name}</span>
           <button 
             onClick={() => setIsGuideModalOpen(true)}
@@ -1687,7 +1795,7 @@ export default function App() {
               className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center"
               title="设置"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              <Settings className="w-[15px] h-[15px]" />
             </button>
           )}
           <button 
@@ -1695,14 +1803,14 @@ export default function App() {
             className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center"
             title="退出登录"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+             <LogOut className="w-[15px] h-[15px]" />
           </button>
         </div>
       </header>
 
-      <main className="flex-1 overflow-hidden flex flex-col lg:grid lg:grid-cols-12">
+      <main className="flex-1 overflow-y-auto lg:overflow-hidden flex flex-col lg:grid lg:grid-cols-12 relative pb-[calc(env(safe-area-inset-bottom)+70px)] md:pb-0">
         {/* Sidebar / Planning Column - Only show if not in tracking view */}
-        <section className={`lg:col-span-3 lg:border-r border-[#1A1A1A] p-6 sm:p-8 flex flex-col border-b lg:border-b-0 overflow-y-auto ${currentView === 'tracking' ? 'hidden' : 'flex'}`}>
+        <section className={`lg:col-span-3 lg:border-r border-[#1A1A1A] p-4 sm:p-6 lg:p-8 flex flex-col border-b lg:border-b-0 h-auto lg:h-full lg:overflow-y-auto ${currentView === 'tracking' ? 'hidden' : 'flex'} ${currentView === 'dashboard' ? 'order-2 lg:order-1' : ''}`}>
           <div className="mb-10 lg:mb-auto flex-1">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-[11px] uppercase tracking-[0.2em] font-bold flex items-center">
@@ -2287,13 +2395,15 @@ export default function App() {
         </section>
 
         {/* Main Schedule / Weekly Breakdown */}
-        <section className={`${currentView === 'tracking' ? 'lg:col-span-12 p-0' : 'lg:col-span-9 p-6 sm:p-8'} flex flex-col border-b border-[#1A1A1A] lg:border-b-0 overflow-y-auto bg-[#F7F6F2]`}>
+        <section className={`${currentView === 'tracking' ? 'lg:col-span-12 p-0' : 'lg:col-span-9 p-4 sm:p-6 lg:p-8'} flex flex-col border-b border-[#1A1A1A] lg:border-b-0 h-auto lg:h-full lg:overflow-y-auto bg-[#F7F6F2] ${currentView === 'dashboard' ? 'order-1 lg:order-2' : ''}`}>
           <div className="flex-1 flex flex-col">
             {/* Requirements View */}
             {currentView === 'requirements' && (
               <div className="space-y-8 animate-in fade-in duration-500 pb-20">
                 <div className="flex flex-col gap-4">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/40 p-6 border border-[#1A1A1A]/10">
+                  
+                  {/* Desktop Header */}
+                  <div className="hidden sm:flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/40 p-6 border border-[#1A1A1A]/10">
                     <div>
                       <h2 className="text-3xl font-serif italic mb-1">产品需求池</h2>
                       <p className="text-[10px] opacity-50 uppercase tracking-widest">收纳、评审与规划产品的各项业务及技术需求</p>
@@ -2330,42 +2440,111 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4 sm:gap-6 border-b border-[#1A1A1A]/10 px-2 overflow-x-auto whitespace-nowrap custom-scrollbar">
-                    <button 
-                      onClick={() => setReqTabFilter('all')}
-                      className={`pb-3 border-b-2 text-[12px] font-bold tracking-widest transition-colors ${reqTabFilter === 'all' ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-[#1A1A1A]/50 hover:text-[#1A1A1A]'}`}
-                    >
-                      所有需求
-                    </button>
-                    <button 
-                      onClick={() => setReqTabFilter('created')}
-                      className={`pb-3 border-b-2 text-[12px] font-bold tracking-widest transition-colors ${reqTabFilter === 'created' ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-[#1A1A1A]/50 hover:text-[#1A1A1A]'}`}
-                    >
-                      我发起的
-                    </button>
-                    <button 
-                      onClick={() => setReqTabFilter('assigned')}
-                      className={`pb-3 border-b-2 text-[12px] font-bold tracking-widest transition-colors ${reqTabFilter === 'assigned' ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-[#1A1A1A]/50 hover:text-[#1A1A1A]'}`}
-                    >
-                      分配给我的
-                    </button>
+                  
+                  {/* Mobile Header Native Apple Style */}
+                  <div className="sm:hidden px-4 pt-2 pb-4 flex flex-col gap-4">
+                    <div>
+                      <h2 className="text-3xl font-serif italic mb-1 text-[#1A1A1A]">需求池</h2>
+                      <p className="text-[11px] opacity-50 uppercase tracking-widest">规划业务及技术需求</p>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                       <select 
+                         value={reqAssigneeFilter}
+                         onChange={(e) => setReqAssigneeFilter(e.target.value)}
+                         className="flex-1 bg-white/80 backdrop-blur-md border border-black/5 rounded-xl py-2.5 px-3 text-[13px] font-medium outline-none text-[#1A1A1A]"
+                       >
+                         <option value="">筛选负责人</option>
+                         {members.filter(m => m.department === 'rnd').map(m => (
+                           <option key={m.id} value={m.id}>{m.name}</option>
+                         ))}
+                       </select>
+                       <button 
+                         onClick={() => setIsRequirementRecycleBinOpen(true)}
+                         className="bg-white/80 backdrop-blur-md border border-black/5 w-11 h-11 rounded-xl flex items-center justify-center text-[#1A1A1A]/60"
+                       >
+                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                         </svg>
+                       </button>
+                    </div>
+                  </div>
+                  
+                  {/* Floating Action Button for Mobile Add Requirement */}
+                  <button onClick={() => {
+                        setEditingRequirementId(null);
+                        setRequirementForm({ title: '', description: '', linkUrl: '', priority: 'medium', source: 'customer', customerName: '', internalSourceDetail: '', assigneeId: '' });
+                        setIsRequirementModalOpen(true);
+                      }} 
+                      className="sm:hidden fixed bottom-[calc(85px+env(safe-area-inset-bottom))] right-4 z-40 bg-zinc-800 text-white w-14 h-14 rounded-[22px] shadow-[0_8px_30px_rgb(0,0,0,0.2)] flex items-center justify-center active:scale-95 transition-transform"
+                  >
+                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  </button>
+
+                  <div className="flex items-center gap-4 sm:gap-6 sm:border-b border-[#1A1A1A]/10 px-4 sm:px-2 overflow-x-auto whitespace-nowrap hide-scrollbar-on-mobile">
+                    {/* Desktop Tabs */}
+                    <div className="hidden sm:flex items-center gap-6">
+                      <button 
+                        onClick={() => setReqTabFilter('all')}
+                        className={`pb-3 border-b-2 text-[12px] font-bold tracking-widest transition-colors ${reqTabFilter === 'all' ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-[#1A1A1A]/50 hover:text-[#1A1A1A]'}`}
+                      >
+                        所有需求
+                      </button>
+                      <button 
+                        onClick={() => setReqTabFilter('created')}
+                        className={`pb-3 border-b-2 text-[12px] font-bold tracking-widest transition-colors ${reqTabFilter === 'created' ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-[#1A1A1A]/50 hover:text-[#1A1A1A]'}`}
+                      >
+                        我发起的
+                      </button>
+                      <button 
+                        onClick={() => setReqTabFilter('assigned')}
+                        className={`pb-3 border-b-2 text-[12px] font-bold tracking-widest transition-colors ${reqTabFilter === 'assigned' ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-[#1A1A1A]/50 hover:text-[#1A1A1A]'}`}
+                      >
+                        分配给我的
+                      </button>
+                    </div>
+
+                    {/* Mobile Native Segmented Control */}
+                    <div className="sm:hidden flex bg-[#1A1A1A]/5 p-1 rounded-[14px] w-full">
+                      {(['all', 'created', 'assigned'] as const).map(tab => (
+                        <button
+                          key={tab}
+                          onClick={() => setReqTabFilter(tab)}
+                          className={`flex-1 py-1.5 text-[12px] font-bold rounded-[10px] transition-all ${reqTabFilter === tab ? 'bg-white shadow-[0_2px_8px_rgb(0,0,0,0.06)] text-[#1A1A1A]' : 'text-[#1A1A1A]/60'}`}
+                        >
+                          {tab === 'all' ? '全部' : tab === 'created' ? '我发起的' : '我负责的'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                <div className="pt-4">
+                <div className="pt-4 pb-8 -mx-4 sm:mx-0 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory scroll-smooth">
                   
-                  <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                  <div className="flex xl:grid xl:grid-cols-6 gap-4 sm:gap-6 pb-4 px-4 sm:px-0">
                   {(['backlog', 'reviewing', 'approved', 'rejected', 'planned', 'completed'] as RequirementStatus[]).map((status) => (
-                    <div key={status} className="flex flex-col gap-4">
-                      <div className="flex items-center justify-between px-1">
-                        <span className="text-[10px] font-bold uppercase tracking-widest opacity-60">
-                          {status === 'backlog' ? '待评审' : 
-                           status === 'reviewing' ? '评审中' : 
-                           status === 'approved' ? '评审通过' : 
-                           status === 'rejected' ? '已驳回' : 
-                           status === 'planned' ? '已排期' : '已完成'}
-                        </span>
-                        <span className="text-[10px] font-mono opacity-40">{displayRequirements.filter(r => r.status === status).length}</span>
+                    <div key={status} className="flex flex-col gap-4 w-[85vw] sm:w-[320px] xl:w-auto shrink-0 snap-center sm:snap-start">
+                      <div className="flex items-center justify-between px-2 sm:px-1 mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${
+                              status === 'backlog' ? 'bg-gray-400' :
+                              status === 'reviewing' ? 'bg-blue-400' :
+                              status === 'approved' ? 'bg-emerald-400' :
+                              status === 'rejected' ? 'bg-rose-400' :
+                              status === 'planned' ? 'bg-indigo-500' :
+                              'bg-slate-800'
+                          }`}></div>
+                          <span className="text-[14px] sm:text-[10px] font-bold uppercase sm:tracking-widest text-[#1A1A1A] sm:opacity-60">
+                            {status === 'backlog' ? '待评审' : 
+                             status === 'reviewing' ? '评审中' : 
+                             status === 'approved' ? '评审通过' : 
+                             status === 'rejected' ? '已驳回' : 
+                             status === 'planned' ? '已排期' : '已完成'}
+                          </span>
+                        </div>
+                        <div className="bg-black/5 px-2 py-0.5 rounded-full text-[12px] sm:text-[10px] font-mono font-medium text-[#1A1A1A]/60">
+                           {displayRequirements.filter(r => r.status === status).length}
+                        </div>
                       </div>
                       <div className="flex flex-col gap-3 min-h-[200px]">
                         {displayRequirements.filter(r => r.status === status).map((req) => (
@@ -2375,16 +2554,16 @@ export default function App() {
                               setSelectedRequirement(req);
                               setIsRequirementDetailModalOpen(true);
                             }}
-                            className={`p-4 hover:shadow-md transition-all group relative overflow-hidden border-t border-r border-b border-[#1A1A1A]/10 border-l-4 cursor-pointer ${
-                              req.status === 'backlog' ? 'bg-white border-l-gray-300' :
-                              req.status === 'reviewing' ? 'bg-blue-50/30 border-l-blue-400' :
-                              req.status === 'approved' ? 'bg-emerald-50/30 border-l-emerald-400' :
-                              req.status === 'rejected' ? 'bg-rose-50/30 border-l-rose-400' :
-                              req.status === 'planned' ? 'bg-indigo-50/30 border-l-indigo-500' :
-                              'bg-slate-50/50 border-l-slate-800 opacity-80'
+                            className={`p-5 hover:shadow-md transition-transform active:scale-[0.98] group relative overflow-hidden bg-white/80 backdrop-blur-md rounded-2xl border border-black/5 cursor-pointer shadow-[0_2px_10px_rgb(0,0,0,0.02)] ${
+                              req.status === 'backlog' ? 'border-l-4 border-l-gray-300' :
+                              req.status === 'reviewing' ? 'border-l-4 border-l-blue-400' :
+                              req.status === 'approved' ? 'border-l-4 border-l-emerald-400' :
+                              req.status === 'rejected' ? 'border-l-4 border-l-rose-400' :
+                              req.status === 'planned' ? 'border-l-4 border-l-indigo-500' :
+                              'border-l-4 border-l-slate-800 opacity-80'
                             }`}
                           >
-                            <div className="flex flex-col sm:flex-row sm:justify-between items-start gap-2 mb-2 relative z-10">
+                            <div className="flex flex-col sm:flex-row sm:justify-between items-start gap-2 mb-3 relative z-10">
                               <div className="flex gap-1.5 flex-wrap">
                                 <span className={`text-[8px] px-1.5 py-0.5 rounded-sm font-bold uppercase ${
                                   req.priority === 'high' ? 'bg-red-50 text-red-600 border border-red-200' : 
@@ -2600,7 +2779,7 @@ export default function App() {
 
               {/* Digital Metrics Board */}
               <div className="flex flex-col gap-4 mb-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory pb-4">
                   
                   {/* 1. Year to Date Profit */}
                   {(() => {
@@ -2628,7 +2807,7 @@ export default function App() {
                     }
 
                     return (
-                      <div className="bg-white border border-[#1A1A1A]/10 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-[#1A1A1A]/20 transition-all">
+                      <div className="bg-white border border-[#1A1A1A]/10 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-[#1A1A1A]/20 transition-all min-w-[280px] sm:min-w-0 w-full shrink-0 snap-center rounded-2xl sm:rounded-none">
                         <div className="absolute -top-4 -right-4 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                           <span className="text-8xl font-serif">¥</span>
                         </div>
@@ -2681,7 +2860,7 @@ export default function App() {
                     }
                     
                     return (
-                      <div className="bg-white border border-[#1A1A1A]/10 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-[#1A1A1A]/20 transition-all">
+                      <div className="bg-white border border-[#1A1A1A]/10 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-[#1A1A1A]/20 transition-all min-w-[280px] sm:min-w-0 w-full shrink-0 snap-center rounded-2xl sm:rounded-none">
                         <div className="absolute -top-4 -right-4 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                           <span className="text-8xl font-serif">¥</span>
                         </div>
@@ -2735,7 +2914,7 @@ export default function App() {
                     }
                     
                     return (
-                      <div className="bg-white border border-[#1A1A1A]/10 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-[#1A1A1A]/20 transition-all">
+                      <div className="bg-white border border-[#1A1A1A]/10 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-[#1A1A1A]/20 transition-all min-w-[280px] sm:min-w-0 w-full shrink-0 snap-center rounded-2xl sm:rounded-none">
                         <div className="absolute -top-4 -right-4 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                           <span className="text-8xl font-serif">¥</span>
                         </div>
@@ -2760,7 +2939,7 @@ export default function App() {
                   })()}
 
                   {/* 4. Combined Month Collection */}
-                  <div className="bg-white border border-[#1A1A1A]/10 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-[#1A1A1A]/20 transition-all">
+                  <div className="bg-white border border-[#1A1A1A]/10 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-sm hover:shadow-md hover:border-[#1A1A1A]/20 transition-all min-w-[280px] sm:min-w-0 w-full shrink-0 snap-center rounded-2xl sm:rounded-none">
                     <span className="text-[10px] uppercase tracking-widest font-bold opacity-60 text-[#1A1A1A] relative z-10 w-[85%] leading-tight">当月回款目标 / 实际 (万)</span>
                     <div className="flex items-baseline gap-2 relative z-10 mt-2">
                        <span className="text-3xl font-serif italic text-[#1A1A1A]">{currentMonthActualCollection}</span>
@@ -2804,8 +2983,8 @@ export default function App() {
                 </div>
 
                 {/* Client Stats Row */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-white border border-[#1A1A1A]/10 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-[#1A1A1A]/30 hover:shadow-md transition-all">
+                <div className="flex sm:grid sm:grid-cols-2 md:grid-cols-4 gap-4 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory pb-4">
+                  <div className="bg-white border border-[#1A1A1A]/10 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-[#1A1A1A]/30 hover:shadow-md transition-all min-w-[240px] sm:min-w-0 shrink-0 snap-center rounded-2xl sm:rounded-sm">
                     <span className="text-[10px] uppercase tracking-widest opacity-60 text-[#1A1A1A]">潜在客户库 (年度累计)</span>
                     <div className="flex items-baseline gap-2 mt-2">
                       <span className="text-3xl font-serif italic text-[#1A1A1A]">{yearLeadClients}</span>
@@ -2813,7 +2992,7 @@ export default function App() {
                     </div>
                   </div>
                   
-                  <div className="bg-white border border-[#1A1A1A]/10 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-[#1A1A1A]/30 hover:shadow-md transition-all">
+                  <div className="bg-white border border-[#1A1A1A]/10 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-[#1A1A1A]/30 hover:shadow-md transition-all min-w-[240px] sm:min-w-0 shrink-0 snap-center rounded-2xl sm:rounded-sm">
                     <span className="text-[10px] uppercase tracking-widest opacity-60 text-[#1A1A1A]">已开发推进中 (年度累计)</span>
                     <div className="flex items-baseline gap-2 mt-2">
                       <span className="text-3xl font-serif italic text-[#16a34a]">{yearActiveClients}</span>
@@ -2821,7 +3000,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="bg-white border border-[#1A1A1A]/10 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-[#1A1A1A]/30 hover:shadow-md transition-all">
+                  <div className="bg-white border border-[#1A1A1A]/10 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-[#1A1A1A]/30 hover:shadow-md transition-all min-w-[240px] sm:min-w-0 shrink-0 snap-center rounded-2xl sm:rounded-sm">
                     <span className="text-[10px] uppercase tracking-widest font-bold opacity-80 text-[#1A1A1A]">已签约成交 (年度累计)</span>
                     <div className="flex items-baseline gap-2 mt-2">
                       <span className="text-3xl font-serif italic text-[#1A1A1A]">{yearSignedClients}</span>
@@ -2829,7 +3008,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="bg-white border border-[#1A1A1A]/10 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-[#1A1A1A]/30 hover:shadow-md transition-all">
+                  <div className="bg-white border border-[#1A1A1A]/10 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-[#1A1A1A]/30 hover:shadow-md transition-all min-w-[240px] sm:min-w-0 shrink-0 snap-center rounded-2xl sm:rounded-sm">
                     <span className="text-[10px] uppercase tracking-widest opacity-60 text-[#1A1A1A]">客户流失 (年度累计)</span>
                     <div className="flex items-baseline gap-2 mt-2">
                       <span className="text-3xl font-serif italic text-red-600">{yearLostClients}</span>
@@ -2921,10 +3100,62 @@ export default function App() {
 
       </main>
 
+      {/* Mobile Bottom Navigation (Apple Style) */}
+      <nav className="md:hidden fixed bottom-0 left-0 w-full bg-[#F7F6F2]/90 backdrop-blur-md border-t border-[#1A1A1A]/10 z-40 pb-[env(safe-area-inset-bottom)] px-2 h-[calc(60px+env(safe-area-inset-bottom))] flex items-center justify-around shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
+        
+        <button 
+          onClick={() => setCurrentView('dashboard')}
+          className={`flex flex-col items-center justify-center w-16 h-12 gap-1 rounded-xl transition-all ${currentView === 'dashboard' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
+        >
+           <LayoutDashboard className={`w-5 h-5 transition-transform ${currentView === 'dashboard' ? 'scale-110' : ''}`} strokeWidth={currentView === 'dashboard' ? 2.5 : 2} />
+           <span className={`text-[9px] font-bold tracking-wider ${currentView === 'dashboard' ? 'opacity-100' : 'opacity-80'}`}>全局</span>
+        </button>
+
+        {(currentUser.roles.includes('项目经理') || currentUser.department === 'admin') && (
+          <button 
+            onClick={() => setCurrentView('tracking')}
+            className={`flex flex-col items-center justify-center w-16 h-12 gap-1 rounded-xl transition-all ${currentView === 'tracking' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
+          >
+             <Target className={`w-5 h-5 transition-transform ${currentView === 'tracking' ? 'scale-110' : ''}`} strokeWidth={currentView === 'tracking' ? 2.5 : 2} />
+             <span className={`text-[9px] font-bold tracking-wider ${currentView === 'tracking' ? 'opacity-100' : 'opacity-80'}`}>跟踪</span>
+          </button>
+        )}
+
+        {(currentUser.department === 'admin' || currentUser.department === 'marketing') && (
+          <button 
+            onClick={() => setCurrentView('marketing')}
+            className={`flex flex-col items-center justify-center w-16 h-12 gap-1 rounded-xl transition-all ${currentView === 'marketing' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
+          >
+             <TrendingUp className={`w-5 h-5 transition-transform ${currentView === 'marketing' ? 'scale-110' : ''}`} strokeWidth={currentView === 'marketing' ? 2.5 : 2} />
+             <span className={`text-[9px] font-bold tracking-wider ${currentView === 'marketing' ? 'opacity-100' : 'opacity-80'}`}>市场</span>
+          </button>
+        )}
+
+        {(currentUser.department === 'admin' || currentUser.department === 'rnd') && (
+          <button 
+            onClick={() => setCurrentView('rnd')}
+            className={`flex flex-col items-center justify-center w-16 h-12 gap-1 rounded-xl transition-all ${currentView === 'rnd' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
+          >
+             <Code2 className={`w-5 h-5 transition-transform ${currentView === 'rnd' ? 'scale-110' : ''}`} strokeWidth={currentView === 'rnd' ? 2.5 : 2} />
+             <span className={`text-[9px] font-bold tracking-wider ${currentView === 'rnd' ? 'opacity-100' : 'opacity-80'}`}>研发</span>
+          </button>
+        )}
+
+        <button 
+          onClick={() => setCurrentView('requirements')}
+          className={`flex flex-col items-center justify-center w-16 h-12 gap-1 rounded-xl transition-all ${currentView === 'requirements' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
+        >
+           <ClipboardList className={`w-5 h-5 transition-transform ${currentView === 'requirements' ? 'scale-110' : ''}`} strokeWidth={currentView === 'requirements' ? 2.5 : 2} />
+           <span className={`text-[9px] font-bold tracking-wider ${currentView === 'requirements' ? 'opacity-100' : 'opacity-80'}`}>需求</span>
+        </button>
+
+      </nav>
+
       {/* Release Goal Modal */}
       {isReleaseGoalModalOpen && (
-        <div className="fixed inset-0 bg-[#1A1A1A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#F7F6F2] p-6 sm:p-8 max-w-md w-full border border-[#1A1A1A] shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 bg-[#1A1A1A]/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
+          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <button 
               onClick={() => setIsReleaseGoalModalOpen(false)}
               className="absolute top-4 right-4 text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
@@ -3042,8 +3273,10 @@ export default function App() {
 
       {/* Goal Setting Modal */}
       {isGoalModalOpen && (
-        <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#F7F6F2] p-6 sm:p-8 max-w-md w-full border border-[#1A1A1A] shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
+          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <button 
               onClick={() => setIsGoalModalOpen(false)}
               className="absolute top-4 right-4 text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
@@ -3166,8 +3399,10 @@ export default function App() {
 
       {/* Edit Target Modal */}
       {isEditModalOpen && editingPlan && (
-        <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#F7F6F2] p-6 sm:p-8 max-w-md w-full border border-[#1A1A1A] shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
+          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <button 
               onClick={() => { setIsEditModalOpen(false); setEditingPlan(null); }}
               className="absolute top-4 right-4 text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
@@ -3210,8 +3445,10 @@ export default function App() {
 
       {/* Actual Progress Modal */}
       {isActualModalOpen && editingPlan && (
-        <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#F7F6F2] p-6 sm:p-8 max-w-md w-full border border-[#1A1A1A] shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
+          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <button 
               onClick={() => { setIsActualModalOpen(false); setEditingPlan(null); }}
               className="absolute top-4 right-4 text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
@@ -3257,8 +3494,10 @@ export default function App() {
 
       {/* Add Task Modal */}
       {isTaskModalOpen && (
-        <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#F7F6F2] p-6 sm:p-8 max-w-md w-full border border-[#1A1A1A] shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
+          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <button 
               onClick={() => setIsTaskModalOpen(false)}
               className="absolute top-4 right-4 text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
@@ -3404,8 +3643,10 @@ export default function App() {
 
       {/* Add Outcome Modal */}
       {isOutcomeModalOpen && (
-        <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#F7F6F2] p-6 sm:p-8 max-w-md w-full border border-[#1A1A1A] shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
+          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <button 
               onClick={() => setIsOutcomeModalOpen(false)}
               className="absolute top-4 right-4 text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
@@ -3503,8 +3744,10 @@ export default function App() {
 
       {/* Add Requirement Modal */}
       {isRequirementModalOpen && (
-        <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#F7F6F2] p-6 sm:p-8 max-w-md w-full border border-[#1A1A1A] shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
+          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <button 
               onClick={() => {
                 setIsRequirementModalOpen(false);
@@ -3654,13 +3897,14 @@ export default function App() {
 
       {/* Requirement Recycle Bin Modal */}
       {isRequirementRecycleBinOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
           <div 
             className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm"
             onClick={() => setIsRequirementRecycleBinOpen(false)}
           />
-          <div className="relative bg-white border border-[#1A1A1A]/10 w-full max-w-3xl max-h-[80vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300">
-            <div className="flex justify-between items-center px-8 py-6 border-b border-[#1A1A1A]/5">
+          <div className="relative bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-3xl h-[100dvh] sm:h-[80vh] max-h-[100dvh] sm:max-h-[80vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-sm">
+            <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2 z-50"></div>
+            <div className="flex justify-between items-center px-6 sm:px-8 py-5 pt-8 sm:pt-6 border-b border-[#1A1A1A]/5 bg-black/[0.02]">
               <div className="flex items-center gap-3">
                 <h3 className="text-[11px] uppercase tracking-[0.2em] font-bold opacity-40">已删除需求记录</h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 bg-black/5 rounded-full opacity-40">
@@ -3712,12 +3956,12 @@ export default function App() {
 
       {/* Logout Confirmation Modal */}
       {isLogoutModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
           <div 
             className="absolute inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm"
             onClick={() => setIsLogoutModalOpen(false)}
           />
-          <div className="relative bg-white p-8 max-w-sm w-full border-t-4 border-[#1A1A1A] shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="relative bg-white pt-8 sm:pt-6 p-8 max-w-sm w-full border-t-4 border-[#1A1A1A] shadow-2xl animate-in zoom-in-95 duration-200">
             <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
               确认退出
             </h3>
@@ -3744,9 +3988,11 @@ export default function App() {
 
       {/* Tracking Modal */}
       {isTrackingModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
           <div className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm" onClick={() => { setIsTrackingModalOpen(false); setTrackingError(''); }} />
-          <div className="relative bg-white border border-[#1A1A1A]/10 w-full max-w-lg p-8 shadow-2xl">
+          <div className="relative bg-white pt-8 sm:pt-6 sm:border border-[#1A1A1A]/10 w-full sm:max-w-lg p-4 sm:p-8 shadow-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:rounded-sm overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <h3 className="text-2xl font-serif italic mb-6">{editingTrackingId ? '编辑项目' : '新增项目'}</h3>
             <div className="grid grid-cols-2 gap-4">
               {[
@@ -3811,9 +4057,11 @@ export default function App() {
 
       {/* Followup Modal */}
       {isFollowupModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
           <div className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm" onClick={() => setIsFollowupModalOpen(false)} />
-          <div className="relative bg-white border border-[#1A1A1A]/10 w-full max-w-2xl p-8 shadow-2xl flex flex-col max-h-[90vh]">
+          <div className="relative bg-white pt-8 sm:pt-6 sm:border border-[#1A1A1A]/10 w-full sm:max-w-2xl p-4 sm:p-8 shadow-2xl flex flex-col h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:rounded-sm mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
+          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <h3 className="text-2xl font-serif italic mb-6 shrink-0">添加跟进记录</h3>
             <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
               <div>
@@ -3851,10 +4099,10 @@ export default function App() {
 
       {/* Tracking Detail Modal */}
       {isTrackingDetailModalOpen && selectedTrackingDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 lg:p-8">
+        <div className="fixed inset-0 z-50 flex items-center justify-center sm:p-6 lg:p-8">
           <div className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm" onClick={() => setIsTrackingDetailModalOpen(false)} />
-          <div className="relative bg-white border border-[#1A1A1A]/10 w-full max-w-5xl h-full max-h-[90vh] shadow-2xl flex flex-col animate-in zoom-in-95 duration-300 rounded-sm overflow-hidden">
-            <div className="px-8 py-6 border-b border-[#1A1A1A]/10 shrink-0 flex justify-between items-start bg-[#F7F6F2]">
+          <div className="relative bg-white pt-8 sm:pt-6 sm:border border-[#1A1A1A]/10 w-full sm:max-w-5xl h-[100dvh] sm:h-full max-h-[100dvh] sm:max-h-[90vh] shadow-xl sm:shadow-2xl flex flex-col animate-in zoom-in-95 sm:zoom-in-100 duration-300 sm:rounded-sm overflow-hidden">
+            <div className="px-6 md:px-8 py-6 pt-4 sm:pt-6 border-b border-[#1A1A1A]/10 shrink-0 flex justify-between items-start bg-[#F7F6F2] relative">
               <div>
                 <div className="flex items-center gap-3 mb-2">
                   <h3 className="text-3xl font-serif italic">{selectedTrackingDetail.customerName}</h3>
@@ -3878,9 +4126,9 @@ export default function App() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden md:overflow-hidden flex flex-col md:flex-row">
               {/* Left Sidebar: Detailed Info */}
-              <div className="w-full md:w-[35%] lg:w-[30%] border-r border-[#1A1A1A]/10 overflow-y-auto p-8 bg-white space-y-8 custom-scrollbar">
+              <div className="w-full md:w-[35%] lg:w-[30%] border-b md:border-b-0 md:border-r border-[#1A1A1A]/10 p-6 md:p-8 bg-white space-y-8 shrink-0 md:h-full md:overflow-y-auto custom-scrollbar">
                 
                 <div>
                    <h4 className="text-[10px] uppercase tracking-widest font-bold opacity-40 mb-3 border-b border-[#1A1A1A]/10 pb-2">客户联系信息</h4>
@@ -3947,7 +4195,7 @@ export default function App() {
               </div>
 
               {/* Right Area: Followup Timeline */}
-              <div className="w-full md:w-[65%] lg:w-[70%] overflow-y-auto p-8 lg:p-10 bg-[#F7F6F2] custom-scrollbar">
+              <div className="w-full md:w-[65%] lg:w-[70%] p-6 md:p-8 lg:p-10 bg-[#F7F6F2] md:h-full md:overflow-y-auto custom-scrollbar">
                  <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#1A1A1A]/10 border-dashed">
                    <div>
                      <h4 className="text-lg font-serif italic">跟进记录明细</h4>
@@ -4011,12 +4259,12 @@ export default function App() {
 
       {/* Terminate Tracking Modal */}
       {isTerminateTrackingModalOpen && trackingToTerminate && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
           <div 
             className="absolute inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm"
             onClick={() => { setIsTerminateTrackingModalOpen(false); setTrackingToTerminate(null); }}
           />
-          <div className="relative bg-white p-8 max-w-sm w-full border-t-4 border-red-500 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="relative bg-white pt-8 sm:pt-6 p-8 max-w-sm w-full border-t-4 border-red-500 shadow-2xl animate-in zoom-in-95 duration-200">
             <h3 className="text-xl font-bold mb-4 text-red-600 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
               确认作废项目
@@ -4045,7 +4293,7 @@ export default function App() {
 
       {/* Reject Requirement Modal */}
       {isRejectRequirementModalOpen && reqToReject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
           <div 
             className="absolute inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm"
             onClick={() => { setIsRejectRequirementModalOpen(false); setReqToReject(null); setRejectReason(''); }}
@@ -4080,13 +4328,14 @@ export default function App() {
 
       {/* Requirement Detail Modal */}
       {isRequirementDetailModalOpen && selectedRequirement && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
           <div 
             className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm"
             onClick={() => setIsRequirementDetailModalOpen(false)}
           />
-          <div className="relative bg-white border border-[#1A1A1A]/10 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300">
-            <div className="flex justify-between items-center px-8 py-5 border-b border-[#1A1A1A]/5 bg-black/[0.02]">
+          <div className="relative bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-2xl h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-sm">
+            <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2 z-50"></div>
+            <div className="flex justify-between items-center px-6 sm:px-8 py-5 pt-8 sm:pt-5 border-b border-[#1A1A1A]/5 bg-black/[0.02] shrink-0">
               <div className="flex items-center gap-3">
                 <span className={`w-2 h-2 ${
                   selectedRequirement.priority === 'high' ? 'bg-red-600 shadow-[0_0_8px_rgba(220,38,38,0.5)]' : 
@@ -4102,8 +4351,8 @@ export default function App() {
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-              <div className="mb-10">
+            <div className="flex-1 overflow-y-auto px-5 py-6 sm:p-8 custom-scrollbar">
+              <div className="mb-6 sm:mb-10">
                 <div className="flex flex-col gap-2 mb-8">
                   {selectedRequirement.serialNumber && <span className="text-[11px] font-mono text-[#1A1A1A]/40 uppercase tracking-widest">{selectedRequirement.serialNumber}</span>}
                   <h2 className="text-2xl sm:text-3xl font-serif italic leading-tight text-[#1A1A1A]">{selectedRequirement.title}</h2>
@@ -4291,12 +4540,12 @@ export default function App() {
 
       {/* Task Detail Modal */}
       {isTaskDetailModalOpen && selectedTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
           <div 
             className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm"
             onClick={() => setIsTaskDetailModalOpen(false)}
           />
-          <div className="relative bg-white border border-[#1A1A1A]/10 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300">
+          <div className="relative bg-white pt-8 sm:pt-6 border border-[#1A1A1A]/10 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300">
             <div className="flex justify-between items-center px-8 py-6 border-b border-[#1A1A1A]/5">
               <div className="flex items-center gap-3">
                 <span className={`w-2 h-2 ${selectedTask.status === 'completed' || selectedTask.progress === 100 ? 'bg-green-500' : 'bg-amber-500'}`} />
@@ -4384,12 +4633,12 @@ export default function App() {
 
       {/* Outcome Detail Modal */}
       {isOutcomeDetailModalOpen && selectedOutcome && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
           <div 
             className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm"
             onClick={() => setIsOutcomeDetailModalOpen(false)}
           />
-          <div className="relative bg-white border border-[#1A1A1A]/10 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300">
+          <div className="relative bg-white pt-8 sm:pt-6 border border-[#1A1A1A]/10 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300">
             <div className="flex justify-between items-center px-8 py-6 border-b border-[#1A1A1A]/5">
               <div className="flex items-center gap-3">
                 <span className="w-2 h-2 bg-[#1A1A1A]" />
@@ -4473,12 +4722,12 @@ export default function App() {
 
       {/* Goal Detail Modal */}
       {isGoalDetailModalOpen && selectedGoalDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
           <div 
             className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm"
             onClick={() => setIsGoalDetailModalOpen(false)}
           />
-          <div className="relative bg-white border border-[#1A1A1A]/10 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300">
+          <div className="relative bg-white pt-8 sm:pt-6 border border-[#1A1A1A]/10 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300">
             <div className="flex justify-between items-center px-8 py-6 border-b border-[#1A1A1A]/5">
               <div className="flex items-center gap-3">
                 <span className="w-2 h-2 bg-[#1A1A1A]" />

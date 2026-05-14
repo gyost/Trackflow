@@ -62,13 +62,27 @@ export const apiService = {
     return data || [];
   },
 
-  saveRequirement: async (req: Requirement): Promise<void> => {
-    const { error } = await supabase.from('requirements').upsert(req);
-    if (error) throw error;
+  saveRequirement: async (req: Requirement & { newHistoryEntry?: RequirementHistory }): Promise<void> => {
+    const { newHistoryEntry, history, ...rest } = req;
+    const { error } = await supabase.from('requirements').upsert(rest);
+    if (error) {
+      console.error('Failed to save requirement:', error);
+      throw error;
+    }
     
-    if (req.history && req.history.length > 0) {
-        const { error: histError } = await supabase.from('requirement_history').upsert(req.history);
-        if (histError) throw histError;
+    if (newHistoryEntry) {
+        const { error: histError } = await supabase.from('requirement_history').upsert(newHistoryEntry);
+        if (histError) {
+          console.error('Failed to save requirement history:', histError);
+          throw histError;
+        }
+    } else if (history && history.length > 0) {
+        // Optional: save history array if needed
+        const { error: histError } = await supabase.from('requirement_history').upsert(history);
+        if (histError) {
+          console.error('Failed to save requirement history array:', histError);
+          throw histError;
+        }
     }
   },
 
@@ -102,8 +116,18 @@ export const apiService = {
   },
 
   saveProjectTracking: async (track: ProjectTracking): Promise<void> => {
-    const { error } = await supabase.from('project_trackings').upsert(track);
-    if (error) throw error;
+    // If the table doesn't have a followupRecords json column, the upsert might fail.
+    // Also remove empty string dates which cause Postgres timestamp errors
+    const trackData: any = { ...track };
+    if (trackData.signedDate === "") trackData.signedDate = null;
+    if (trackData.followupDate === "") trackData.followupDate = null;
+    if (trackData.lastFollowupDate === "") trackData.lastFollowupDate = null;
+
+    const { error } = await supabase.from('project_trackings').upsert(trackData);
+    if (error) {
+      console.error('Failed to save project tracking:', error);
+      throw error;
+    }
   },
 
   deleteProjectTracking: async (id: string): Promise<void> => {
