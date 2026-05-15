@@ -444,12 +444,14 @@ const ProjectTrackingView = ({
 export default function App() {
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
   const [currentUserLoaded, setCurrentUserLoaded] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<string>('dashboard');
-  const [plans, setPlans] = useState<Plan[]>(initialPlans);
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
-  const [outcomes, setOutcomes] = useState<Outcome[]>(initialOutcomes);
-  const [requirements, setRequirements] = useState<Requirement[]>(initialRequirements);
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [outcomes, setOutcomes] = useState<Outcome[]>([]);
+  const [requirements, setRequirements] = useState<Requirement[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [releaseGoals, setReleaseGoals] = useState<ReleaseGoal[]>([]);
   const [projectTrackings, setProjectTrackings] = useState<ProjectTracking[]>([]);
 
@@ -600,9 +602,13 @@ export default function App() {
   });
 
   useEffect(() => {
+    let mounted = true;
     const fetchData = async () => {
+      setIsLoadingData(true);
+      setDataError(null);
+      console.log('fetchData: START');
       try {
-        const [projectsData, plansData, tasksData, outcomesData, requirementsData, releaseGoalsData, trackingsData] = await Promise.all([
+        const fetchPromise = Promise.all([
           apiService.getProjects(),
           apiService.getPlans(),
           apiService.getTasks(),
@@ -611,19 +617,66 @@ export default function App() {
           apiService.getReleaseGoals(),
           apiService.getProjectTrackings()
         ]);
-        setProjects(projectsData.length > 0 ? projectsData : mockProjects);
-        setPlans(plansData.length > 0 ? plansData : initialPlans);
-        setTasks(tasksData.length > 0 ? tasksData : initialTasks);
-        setOutcomes(outcomesData.length > 0 ? outcomesData : initialOutcomes);
-        setRequirements(requirementsData.length > 0 ? requirementsData : initialRequirements);
-        setReleaseGoals(releaseGoalsData && releaseGoalsData.length > 0 ? releaseGoalsData : []);
-        setProjectTrackings(trackingsData && trackingsData.length > 0 ? trackingsData : []);
+        
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('请求超时 (15秒)')), 15000)
+        );
+
+        console.log('fetchData: Waiting for initial fetch');
+        const results = await Promise.race([fetchPromise, timeoutPromise]) as any;
+        const [projectsData, plansData, tasksData, outcomesData, requirementsData, releaseGoalsData, trackingsData] = results;
+        console.log('fetchData: Initial fetch done');
+
+        if (projectsData.length === 0) {
+           console.log('fetchData: No projects found, starting seed');
+           const seedService = await import('./services/seedService');
+           
+           const seeded = await Promise.race([
+               seedService.seedSupabase(),
+               new Promise<boolean>((_, reject) => setTimeout(() => reject(new Error('Seed 请求超时 (15秒)')), 15000))
+           ]);
+           
+           console.log('fetchData: Seed result:', seeded);
+           if (seeded && mounted) {
+               console.log('fetchData: Fetching data after seed');
+               const seedFetchPromise = Promise.all([
+                 apiService.getProjects(), apiService.getPlans(), apiService.getTasks(), apiService.getOutcomes(), apiService.getRequirements(), apiService.getReleaseGoals(), apiService.getProjectTrackings()
+               ]);
+               const seedResults = await Promise.race([seedFetchPromise, timeoutPromise]) as any;
+               const [p, pl, t, o, r, rg, tr] = seedResults;
+               
+               console.log('fetchData: Seed fetch done');
+               setProjects(p); setPlans(pl); setTasks(t); setOutcomes(o); setRequirements(r); setReleaseGoals(rg || []); setProjectTrackings(tr || []);
+               setIsLoadingData(false);
+               return;
+           }
+        }
+
+        if (mounted) {
+          console.log('fetchData: Setting state');
+          setProjects(projectsData);
+          setPlans(plansData);
+          setTasks(tasksData);
+          setOutcomes(outcomesData);
+          setRequirements(requirementsData);
+          setReleaseGoals(releaseGoalsData || []);
+          setProjectTrackings(trackingsData || []);
+          console.log('fetchData: State set successfully');
+        }
       } catch (err) {
         console.error('Failed to fetch data:', err);
+        if (mounted) {
+           const errObj = err as any;
+           const details = errObj?.message || errObj?.details || String(err);
+           setDataError('与数据库连接失败: ' + details);
+        }
+      } finally {
+        console.log('fetchData: FINISHED');
+        if (mounted) setIsLoadingData(false);
       }
     };
     fetchData();
-    // In a real app we might use WebSockets or polling here
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -1709,6 +1762,32 @@ export default function App() {
     }
     return true;
   });
+
+  if (isLoadingData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-4 border-[#1A1A1A]/20 border-t-[#1A1A1A] rounded-full animate-spin"></div>
+          <div className="text-sm font-medium opacity-60">加载后端数据中...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (dataError) {
+    return (
+       <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#FDFCFB] text-center">
+          <div className="w-12 h-12 rounded-full bg-red-100 text-red-500 flex items-center justify-center mb-4">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold mb-2">数据加载失败</h2>
+          <p className="opacity-70 mb-4 max-w-md">{dataError}</p>
+          <button onClick={() => window.location.reload()} className="px-4 py-2 bg-[#1A1A1A] text-white">重试</button>
+       </div>
+    );
+  }
 
   return (
     <div className="h-[100dvh] w-full bg-dynamic-minimal text-[#1A1A1A] font-sans flex flex-col selection:bg-[#1A1A1A] selection:text-[#FAFAF9] overflow-hidden antialiased">
