@@ -902,7 +902,7 @@ export default function App() {
             // Create new
             const newPlan: Plan = {
                 id: generateId(),
-                projectId: 'p1', // Default to first marketing project
+                projectId: projects[0]?.id || generateId(), // Default to first project
                 title: `${monthLabel} ${title}`,
                 level: 'month',
                 startDate: baseDateStr,
@@ -1016,9 +1016,9 @@ export default function App() {
       
       const newTasks: Task[] = taskForms.filter(f => f.title.trim()).map(form => ({
         id: generateId(),
-        projectId: proj ? proj.id : 'p1', // Backward compatibility for now
+        projectId: proj ? proj.id : (projects[0]?.id || generateId()), // Fallback
         projectName: form.projectName,
-        planId: 'tmp',
+        planId: plans[0]?.id || generateId(),
         title: form.title,
         outcome: form.outcome,
         assigneeId: selectedMemberId,
@@ -1046,7 +1046,7 @@ export default function App() {
       
       const newOutcomes: Outcome[] = outcomeForms.filter(f => f.title.trim() && f.description.trim()).map(form => ({
         id: generateId(),
-        projectId: proj ? proj.id : 'p1',
+        projectId: proj ? proj.id : (projects[0]?.id || generateId()),
         submitterId: selectedMemberId,
         title: form.title,
         description: form.description,
