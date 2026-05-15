@@ -87,37 +87,63 @@ export const apiService = {
 
   // Requirements
   getRequirements: async (): Promise<Requirement[]> => {
-    // Note: If you have a foreign key set up to `requirement_history`, supabase can auto-join
-    const { data, error } = await supabase.from('requirements').select(`*, requirement_history(*)`);
-    if (error) throw new Error(error.message || JSON.stringify(error));
-    const parsedData = toCamelCase(data || []);
-    // Map relation if its named requirementHistory
-    return parsedData.map((d: any) => {
-        d.history = d.requirementHistory || d.history;
-        delete d.requirementHistory;
-        return d;
-    });
+    try {
+      const { data: reqData, error: reqError } = await supabase.from('requirements').select('*');
+      if (reqError) throw new Error(reqError.message || JSON.stringify(reqError));
+      
+      let historyMap: Record<string, RequirementHistory[]> = {};
+      try {
+        const { data: histData, error: histError } = await supabase.from('requirement_history').select('*');
+        if (!histError && histData) {
+          const parsedHist = toCamelCase(histData);
+          parsedHist.forEach((h: any) => {
+            if (!historyMap[h.requirementId]) {
+              historyMap[h.requirementId] = [];
+            }
+            historyMap[h.requirementId].push(h);
+          });
+        }
+      } catch (e) {
+        console.warn('Could not fetch requirement_history. Proceeding without history.', e);
+      }
+
+      const parsedData = toCamelCase(reqData || []);
+      return parsedData.map((d: any) => {
+          d.history = historyMap[d.id] || [];
+          return d;
+      });
+    } catch (error: any) {
+      throw new Error(error.message || JSON.stringify(error));
+    }
   },
 
   saveRequirement: async (req: Requirement & { newHistoryEntry?: RequirementHistory }): Promise<void> => {
-    const { newHistoryEntry, history, ...rest } = req;
-    
-    // Convert requirement to snake case
-    const reqData = toSnakeCase(rest);
-    
-    const { error } = await supabase.from('requirements').upsert(reqData);
-    if (error) {
-      console.error('Failed to save requirement:', error);
+    try {
+      const { newHistoryEntry, history, ...rest } = req;
+      
+      // Convert requirement to snake case
+      const reqData = toSnakeCase(rest);
+      
+      const { error } = await supabase.from('requirements').upsert(reqData);
+      if (error) {
+        console.error('Failed to save requirement:', error);
+        throw new Error(error.message || JSON.stringify(error));
+      }
+      
+      if (newHistoryEntry) {
+        try {
+          const histData = toSnakeCase(newHistoryEntry);
+          // ensure relation
+          histData.requirement_id = req.id;
+          const { error: histError } = await supabase.from('requirement_history').upsert(histData);
+          if (histError) console.warn('Failed to save requirement history:', histError);
+        } catch (e) {
+          console.warn('Could not save requirement_history.', e);
+        }
+      } 
+    } catch (error: any) {
       throw new Error(error.message || JSON.stringify(error));
     }
-    
-    if (newHistoryEntry) {
-        const histData = toSnakeCase(newHistoryEntry);
-        // ensure relation
-        histData.requirement_id = req.id;
-        const { error: histError } = await supabase.from('requirement_history').upsert(histData);
-        if (histError) throw new Error(histError.message || JSON.stringify(histError));
-    } 
   },
 
   deleteRequirement: async (id: string): Promise<void> => {
