@@ -44,24 +44,28 @@ export default function RichTextEditor({
     <div className="space-y-2">
       <div className="flex gap-1 border border-[#1A1A1A]/20 bg-[#EBE9E4] p-1">
         <button
+          type="button"
           onClick={() => editor.chain().focus().toggleBold().run()}
           className={`px-2 py-0.5 text-xs border ${editor.isActive('bold') ? 'bg-[#1A1A1A] text-white' : 'border-transparent hover:bg-black/5'}`}
         >
           加粗
         </button>
         <button
+          type="button"
           onClick={() => editor.chain().focus().toggleItalic().run()}
           className={`px-2 py-0.5 text-xs border ${editor.isActive('italic') ? 'bg-[#1A1A1A] text-white' : 'border-transparent hover:bg-black/5'}`}
         >
           斜体
         </button>
         <button
+          type="button"
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           className={`px-2 py-0.5 text-xs border ${editor.isActive('bulletList') ? 'bg-[#1A1A1A] text-white' : 'border-transparent hover:bg-black/5'}`}
         >
           无序列表
         </button>
         <button
+          type="button"
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           className={`px-2 py-0.5 text-xs border ${editor.isActive('orderedList') ? 'bg-[#1A1A1A] text-white' : 'border-transparent hover:bg-black/5'}`}
         >

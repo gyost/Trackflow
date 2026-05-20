@@ -1,3 +1,4 @@
+import { getOrganizationId } from './lib/orgService';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -25,6 +26,7 @@ import RichTextEditor from './components/RichTextEditor';
 import Login from './components/Login';
 import AccountSetupModal from './components/AccountSetupModal';
 import { apiService } from './services/apiService';
+import { seedSupabase, forceSeedTable } from './services/seedService';
 
 import GuideModal from './components/GuideModal';
 import ProfileModal from './components/ProfileModal';
@@ -447,6 +449,28 @@ export default function App() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<string>('dashboard');
+  const [loadingStep, setLoadingStep] = useState<string>('正在对数据服务进行连接初始化...');
+  const [useLocalMockMode, setUseLocalMockMode] = useState<boolean>(false);
+
+  const switchToLocalMockMode = () => {
+    console.log('一键切换至纯前端本地 Mock 模式');
+    apiService.setLocalMockOverride(true);
+    setUseLocalMockMode(true);
+    setIsLoadingData(false);
+    setDataError(null);
+  };
+  
+  useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const errObj = event.reason;
+      if (errObj && (String(errObj).includes('RLS受阻') || String(errObj).includes('Could not find') || String(errObj).includes('schema cache'))) {
+        setDataError(String(errObj));
+      }
+    };
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    return () => window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+  }, []);
+
   const [plans, setPlans] = useState<Plan[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
@@ -491,7 +515,7 @@ export default function App() {
   };
   const [groups, setGroups] = useState<Group[]>(() => {
     const saved = localStorage.getItem('groups');
-    if (saved) return JSON.parse(saved);
+    if (saved && saved.includes('-')) return JSON.parse(saved);
     return mockGroups;
   });
 
@@ -500,6 +524,12 @@ export default function App() {
   }, [groups]);
   const [members, setMembers] = useState(() => {
     const saved = localStorage.getItem('members');
+    if (saved && !saved.includes('-')) {
+      localStorage.removeItem('members');
+      localStorage.removeItem('groups');
+      localStorage.removeItem('currentUser');
+      return mockMembers;
+    }
     if (saved) {
       const parsedMembers = JSON.parse(saved);
       return parsedMembers.map((m: any) => ({
@@ -604,8 +634,34 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
     const fetchData = async () => {
+      if (useLocalMockMode) {
+        console.log('fetchData: Local mock mode active, skipping cloud fetch');
+        setProjects(mockProjects);
+        setPlans(initialPlans);
+        setTasks(initialTasks);
+        setOutcomes(initialOutcomes);
+        setRequirements(initialRequirements);
+        setReleaseGoals([]);
+        setProjectTrackings([]);
+        setIsLoadingData(false);
+        return;
+      }
+
       setIsLoadingData(true);
+      setLoadingStep('正在连接组织管理服务并识别您的归属组织 (organizations)...');
+      try {
+        await getOrganizationId();
+      } catch (err: any) {
+        console.warn('Failed to init organization', err);
+        const errObj = err as any;
+        const details = errObj?.message || errObj?.details || String(err);
+        setDataError('组织初始化失败: ' + details);
+        setIsLoadingData(false);
+        return;
+      }
+      if (!mounted) return;
       setDataError(null);
+      setLoadingStep('正在与 Supabase 云服务建立连接，加载底层数据模型...');
       console.log('fetchData: START');
       try {
         const fetchPromise = Promise.all([
@@ -628,6 +684,7 @@ export default function App() {
         console.log('fetchData: Initial fetch done');
 
         if (projectsData.length === 0) {
+           setLoadingStep('检测到全新数据库，正在写入预制业务演示数据以配置核心看板...');
            console.log('fetchData: No projects found, starting seed');
            const seedService = await import('./services/seedService');
            
@@ -653,6 +710,7 @@ export default function App() {
         }
 
         if (mounted) {
+          setLoadingStep('获取核心数据模型成功，正在组装渲染业务看板...');
           console.log('fetchData: Setting state');
           setProjects(projectsData);
           setPlans(plansData);
@@ -664,7 +722,7 @@ export default function App() {
           console.log('fetchData: State set successfully');
         }
       } catch (err) {
-        console.error('Failed to fetch data:', err);
+        console.warn('Failed to fetch data:', err);
         if (mounted) {
            const errObj = err as any;
            const details = errObj?.message || errObj?.details || String(err);
@@ -677,7 +735,7 @@ export default function App() {
     };
     fetchData();
     return () => { mounted = false; };
-  }, []);
+  }, [useLocalMockMode]);
 
   useEffect(() => {
     localStorage.setItem('guideContent', guideContent);
@@ -730,6 +788,10 @@ export default function App() {
   const [selectedGoalDetail, setSelectedGoalDetail] = useState<{title: string, content: string} | null>(null);
 
   const [isReleaseGoalModalOpen, setIsReleaseGoalModalOpen] = useState(false);
+  const [isDbHelperOpen, setIsDbHelperOpen] = useState(false);
+  const [dbSyncStatus, setDbSyncStatus] = useState<string>('');
+  const [dbSyncError, setDbSyncError] = useState<string>('');
+  const [isSyncingDb, setIsSyncingDb] = useState(false);
   const [editingReleaseGoal, setEditingReleaseGoal] = useState<ReleaseGoal | null>(null);
   const [releaseGoalForm, setReleaseGoalForm] = useState<Partial<ReleaseGoal>>({
     title: '',
@@ -817,7 +879,7 @@ export default function App() {
 
   useEffect(() => {
     const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
+    if (savedUser && savedUser.includes('-')) {
       const parsedUser = JSON.parse(savedUser);
       if (!parsedUser.roles) {
         parsedUser.roles = parsedUser.role ? [parsedUser.role] : [];
@@ -1093,7 +1155,7 @@ export default function App() {
       setEditingReleaseGoal(null);
       setIsReleaseGoalModalOpen(false);
     } catch (err) {
-      console.error('Failed to save release goal', err);
+      console.warn('Failed to save release goal', err);
     }
   };
 
@@ -1102,7 +1164,7 @@ export default function App() {
       await apiService.deleteReleaseGoal(id);
       setReleaseGoals(releaseGoals.filter(g => g.id !== id));
     } catch (err) {
-      console.error('Failed to delete release goal', err);
+      console.warn('Failed to delete release goal', err);
     }
   };
 
@@ -1120,7 +1182,7 @@ export default function App() {
           await apiService.saveProjectTracking(updated);
           setProjectTrackings(prev => prev.map(t => t.id === trackingToTerminate ? updated : t));
         } catch (err) {
-          console.error('Failed to terminate tracking', err);
+          console.warn('Failed to terminate tracking', err);
         }
       }
       setIsTerminateTrackingModalOpen(false);
@@ -1136,7 +1198,7 @@ export default function App() {
         await apiService.saveProjectTracking(updated);
         setProjectTrackings(prev => prev.map(t => t.id === id ? updated : t));
       } catch (err) {
-        console.error('Failed to update tracking status', err);
+        console.warn('Failed to update tracking status', err);
       }
     }
   };
@@ -1152,8 +1214,13 @@ export default function App() {
       setIsTrackingModalOpen(false);
       setEditingTrackingId(null);
     } catch (err) {
-      console.error('Failed to save tracking', err);
-      setTrackingError('Failed to save tracking record.');
+      console.warn('Failed to save tracking', err);
+      const eObj = err as any;
+      if (eObj.message && eObj.message.includes('security policy')) {
+        setTrackingError('Supabase权限受限: 请在Supabase控制台关闭表 project_trackings 的 RLS，或添加匿名访问策略。');
+      } else {
+        setTrackingError('Failed to save tracking record: ' + (eObj.message || ''));
+      }
     }
   };
 
@@ -1178,7 +1245,7 @@ export default function App() {
             setProjectTrackings(prev => prev.map(t => t.id === editingTrackingId ? updated : t));
             setIsFollowupModalOpen(false);
         } catch(err) {
-            console.error('Failed to add followup', err);
+            console.warn('Failed to add followup', err);
         }
       }
     }
@@ -1249,7 +1316,7 @@ export default function App() {
           source: requirementForm.source,
           customerName: requirementForm.source === 'customer' ? requirementForm.customerName : undefined,
           internalSourceDetail: requirementForm.source === 'internal' ? requirementForm.internalSourceDetail : undefined,
-          submitterId: currentUser?.id || members[0]?.id || 'admin',
+          submitterId: currentUser?.id || members[0]?.id || generateId(),
           assigneeId: requirementForm.assigneeId || undefined,
           createdAt: now,
           updatedAt: now,
@@ -1264,8 +1331,12 @@ export default function App() {
       setEditingRequirementId(null);
       setRequirementForm({ title: '', description: '', linkUrl: '', priority: 'medium', source: 'customer', customerName: '', internalSourceDetail: '', assigneeId: '' });
     } catch (err) {
-      console.error('Failed to submit requirement:', err);
-      alert('提交需求失败，请检查网络或表单项');
+      console.warn('Failed to submit requirement:', err);
+      const errMsg = err && typeof err === 'object' && 'message' in err ? err.message : String(err);
+      alert('提交需求失败: ' + errMsg);
+      if (errMsg.includes('RLS受阻') || errMsg.includes('Could not find') || errMsg.includes('schema cache')) {
+        setDataError(errMsg);
+      }
     } finally {
       setIsSubmittingRequirement(false);
     }
@@ -1304,7 +1375,7 @@ export default function App() {
         await apiService.saveRequirement({ ...updatedReq, newHistoryEntry });
         setRequirements(prev => prev.map(r => r.id === id ? updatedReq : r));
       } catch (err) {
-        console.error('Failed to update status:', err);
+        console.warn('Failed to update status:', err);
       }
     }
   };
@@ -1332,7 +1403,7 @@ export default function App() {
       setReqToReject(null);
       setRejectReason('');
     } catch (err) {
-      console.error('Failed to reject requirement:', err);
+      console.warn('Failed to reject requirement:', err);
     }
   };
 
@@ -1350,7 +1421,7 @@ export default function App() {
         await apiService.saveRequirement(updatedReq);
         setRequirements(prev => prev.map(r => r.id === id ? updatedReq : r));
       } catch (err) {
-        console.error('Failed to delete requirement:', err);
+        console.warn('Failed to delete requirement:', err);
       }
     }
   };
@@ -1369,7 +1440,7 @@ export default function App() {
         await apiService.saveRequirement(updatedReq);
         setRequirements(prev => prev.map(r => r.id === id ? updatedReq : r));
       } catch (err) {
-        console.error('Failed to restore requirement:', err);
+        console.warn('Failed to restore requirement:', err);
       }
     }
   };
@@ -1765,26 +1836,149 @@ export default function App() {
 
   if (isLoadingData) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 border-4 border-[#1A1A1A]/20 border-t-[#1A1A1A] rounded-full animate-spin"></div>
-          <div className="text-sm font-medium opacity-60">加载后端数据中...</div>
+      <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB] p-6 text-center animate-fade-in">
+        <div className="flex flex-col items-center gap-6 max-w-md w-full">
+          <div className="w-12 h-12 border-4 border-[#1A1A1A]/10 border-t-[#1A1A1A] rounded-full animate-spin"></div>
+          
+          <div className="space-y-2">
+            <h3 className="text-base font-semibold text-[#1A1A1A]">正在进入数字化管理系统...</h3>
+            <div className="text-xs text-black/50 font-mono bg-black/[0.03] py-2 px-3 rounded-md min-h-[40px] flex items-center justify-center">
+              {loadingStep}
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-black/5 w-full flex flex-col items-center gap-3">
+            <p className="text-xs text-black/40">
+              提示：若您的 Supabase 云数据库未配置，或免费宿主机休眠导致唤醒缓慢，您可以随时切换至本地演示模式。
+            </p>
+            <button 
+              onClick={switchToLocalMockMode}
+              className="px-4 py-2 text-xs font-semibold text-white bg-[#1A1A1A] hover:bg-black transition-colors rounded-lg shadow-sm"
+            >
+              一键降级为本地 Mock 模式
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   if (dataError) {
+    const isRlsError = dataError.includes('RLS受阻') || dataError.includes('row-level security');
+    const isMissingColumn = dataError.includes('Could not find') || dataError.includes('schema cache') || dataError.includes('column') || dataError.includes('relation');
+    const columnNameMatch = dataError.match(/column ["']([^"']+)["']/i) || dataError.match(/column ([^ ]+)/i) || dataError.match(/'([^']+)' column/i);
+    const tableNameMatch = dataError.match(/relation ["']([^"']+)["']/i) || dataError.match(/of ["']([^"']+)["']/i) || dataError.match(/of '([^']+)'/i);
+    const colName = columnNameMatch ? columnNameMatch[1] : '缺失字段';
+    const tabName = tableNameMatch ? tableNameMatch[1] : '该表';
+    
     return (
        <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#FDFCFB] text-center">
           <div className="w-12 h-12 rounded-full bg-red-100 text-red-500 flex items-center justify-center mb-4">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold mb-2">数据加载失败</h2>
-          <p className="opacity-70 mb-4 max-w-md">{dataError}</p>
-          <button onClick={() => window.location.reload()} className="px-4 py-2 bg-[#1A1A1A] text-white">重试</button>
+          <h2 className="text-xl font-bold mb-2">{isRlsError ? 'Supabase 权限限制 (RLS受阻)' : '数据加载失败'}</h2>
+          <p className="opacity-70 mb-4 max-w-lg text-left">{dataError}</p>
+          
+          {isMissingColumn && (
+             <div className="mt-4 mb-4 bg-gray-100 p-4 rounded-xl text-left max-w-2xl w-full text-[#1A1A1A]">
+               <p className="font-bold mb-2">💡 解决方案：请在您的 Supabase 项目中执行以下 SQL 语句，补充缺失的字段：</p>
+               <pre className="text-xs p-4 bg-black text-green-400 rounded overflow-x-auto whitespace-pre-wrap">
+                 {`alter table "${tabName}" add column if not exists "${colName}" jsonb;`}
+               </pre>
+               <details className="mt-4 cursor-pointer">
+                 <summary className="font-bold text-[#1A1A1A] underline">如果仍然报错，请点击此处复制完整数据库更新脚本（一键补齐所有缺失字段）</summary>
+                 <pre className="mt-2 text-[10px] p-4 bg-black text-green-400 rounded overflow-x-auto whitespace-pre-wrap">
+                   {`
+alter table requirements add column if not exists serial_number text;
+alter table requirements add column if not exists project_id text;
+alter table requirements add column if not exists link_url text;
+alter table requirements add column if not exists customer_name text;
+alter table requirements add column if not exists internal_source_detail text;
+alter table requirements add column if not exists submitter_id text;
+alter table requirements add column if not exists assignee_id text;
+alter table requirements add column if not exists deleted boolean;
+alter table requirements add column if not exists deleted_at timestamp with time zone;
+alter table requirements add column if not exists organization_id text;
+alter table tasks add column if not exists project_name text;
+alter table tasks add column if not exists plan_id text;
+alter table tasks add column if not exists title text;
+alter table tasks add column if not exists assignee_id text;
+alter table tasks add column if not exists status text;
+alter table tasks add column if not exists priority text;
+alter table tasks add column if not exists progress numeric;
+alter table tasks add column if not exists planned_progress numeric;
+alter table tasks add column if not exists start_date text;
+alter table tasks add column if not exists actual_start_date text;
+alter table tasks add column if not exists actual_end_date text;
+alter table tasks add column if not exists end_date text;
+alter table tasks add column if not exists outcome text;
+alter table tasks add column if not exists organization_id text;
+alter table plans add column if not exists metric jsonb;
+alter table plans add column if not exists organization_id text;
+alter table requirement_history add column if not exists requirement_id text;
+alter table requirement_history add column if not exists status text;
+alter table requirement_history add column if not exists timestamp text;
+alter table requirement_history add column if not exists note text;
+alter table requirement_history add column if not exists organization_id text;
+alter table project_trackings add column if not exists followup_records jsonb;
+alter table project_trackings add column if not exists organization_id text;
+alter table project_trackings add column if not exists updated_at timestamp with time zone;
+alter table project_trackings add column if not exists signed_date text;
+alter table project_trackings add column if not exists followup_date text;
+alter table project_trackings add column if not exists last_followup_date text;
+alter table project_trackings add column if not exists expected_contract_amount numeric;
+alter table project_trackings add column if not exists actual_contract_amount numeric;
+alter table project_trackings add column if not exists contact_name text;
+alter table project_trackings add column if not exists contact_phone text;
+alter table release_goals add column if not exists actual_version text;
+alter table release_goals add column if not exists actual_release_date text;
+alter table release_goals add column if not exists note text;
+alter table release_goals add column if not exists organization_id text;
+alter table outcomes add column if not exists file_url text;
+alter table outcomes add column if not exists organization_id text;
+alter table organizations add column if not exists name text;
+alter table projects add column if not exists manager_id text;
+`}
+                 </pre>
+               </details>
+               <p className="mt-3 text-sm text-gray-600">执行位置：进入 <a href="https://supabase.com/dashboard/project/_/sql/new" target="_blank" rel="noreferrer" className="underline hover:text-black font-semibold">Supabase Dashboard</a> -&gt; SQL Editor -&gt; New query -&gt; 粘贴代码并点击 <strong>RUN</strong>。</p>
+             </div>
+          )}
+          {isRlsError && (
+             <div className="mt-4 mb-8 bg-gray-100 p-4 rounded-xl text-left max-w-2xl w-full text-[#1A1A1A]">
+               <p className="font-bold mb-2">💡 解决方案：请在您的 Supabase 项目中执行以下 SQL 语句，关闭全表的安全策略限制：</p>
+               <pre className="text-xs p-4 bg-black text-green-400 rounded overflow-x-auto whitespace-pre-wrap">
+{`alter table organizations disable row level security;
+alter table projects disable row level security;
+alter table plans disable row level security;
+alter table tasks disable row level security;
+alter table outcomes disable row level security;
+alter table requirements disable row level security;
+alter table requirement_history disable row level security;
+alter table release_goals disable row level security;
+alter table project_trackings disable row level security;
+`}
+               </pre>
+               <p className="mt-3 text-sm text-gray-600">执行位置：进入 <a href="https://supabase.com/dashboard/project/_/sql/new" target="_blank" rel="noreferrer" className="underline hover:text-black font-semibold">Supabase Dashboard</a> -&gt; SQL Editor -&gt; New query -&gt; 粘贴上述代码并点击 <strong>RUN</strong>。</p>
+             </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-6">
+            <button 
+              onClick={() => window.location.reload()} 
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[#1A1A1A] text-sm font-semibold tracking-wide text-white shadow-md hover:bg-black transition-colors"
+            >
+              确认已执行并重试
+            </button>
+            <button 
+              onClick={switchToLocalMockMode} 
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-gray-800 transition-colors"
+            >
+              一键降级为本地 Mock 演示模式
+            </button>
+          </div>
        </div>
     );
   }
@@ -2508,7 +2702,6 @@ export default function App() {
                         <svg className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
-                        删除记录
                       </button>
                       <button 
                         onClick={() => {
@@ -2516,48 +2709,20 @@ export default function App() {
                           setRequirementForm({ title: '', description: '', linkUrl: '', priority: 'medium', source: 'customer', customerName: '', internalSourceDetail: '', assigneeId: '' });
                           setIsRequirementModalOpen(true);
                         }}
-                        className="bg-[#1A1A1A] text-[#F7F6F2] py-2.5 px-6 text-[11px] font-bold uppercase tracking-widest hover:opacity-90 transition-opacity"
+                        className="bg-[#1A1A1A] hover:bg-black text-[#F7F6F2] py-2.5 px-4 text-[11px] font-bold uppercase tracking-widest transition-all cursor-pointer shadow-md hover:-translate-y-0.5"
                       >
-                        + 提交新需求
+                        新增产品需求
                       </button>
                     </div>
                   </div>
-                  
-                  {/* Mobile Header Native Apple Style */}
-                  <div className="sm:hidden px-4 pt-2 pb-4 flex flex-col gap-4">
-                    <div>
-                      <h2 className="text-3xl font-serif italic mb-1 text-[#1A1A1A]">需求池</h2>
-                      <p className="text-[11px] opacity-50 uppercase tracking-widest">规划业务及技术需求</p>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                       <select 
-                         value={reqAssigneeFilter}
-                         onChange={(e) => setReqAssigneeFilter(e.target.value)}
-                         className="flex-1 bg-white/80 backdrop-blur-md border border-black/5 rounded-xl py-2.5 px-3 text-[13px] font-medium outline-none text-[#1A1A1A]"
-                       >
-                         <option value="">筛选负责人</option>
-                         {members.filter(m => m.department === 'rnd').map(m => (
-                           <option key={m.id} value={m.id}>{m.name}</option>
-                         ))}
-                       </select>
-                       <button 
-                         onClick={() => setIsRequirementRecycleBinOpen(true)}
-                         className="bg-white/80 backdrop-blur-md border border-black/5 w-11 h-11 rounded-xl flex items-center justify-center text-[#1A1A1A]/60"
-                       >
-                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                         </svg>
-                       </button>
-                    </div>
-                  </div>
-                  
-                  {/* Floating Action Button for Mobile Add Requirement */}
-                  <button onClick={() => {
+
+                  {/* 移动端新增需求浮动按钮 */}
+                  <button 
+                      onClick={() => {
                         setEditingRequirementId(null);
                         setRequirementForm({ title: '', description: '', linkUrl: '', priority: 'medium', source: 'customer', customerName: '', internalSourceDetail: '', assigneeId: '' });
                         setIsRequirementModalOpen(true);
-                      }} 
+                      }}
                       className="sm:hidden fixed bottom-[calc(85px+env(safe-area-inset-bottom))] right-4 z-40 bg-zinc-800 text-white w-14 h-14 rounded-[22px] shadow-[0_8px_30px_rgb(0,0,0,0.2)] flex items-center justify-center active:scale-95 transition-transform"
                   >
                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -3249,7 +3414,7 @@ export default function App() {
               <div>
                 <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">选择研发小组</label>
                 <select 
-                  value={releaseGoalForm.groupId} 
+                  value={releaseGoalForm.groupId || ''} 
                   onChange={(e) => setReleaseGoalForm({...releaseGoalForm, groupId: e.target.value})} 
                   className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-1 text-sm font-mono pb-2"
                   required
@@ -3277,7 +3442,7 @@ export default function App() {
                   <input 
                     type="month" 
                     required
-                    value={releaseGoalForm.targetMonth} 
+                    value={releaseGoalForm.targetMonth || ''} 
                     onChange={(e) => setReleaseGoalForm({...releaseGoalForm, targetMonth: e.target.value})} 
                     className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-1 text-sm font-mono" 
                   />
@@ -3287,7 +3452,7 @@ export default function App() {
                   <input 
                     type="date" 
                     required
-                    value={releaseGoalForm.targetDate} 
+                    value={releaseGoalForm.targetDate || ''} 
                     onChange={(e) => setReleaseGoalForm({...releaseGoalForm, targetDate: e.target.value})} 
                     className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-1 text-sm font-mono" 
                   />
@@ -4092,7 +4257,7 @@ export default function App() {
                   <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">{field.label}</label>
                   <input 
                     type={field.key.includes('Amount') ? 'number' : field.key === 'lastFollowupDate' ? 'date' : 'text'}
-                    value={(trackingForm as any)[field.key]} 
+                    value={(trackingForm as any)[field.key] ?? ''} 
                     onChange={(e) => setTrackingForm({...trackingForm, [field.key]: field.key.includes('Amount') ? Number(e.target.value) : e.target.value})} 
                     className="w-full bg-transparent border-b border-[#1A1A1A]/30 outline-none py-2 text-sm"
                     placeholder={field.placeholder}

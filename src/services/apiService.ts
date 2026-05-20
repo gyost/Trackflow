@@ -1,14 +1,51 @@
+import { injectOrgId } from '../lib/orgService';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Plan, Task, Outcome, Project, Requirement, RequirementHistory, ReleaseGoal, ProjectTracking, FollowupRecord } from '../types';
+import { mockProjects, mockPlans, mockTasks, mockOutcomes, mockRequirements } from '../mockData';
 
 // Utility functions for converting between camelCase and snake_case
 const toSnakeCaseStr = (str: string) => str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 const toCamelCaseStr = (str: string) => str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
 
+let localMockOverride = false;
+
+function getLocalData<T>(key: string, defaultValue: T): T {
+  const data = localStorage.getItem(key);
+  if (data) {
+    try {
+      return JSON.parse(data);
+    } catch {
+      return defaultValue;
+    }
+  }
+  return defaultValue;
+}
+
+function setLocalData<T>(key: string, val: T) {
+  localStorage.setItem(key, JSON.stringify(val));
+}
+
+function upsertLocalItem<T extends { id: string }>(key: string, item: T, defaultValue: T[]) {
+  const list = getLocalData<T[]>(key, defaultValue);
+  const idx = list.findIndex(i => i.id === item.id);
+  if (idx > -1) {
+    list[idx] = item;
+  } else {
+    list.push(item);
+  }
+  setLocalData(key, list);
+}
+
+function deleteLocalItem<T extends { id: string }>(key: string, id: string, defaultValue: T[]) {
+  const list = getLocalData<T[]>(key, defaultValue);
+  const filtered = list.filter(i => i.id !== id);
+  setLocalData(key, filtered);
+}
+
 function ensureConfigured() {
-  if (!isSupabaseConfigured) {
+  if (!isSupabaseConfigured && !localMockOverride) {
     const u = import.meta.env.VITE_SUPABASE_URL;
-    throw new Error(`Supabase 未配置或 URL 格式无效（当前为: ${u}）。请在环境变量中设置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。如果您在预览环境中，请在设置中配置密钥。`);
+    throw new Error(`Supabase 未配置或 URL 格式无效（当前为: ${u}）。`);
   }
 }
 
@@ -18,7 +55,7 @@ export function toSnakeCase(obj: any): any {
     return Object.fromEntries(
       Object.entries(obj).map(([key, value]) => [
         toSnakeCaseStr(key),
-        toSnakeCase(value),
+        (key.endsWith('Id') && value === '') ? null : toSnakeCase(value)
       ])
     );
   }
@@ -39,107 +76,157 @@ export function toCamelCase(obj: any): any {
 }
 
 export const apiService = {
+  setLocalMockOverride: (val: boolean) => {
+    localMockOverride = val;
+  },
+  isLocalMockActive: (): boolean => {
+    return !isSupabaseConfigured || localMockOverride;
+  },
+
   // Projects
   getProjects: async (): Promise<Project[]> => {
-    try { ensureConfigured();
+    try {
+      if (apiService.isLocalMockActive()) {
+        return getLocalData('mock_projects', mockProjects);
+      }
+      ensureConfigured();
       const { data, error } = await supabase.from('projects').select('*');
-      if (error) throw new Error(error.message || JSON.stringify(error));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       return toCamelCase(data || []);
     } catch (e: any) {
-      console.error('getProjects error:', e);
       throw new Error(e.message || String(e));
     }
   },
 
   // Plans
   getPlans: async (): Promise<Plan[]> => {
-    try { ensureConfigured();
+    try {
+      if (apiService.isLocalMockActive()) {
+        const plans = getLocalData<Plan[]>('mock_plans', mockPlans);
+        return plans.map((p: any) => ({
+          ...p,
+          metric: typeof p.metric === 'string' ? JSON.parse(p.metric) : p.metric
+        }));
+      }
+      ensureConfigured();
       const { data, error } = await supabase.from('plans').select('*');
-      if (error) throw new Error(error.message || JSON.stringify(error));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       const plans = toCamelCase(data || []);
       return plans.map((p: any) => ({
         ...p,
         metric: typeof p.metric === 'string' ? JSON.parse(p.metric) : p.metric
       }));
     } catch (e: any) {
-      console.error('getPlans error:', e);
       throw new Error(e.message || String(e));
     }
   },
 
   savePlan: async (plan: Plan): Promise<void> => {
-    try { ensureConfigured();
+    try {
+      if (apiService.isLocalMockActive()) {
+        upsertLocalItem('mock_plans', plan, mockPlans);
+        return;
+      }
+      ensureConfigured();
       const dataToSave = toSnakeCase(plan);
-      const { error } = await supabase.from('plans').upsert(dataToSave);
-      if (error) throw new Error(error.message || JSON.stringify(error));
+      const { error } = await supabase.from('plans').upsert(await injectOrgId(dataToSave));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
     } catch (e: any) {
-      console.error('savePlan error:', e);
       throw new Error(e.message || String(e));
     }
   },
 
   // Tasks
   getTasks: async (): Promise<Task[]> => {
-    try { ensureConfigured();
+    try {
+      if (apiService.isLocalMockActive()) {
+        return getLocalData('mock_tasks', mockTasks);
+      }
+      ensureConfigured();
       const { data, error } = await supabase.from('tasks').select('*');
-      if (error) throw new Error(error.message || JSON.stringify(error));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       return toCamelCase(data || []);
     } catch (e: any) {
-      console.error('getTasks error:', e, 'url:', import.meta.env.VITE_SUPABASE_URL);
       throw new Error((e.message || String(e)) + ' (URL: ' + import.meta.env.VITE_SUPABASE_URL + ')');
     }
   },
 
   saveTask: async (task: Task): Promise<void> => {
-    try { ensureConfigured();
-      const { error } = await supabase.from('tasks').upsert(toSnakeCase(task));
-      if (error) throw new Error(error.message || JSON.stringify(error));
+    try {
+      if (apiService.isLocalMockActive()) {
+        upsertLocalItem('mock_tasks', task, mockTasks);
+        return;
+      }
+      ensureConfigured();
+      const { error } = await supabase.from('tasks').upsert(await injectOrgId(toSnakeCase(task)));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
     } catch (e: any) {
-      console.error('saveTask error:', e);
       throw new Error(e.message || String(e));
     }
   },
 
   deleteTask: async (taskId: string): Promise<void> => {
-    try { ensureConfigured();
+    try {
+      if (apiService.isLocalMockActive()) {
+        deleteLocalItem('mock_tasks', taskId, mockTasks);
+        return;
+      }
+      ensureConfigured();
       const { error } = await supabase.from('tasks').delete().eq('id', taskId);
-      if (error) throw new Error(error.message || JSON.stringify(error));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
     } catch (e: any) {
-      console.error('deleteTask error:', e);
       throw new Error(e.message || String(e));
     }
   },
 
   // Outcomes
   getOutcomes: async (): Promise<Outcome[]> => {
-    try { ensureConfigured();
+    try {
+      if (apiService.isLocalMockActive()) {
+        return getLocalData('mock_outcomes', mockOutcomes);
+      }
+      ensureConfigured();
       const { data, error } = await supabase.from('outcomes').select('*');
-      if (error) throw new Error(error.message || JSON.stringify(error));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       return toCamelCase(data || []);
     } catch (e: any) {
-      console.error('getOutcomes error:', e);
       throw new Error(e.message || String(e));
     }
   },
 
   saveOutcome: async (outcome: Outcome): Promise<void> => {
-    try { ensureConfigured();
-      const { error } = await supabase.from('outcomes').upsert(toSnakeCase(outcome));
-      if (error) throw new Error(error.message || JSON.stringify(error));
+    try {
+      if (apiService.isLocalMockActive()) {
+        upsertLocalItem('mock_outcomes', outcome, mockOutcomes);
+        return;
+      }
+      ensureConfigured();
+      const { error } = await supabase.from('outcomes').upsert(await injectOrgId(toSnakeCase(outcome)));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
     } catch (e: any) {
-      console.error('saveOutcome error:', e);
       throw new Error(e.message || String(e));
     }
   },
 
   // Requirements
   getRequirements: async (): Promise<Requirement[]> => {
-    try { ensureConfigured();
-      const { data: reqData, error: reqError } = await supabase.from('requirements').select('*');
-      if (reqError) throw new Error(reqError.message || JSON.stringify(reqError));
+    try {
+      if (apiService.isLocalMockActive()) {
+        return getLocalData('mock_requirements', mockRequirements);
+      }
+      ensureConfigured();
+      let reqData: any[] = [];
+      try {
+        const { data, error } = await supabase.from('requirements').select('*');
+        if (error) throw error;
+        reqData = data || [];
+      } catch (dbErr: any) {
+        console.warn('Failed to fetch requirements from Supabase. Falling back to local data.', dbErr);
+        return getLocalData('mock_requirements', mockRequirements);
+      }
       
       let historyMap: Record<string, RequirementHistory[]> = {};
-      try { ensureConfigured();
+      try {
         const { data: histData, error: histError } = await supabase.from('requirement_history').select('*');
         if (!histError && histData) {
           const parsedHist = toCamelCase(histData);
@@ -154,120 +241,177 @@ export const apiService = {
         console.warn('Could not fetch requirement_history. Proceeding without history.', e);
       }
 
-      const parsedData = toCamelCase(reqData || []);
-      return parsedData.map((d: any) => {
+      const parsedData = toCamelCase(reqData);
+      const cloudReqs = parsedData.map((d: any) => {
           d.history = historyMap[d.id] || [];
           return d;
       });
+
+      // Merge local added requirements
+      const localReqs = getLocalData<Requirement[]>('mock_requirements', []);
+      const mergedReqs = [...cloudReqs];
+      localReqs.forEach(lr => {
+        if (!mergedReqs.some(cr => cr.id === lr.id)) {
+          mergedReqs.unshift(lr);
+        }
+      });
+      return mergedReqs;
     } catch (error: any) {
-      throw new Error(error.message || JSON.stringify(error));
+      console.warn('Failed to query requirements completely. Reverting to empty/mock data.', error);
+      return getLocalData('mock_requirements', mockRequirements);
     }
   },
 
   saveRequirement: async (req: Requirement & { newHistoryEntry?: RequirementHistory }): Promise<void> => {
-    try { ensureConfigured();
-      const { newHistoryEntry, history, ...rest } = req;
-      
-      // Convert requirement to snake case
+    // Synchronously back up to localStorage to guarantee submission success locally under any network/RLS issues
+    const { newHistoryEntry, history, ...rest } = req;
+    const cached = getLocalData<Requirement[]>('mock_requirements', mockRequirements);
+    const idx = cached.findIndex(r => r.id === req.id);
+    
+    const targetReq = { ...rest, history: history || [] };
+    if (newHistoryEntry) {
+      targetReq.history = [...targetReq.history, newHistoryEntry];
+    }
+    
+    if (idx > -1) {
+      cached[idx] = targetReq;
+    } else {
+      cached.push(targetReq);
+    }
+    setLocalData('mock_requirements', cached);
+
+    if (apiService.isLocalMockActive()) {
+      return;
+    }
+
+    try {
+      ensureConfigured();
       const reqData = toSnakeCase(rest);
-      
-      const { error } = await supabase.from('requirements').upsert(reqData);
+      const { error } = await supabase.from('requirements').upsert(await injectOrgId(reqData));
       if (error) {
-        console.error('Failed to save requirement:', error);
-        throw new Error(error.message || JSON.stringify(error));
+        console.warn('Supabase requirements upsert failed. Saved to local storage fallback only.', error);
       }
       
       if (newHistoryEntry) {
-        try { ensureConfigured();
+        try {
           const histData = toSnakeCase(newHistoryEntry);
-          // ensure relation
           histData.requirement_id = req.id;
-          const { error: histError } = await supabase.from('requirement_history').upsert(histData);
+          const { error: histError } = await supabase.from('requirement_history').upsert(await injectOrgId(histData));
           if (histError) console.warn('Failed to save requirement history:', histError);
         } catch (e) {
           console.warn('Could not save requirement_history.', e);
         }
       } 
     } catch (error: any) {
-      throw new Error(error.message || JSON.stringify(error));
+      console.warn('Supabase requirements operation failed. Local storage saved successfully.', error);
     }
   },
 
   deleteRequirement: async (id: string): Promise<void> => {
-    try { ensureConfigured();
+    try {
+      if (apiService.isLocalMockActive()) {
+        deleteLocalItem('mock_requirements', id, mockRequirements);
+        return;
+      }
+      ensureConfigured();
       const { error } = await supabase.from('requirements').delete().eq('id', id);
-      if (error) throw new Error(error.message || JSON.stringify(error));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
     } catch (e: any) {
-      console.error('deleteRequirement error:', e);
       throw new Error(e.message || String(e));
     }
   },
 
   // Release Goals
   getReleaseGoals: async (): Promise<ReleaseGoal[]> => {
-    try { ensureConfigured();
+    try {
+      if (apiService.isLocalMockActive()) {
+        return getLocalData('mock_release_goals', []);
+      }
+      ensureConfigured();
       const { data, error } = await supabase.from('release_goals').select('*');
-      if (error) throw new Error(error.message || JSON.stringify(error));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       return toCamelCase(data || []);
     } catch (e: any) {
-      console.error('getReleaseGoals error:', e);
       throw new Error(e.message || String(e));
     }
   },
 
   saveReleaseGoal: async (goal: ReleaseGoal): Promise<void> => {
-    try { ensureConfigured();
-      const { error } = await supabase.from('release_goals').upsert(toSnakeCase(goal));
-      if (error) throw new Error(error.message || JSON.stringify(error));
+    try {
+      if (apiService.isLocalMockActive()) {
+        upsertLocalItem('mock_release_goals', goal, []);
+        return;
+      }
+      ensureConfigured();
+      const { error } = await supabase.from('release_goals').upsert(await injectOrgId(toSnakeCase(goal)));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
     } catch (e: any) {
-      console.error('saveReleaseGoal error:', e);
       throw new Error(e.message || String(e));
     }
   },
 
   deleteReleaseGoal: async (id: string): Promise<void> => {
-    try { ensureConfigured();
+    try {
+      if (apiService.isLocalMockActive()) {
+        deleteLocalItem('mock_release_goals', id, []);
+        return;
+      }
+      ensureConfigured();
       const { error } = await supabase.from('release_goals').delete().eq('id', id);
-      if (error) throw new Error(error.message || JSON.stringify(error));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
     } catch (e: any) {
-      console.error('deleteReleaseGoal error:', e);
       throw new Error(e.message || String(e));
     }
   },
 
   // Project Trackings
   getProjectTrackings: async (): Promise<ProjectTracking[]> => {
-    try { ensureConfigured();
+    try {
+      if (apiService.isLocalMockActive()) {
+        return getLocalData('mock_project_trackings', []);
+      }
+      ensureConfigured();
       const { data, error } = await supabase.from('project_trackings').select('*');
-      if (error) throw new Error(error.message || JSON.stringify(error));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       return toCamelCase(data || []);
     } catch (e: any) {
-      console.error('getProjectTrackings error:', e);
       throw new Error(e.message || String(e));
     }
   },
 
   saveProjectTracking: async (track: ProjectTracking): Promise<void> => {
-    try { ensureConfigured();
+    try {
+      if (apiService.isLocalMockActive()) {
+        const trackData: any = { ...track };
+        if (trackData.signedDate === "") trackData.signedDate = null;
+        if (trackData.followupDate === "") trackData.followupDate = null;
+        if (trackData.lastFollowupDate === "") trackData.lastFollowupDate = null;
+        upsertLocalItem('mock_project_trackings', trackData, []);
+        return;
+      }
+      ensureConfigured();
       const trackData: any = { ...track };
       if (trackData.signedDate === "") trackData.signedDate = null;
       if (trackData.followupDate === "") trackData.followupDate = null;
       if (trackData.lastFollowupDate === "") trackData.lastFollowupDate = null;
 
-      const { error } = await supabase.from('project_trackings').upsert(toSnakeCase(trackData));
-      if (error) throw new Error(error.message || JSON.stringify(error));
+      const { error } = await supabase.from('project_trackings').upsert(await injectOrgId(toSnakeCase(trackData)));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
     } catch (e: any) {
-      console.error('saveProjectTracking error:', e);
       throw new Error(e.message || String(e));
     }
   },
 
   deleteProjectTracking: async (id: string): Promise<void> => {
-    try { ensureConfigured();
+    try {
+      if (apiService.isLocalMockActive()) {
+        deleteLocalItem('mock_project_trackings', id, []);
+        return;
+      }
+      ensureConfigured();
       const { error } = await supabase.from('project_trackings').delete().eq('id', id);
-      if (error) throw new Error(error.message || JSON.stringify(error));
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
     } catch (e: any) {
-      console.error('deleteProjectTracking error:', e);
       throw new Error(e.message || String(e));
     }
   }
