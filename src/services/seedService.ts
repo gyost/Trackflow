@@ -14,11 +14,76 @@ function toSnakeCase(obj: any): any {
     return Object.fromEntries(
       Object.entries(obj).map(([key, value]) => [
         key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`),
-        toSnakeCase(value),
+        (key.endsWith('Id') && value === '') ? null : toSnakeCase(value),
       ])
     );
   }
   return obj;
+}
+
+// 自动检测并写入缺失的关联项目与计划，以防违反外键约束（例如 tasks_project_id_fkey 或 plans_project_id_fkey）
+async function ensureReferencedProjectsAndPlansExist(items: any[]) {
+  const referencedProjectIds = new Set<string>();
+  const referencedPlanIds = new Set<string>();
+
+  items.forEach(item => {
+    const projectId = item.projectId || item.project_id;
+    const planId = item.planId || item.plan_id;
+    if (projectId) referencedProjectIds.add(projectId);
+    if (planId) referencedPlanIds.add(planId);
+  });
+
+  if (referencedProjectIds.size > 0) {
+    try {
+      const { data: existingProjects, error: prjErr } = await supabase.from('projects').select('id');
+      if (!prjErr && existingProjects) {
+        const existingPrjIds = new Set(existingProjects.map(p => p.id));
+        const missingProjectIds = Array.from(referencedProjectIds).filter(id => !existingPrjIds.has(id));
+
+        if (missingProjectIds.length > 0) {
+          console.log(`[Self-Healing] 检测到引用的项目 ID 缺失，正在补充写入 mock 关联项目:`, missingProjectIds);
+          const projectsToInsert = mockProjects.filter(p => missingProjectIds.includes(p.id));
+          if (projectsToInsert.length > 0) {
+            const { error: insErr } = await supabase.from('projects').insert(await injectOrgId(toSnakeCase(projectsToInsert)));
+            if (insErr) {
+              console.warn('[Self-Healing] 自动补充项目失败:', insErr);
+            } else {
+              console.log('[Self-Healing] 自动补充项目成功！');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Self-Healing] 检测现有项目时发生异常:', e);
+    }
+  }
+
+  if (referencedPlanIds.size > 0) {
+    try {
+      const { data: existingPlans, error: plnErr } = await supabase.from('plans').select('id');
+      if (!plnErr && existingPlans) {
+        const existingPlnIds = new Set(existingPlans.map(p => p.id));
+        const missingPlanIds = Array.from(referencedPlanIds).filter(id => !existingPlnIds.has(id));
+
+        if (missingPlanIds.length > 0) {
+          console.log(`[Self-Healing] 检测到引用的计划 ID 缺失，正在补充写入 mock 新计划:`, missingPlanIds);
+          const plansToInsert = mockPlans.filter(p => missingPlanIds.includes(p.id));
+          if (plansToInsert.length > 0) {
+            // 递归确保计划本身的关联项目也是存在的
+            await ensureReferencedProjectsAndPlansExist(plansToInsert);
+            const { error: insErr } = await supabase.from('plans').insert(await injectOrgId(toSnakeCase(plansToInsert)));
+            if (insErr) {
+              console.warn('[Self-Healing] 自动补充计划失败:', insErr);
+            } else {
+              console.log('[Self-Healing] 自动补充计划成功！');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Self-Healing] 检测现有计划时发生异常:', e);
+    }
+  }
 }
 
 // 增量填充每张表
@@ -28,12 +93,16 @@ export const seedSupabase = async (): Promise<boolean> => {
     console.log('--- 启动 Supabase 各张表的细粒度增量检查与注入 ---');
     let seededAtLeastOne = false;
 
-    // 1. Projects
+    // 1. Projects (设置 manager_id 为 null 绕过外键)
     try {
       const { count, error } = await supabase.from('projects').select('*', { count: 'exact', head: true });
       if (!error && (count === null || count === 0) && mockProjects.length > 0) {
         console.log('Seeding: projects 表为空，正在注入数据...');
-        const { error: insErr } = await supabase.from('projects').insert(await injectOrgId(toSnakeCase(mockProjects)));
+        const projectsToSeed = mockProjects.map(p => ({
+          ...p,
+          managerId: '' // toSnakeCase 映射为 null 绕过 projects_manager_id_fkey
+        }));
+        const { error: insErr } = await supabase.from('projects').insert(await injectOrgId(toSnakeCase(projectsToSeed)));
         if (insErr) console.warn('Projects 表注入失败:', insErr);
         else seededAtLeastOne = true;
       }
@@ -41,12 +110,22 @@ export const seedSupabase = async (): Promise<boolean> => {
       console.warn('Projects 增量检查失败:', e);
     }
 
-    // 2. Plans
+    // 2. Plans (序列化 metric 到 title 绕过不存在的 metric 列)
     try {
       const { count, error } = await supabase.from('plans').select('*', { count: 'exact', head: true });
       if (!error && (count === null || count === 0) && mockPlans.length > 0) {
         console.log('Seeding: plans 表为空，正在注入数据...');
-        const { error: insErr } = await supabase.from('plans').insert(await injectOrgId(toSnakeCase(mockPlans)));
+        const plansToSeed = mockPlans.map(p => {
+          const serialized = { ...p };
+          if (p.metric) {
+            serialized.title = `${p.title} [metric:${JSON.stringify(p.metric)}]`;
+          }
+          delete (serialized as any).metric; // 绕过未 migrate 的 metric 列
+          return serialized;
+        });
+        // 确保关联的 project 先存在以避免约束错误
+        await ensureReferencedProjectsAndPlansExist(plansToSeed);
+        const { error: insErr } = await supabase.from('plans').insert(await injectOrgId(toSnakeCase(plansToSeed)));
         if (insErr) console.warn('Plans 表注入失败:', insErr);
         else seededAtLeastOne = true;
       }
@@ -59,7 +138,17 @@ export const seedSupabase = async (): Promise<boolean> => {
       const { count, error } = await supabase.from('tasks').select('*', { count: 'exact', head: true });
       if (!error && (count === null || count === 0) && mockTasks.length > 0) {
         console.log('Seeding: tasks 表为空，正在注入数据...');
-        const { error: insErr } = await supabase.from('tasks').insert(await injectOrgId(toSnakeCase(mockTasks)));
+        // 确保关联的 project & plan 先存在以避免约束错误
+        const tasksToSeed = mockTasks.map(t => {
+          const serialized = { ...t };
+          if (t.assigneeId) {
+            serialized.title = `${t.title} [assignee_id:${t.assigneeId}]`;
+          }
+          serialized.assigneeId = ''; // map as NULL in supabase
+          return serialized;
+        });
+        await ensureReferencedProjectsAndPlansExist(tasksToSeed);
+        const { error: insErr } = await supabase.from('tasks').insert(await injectOrgId(toSnakeCase(tasksToSeed)));
         if (insErr) console.warn('Tasks 表注入失败:', insErr);
         else seededAtLeastOne = true;
       }
@@ -67,12 +156,22 @@ export const seedSupabase = async (): Promise<boolean> => {
       console.warn('Tasks 增量检查失败:', e);
     }
 
-    // 4. Outcomes
+    // 4. Outcomes (序列化 date 到 title 绕过不存在的 date 列)
     try {
       const { count, error } = await supabase.from('outcomes').select('*', { count: 'exact', head: true });
       if (!error && (count === null || count === 0) && mockOutcomes.length > 0) {
         console.log('Seeding: outcomes 表为空，正在注入数据...');
-        const { error: insErr } = await supabase.from('outcomes').insert(await injectOrgId(toSnakeCase(mockOutcomes)));
+        const outcomesToSeed = mockOutcomes.map(o => {
+          const serialized = { ...o };
+          if (o.date) {
+            serialized.title = `${o.title} [date:${o.date}]`;
+          }
+          delete (serialized as any).date; // 绕过未 migrate 的 date 列
+          return serialized;
+        });
+        // 确保关联的 project 先存在以避免约束错误
+        await ensureReferencedProjectsAndPlansExist(outcomesToSeed);
+        const { error: insErr } = await supabase.from('outcomes').insert(await injectOrgId(toSnakeCase(outcomesToSeed)));
         if (insErr) console.warn('Outcomes 表注入失败:', insErr);
         else seededAtLeastOne = true;
       }
@@ -89,6 +188,8 @@ export const seedSupabase = async (): Promise<boolean> => {
           const { history, ...rest } = r;
           return rest;
         });
+        // 确保关联的 project 先存在以避免约束错误
+        await ensureReferencedProjectsAndPlansExist(newReqs);
         const { error: insErr } = await supabase.from('requirements').insert(await injectOrgId(toSnakeCase(newReqs)));
         if (insErr) {
           console.warn('Requirements 表注入失败:', insErr);
@@ -126,10 +227,42 @@ export const forceSeedTable = async (tableName: string): Promise<string> => {
   ensureConfigured();
   try {
     let dataToInsert: any = [];
-    if (tableName === 'projects') dataToInsert = mockProjects;
-    else if (tableName === 'plans') dataToInsert = mockPlans;
-    else if (tableName === 'tasks') dataToInsert = mockTasks;
-    else if (tableName === 'outcomes') dataToInsert = mockOutcomes;
+    if (tableName === 'projects') {
+      dataToInsert = mockProjects.map(p => ({
+        ...p,
+        managerId: '' // map as NULL to bypass fk constraint
+      }));
+    }
+    else if (tableName === 'plans') {
+      dataToInsert = mockPlans.map(p => {
+        const serialized = { ...p };
+        if (p.metric) {
+          serialized.title = `${p.title} [metric:${JSON.stringify(p.metric)}]`;
+        }
+        delete (serialized as any).metric; // bypass missing core metric column
+        return serialized;
+      });
+    }
+    else if (tableName === 'tasks') {
+      dataToInsert = mockTasks.map(t => {
+        const serialized = { ...t };
+        if (t.assigneeId) {
+          serialized.title = `${t.title} [assignee_id:${t.assigneeId}]`;
+        }
+        serialized.assigneeId = ''; // map as NULL in supabase
+        return serialized;
+      });
+    }
+    else if (tableName === 'outcomes') {
+      dataToInsert = mockOutcomes.map(o => {
+        const serialized = { ...o };
+        if (o.date) {
+          serialized.title = `${o.title} [date:${o.date}]`;
+        }
+        delete (serialized as any).date; // bypass missing date column
+        return serialized;
+      });
+    }
     else if (tableName === 'requirements') {
       dataToInsert = mockRequirements.map(r => {
         const { history, ...rest } = r;
@@ -142,6 +275,9 @@ export const forceSeedTable = async (tableName: string): Promise<string> => {
     if (dataToInsert.length === 0) {
       return `表 ${tableName} 无对应 mock 数据。`;
     }
+
+    // 确保关联的 project/plan 如果在 mock 中有就先写入
+    await ensureReferencedProjectsAndPlansExist(dataToInsert);
 
     // 尝试先清空已有数据
     try {

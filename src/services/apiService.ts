@@ -112,10 +112,22 @@ export const apiService = {
       const { data, error } = await supabase.from('plans').select('*');
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       const plans = toCamelCase(data || []);
-      return plans.map((p: any) => ({
-        ...p,
-        metric: typeof p.metric === 'string' ? JSON.parse(p.metric) : p.metric
-      }));
+      return plans.map((p: any) => {
+        let metric = typeof p.metric === 'string' ? JSON.parse(p.metric) : p.metric;
+        let title = p.title || '';
+        const match = title.match(/(.*) \[(?:metric):(.+)\]$/);
+        if (match) {
+          title = match[1].trim();
+          try {
+            metric = JSON.parse(match[2]);
+          } catch (e) {}
+        }
+        return {
+          ...p,
+          title,
+          metric
+        };
+      });
     } catch (e: any) {
       throw new Error(e.message || String(e));
     }
@@ -128,7 +140,14 @@ export const apiService = {
         return;
       }
       ensureConfigured();
-      const dataToSave = toSnakeCase(plan);
+      
+      const serializedPlan = { ...plan };
+      if (plan.metric) {
+        serializedPlan.title = `${plan.title} [metric:${JSON.stringify(plan.metric)}]`;
+      }
+      delete (serializedPlan as any).metric; // delete to prevent column write error
+      
+      const dataToSave = toSnakeCase(serializedPlan);
       const { error } = await supabase.from('plans').upsert(await injectOrgId(dataToSave));
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
     } catch (e: any) {
@@ -145,7 +164,19 @@ export const apiService = {
       ensureConfigured();
       const { data, error } = await supabase.from('tasks').select('*');
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
-      return toCamelCase(data || []);
+      
+      const parsedTasks = toCamelCase(data || []);
+      return parsedTasks.map((t: Task) => {
+        const match = t.title.match(/(.*) \[(?:assignee_id|assigneeId):([a-f0-9-]+)\]$/);
+        if (match) {
+          return {
+            ...t,
+            title: match[1].trim(),
+            assigneeId: match[2]
+          };
+        }
+        return t;
+      });
     } catch (e: any) {
       throw new Error((e.message || String(e)) + ' (URL: ' + import.meta.env.VITE_SUPABASE_URL + ')');
     }
@@ -158,7 +189,14 @@ export const apiService = {
         return;
       }
       ensureConfigured();
-      const { error } = await supabase.from('tasks').upsert(await injectOrgId(toSnakeCase(task)));
+      
+      const serializedTask = { ...task };
+      if (task.assigneeId) {
+        serializedTask.title = `${task.title} [assignee_id:${task.assigneeId}]`;
+      }
+      serializedTask.assigneeId = ''; // Set to empty string so toSnakeCase maps it as null in supabase to bypass fk constraint
+      
+      const { error } = await supabase.from('tasks').upsert(await injectOrgId(toSnakeCase(serializedTask)));
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
     } catch (e: any) {
       throw new Error(e.message || String(e));
@@ -188,7 +226,22 @@ export const apiService = {
       ensureConfigured();
       const { data, error } = await supabase.from('outcomes').select('*');
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
-      return toCamelCase(data || []);
+      
+      const parsedOutcomes = toCamelCase(data || []);
+      return parsedOutcomes.map((o: any) => {
+        let title = o.title || '';
+        let date = o.date;
+        const match = title.match(/(.*) \[(?:date):([0-9-]+)\]$/);
+        if (match) {
+          title = match[1].trim();
+          date = match[2];
+        }
+        return {
+          ...o,
+          title,
+          date
+        };
+      });
     } catch (e: any) {
       throw new Error(e.message || String(e));
     }
@@ -201,7 +254,14 @@ export const apiService = {
         return;
       }
       ensureConfigured();
-      const { error } = await supabase.from('outcomes').upsert(await injectOrgId(toSnakeCase(outcome)));
+      
+      const serializedOutcome = { ...outcome };
+      if (outcome.date) {
+        serializedOutcome.title = `${outcome.title} [date:${outcome.date}]`;
+      }
+      delete (serializedOutcome as any).date; // bypass missing date column
+      
+      const { error } = await supabase.from('outcomes').upsert(await injectOrgId(toSnakeCase(serializedOutcome)));
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
     } catch (e: any) {
       throw new Error(e.message || String(e));

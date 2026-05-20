@@ -1078,9 +1078,9 @@ export default function App() {
       
       const newTasks: Task[] = taskForms.filter(f => f.title.trim()).map(form => ({
         id: generateId(),
-        projectId: proj ? proj.id : (projects[0]?.id || generateId()), // Fallback
+        projectId: proj ? proj.id : (projects[0]?.id || ''), // Fallback as empty string instead of random ID to map as NULL in supabase
         projectName: form.projectName,
-        planId: plans[0]?.id || generateId(),
+        planId: plans[0]?.id || '', // Fallback as empty string instead of random ID to map as NULL in supabase
         title: form.title,
         outcome: form.outcome,
         assigneeId: selectedMemberId,
@@ -1454,19 +1454,29 @@ export default function App() {
 
   const marketingTasks = tasks.filter(t => {
     const project = projects.find(p => p.id === t.projectId);
+    const assignee = members.find(m => m.id === t.assigneeId);
     const isInWeek = isSameWeek(parseISO(t.endDate), currentWeekDate, { weekStartsOn: 1 });
-    return project?.category === 'marketing' && isInWeek;
+    const category = project?.category || assignee?.department;
+    return category === 'marketing' && isInWeek;
   });
 
   const rndTasks = tasks.filter(t => {
     const project = projects.find(p => p.id === t.projectId);
+    const assignee = members.find(m => m.id === t.assigneeId);
     const isInWeek = isSameWeek(parseISO(t.endDate), currentWeekDate, { weekStartsOn: 1 });
-    return project?.category === 'rnd' && isInWeek;
+    const category = project?.category || assignee?.department;
+    return category === 'rnd' && isInWeek;
   });
 
   const totalProgress = filteredProjects.reduce((acc, curr) => acc + curr.progress, 0);
 
-  const viewOutcomes = outcomes.filter(o => currentView === 'dashboard' || projects.find(p => p.id === o.projectId)?.category === currentView);
+  const viewOutcomes = outcomes.filter(o => {
+    if (currentView === 'dashboard') return true;
+    const project = projects.find(p => p.id === o.projectId);
+    const submitter = members.find(m => m.id === o.submitterId);
+    const category = project?.category || submitter?.department;
+    return category === currentView;
+  });
 
   // Funnel Data Calculation
   const CURRENT_MONTH = selectedMonth;
@@ -1687,7 +1697,13 @@ export default function App() {
                 const assignee = members.find(m => m.id === assigneeId);
                 const memberTasks = groupTasks.filter(t => t.assigneeId === assigneeId)
                   .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
-                const memberOutcomes = outcomes.filter(o => o.submitterId === assigneeId && projects.find(p => p.id === o.projectId)?.category === department);
+                const memberOutcomes = outcomes.filter(o => {
+                  if (o.submitterId !== assigneeId) return false;
+                  const project = projects.find(p => p.id === o.projectId);
+                  const submitter = members.find(m => m.id === o.submitterId);
+                  const category = project?.category || submitter?.department;
+                  return category === department;
+                });
                 const memberProgress = memberTasks.length > 0
                   ? Math.round(memberTasks.reduce((acc, curr) => acc + curr.progress, 0) / memberTasks.length)
                   : 0;

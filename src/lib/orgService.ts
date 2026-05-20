@@ -50,9 +50,13 @@ export async function getOrganizationId(): Promise<string> {
 export async function injectOrgId(data: any): Promise<any> {
   const orgId = await getOrganizationId();
   if (Array.isArray(data)) {
-    data.forEach(item => { item.organization_id = orgId; });
+    data.forEach(item => { 
+      item.organization_id = orgId; 
+      item.org_id = orgId;
+    });
   } else {
     data.organization_id = orgId;
+    data.org_id = orgId;
   }
   return data;
 }
