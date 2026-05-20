@@ -47,16 +47,65 @@ export async function getOrganizationId(): Promise<string> {
   return orgPromise;
 }
 
-export async function injectOrgId(data: any): Promise<any> {
+function getOrgFieldForItem(item: any, tableHint?: string): 'org_id' | 'organization_id' {
+  if (tableHint) {
+    if (tableHint === 'requirements' || tableHint === 'requirement_history') {
+      return 'org_id';
+    }
+    return 'organization_id';
+  }
+
+  // Fallback: auto-detect based on keys in the object (supports both camelCase and snake_case)
+  if (item && typeof item === 'object') {
+    // Unique keys for Requirement
+    if (
+      'serial_number' in item || 'serialNumber' in item ||
+      'source' in item || 
+      'internal_source_detail' in item || 'internalSourceDetail' in item ||
+      'link_url' in item || 'linkUrl' in item ||
+      'customer_name' in item || 'customerName' in item
+    ) {
+      return 'org_id';
+    }
+    // Unique keys for RequirementHistory
+    if (
+      'requirement_id' in item || 'requirementId' in item ||
+      'timestamp' in item || 
+      'note' in item
+    ) {
+      return 'org_id';
+    }
+  }
+
+  return 'organization_id';
+}
+
+export async function injectOrgId(data: any, tableHint?: string): Promise<any> {
   const orgId = await getOrganizationId();
   if (Array.isArray(data)) {
     data.forEach(item => { 
-      item.organization_id = orgId; 
-      item.org_id = orgId;
+      const field = getOrgFieldForItem(item, tableHint);
+      if (field === 'org_id') {
+        item.org_id = orgId;
+        delete item.organization_id;
+        delete item.organizationId;
+      } else {
+        item.organization_id = orgId;
+        delete item.org_id;
+        delete item.orgId;
+      }
     });
   } else {
-    data.organization_id = orgId;
-    data.org_id = orgId;
+    const field = getOrgFieldForItem(data, tableHint);
+    if (field === 'org_id') {
+      data.org_id = orgId;
+      delete data.organization_id;
+      delete data.organizationId;
+    } else {
+      data.organization_id = orgId;
+      delete data.org_id;
+      delete data.orgId;
+    }
   }
   return data;
 }

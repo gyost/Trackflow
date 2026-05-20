@@ -44,7 +44,7 @@ async function ensureReferencedProjectsAndPlansExist(items: any[]) {
           console.log(`[Self-Healing] 检测到引用的项目 ID 缺失，正在补充写入 mock 关联项目:`, missingProjectIds);
           const projectsToInsert = mockProjects.filter(p => missingProjectIds.includes(p.id));
           if (projectsToInsert.length > 0) {
-            const { error: insErr } = await supabase.from('projects').insert(await injectOrgId(toSnakeCase(projectsToInsert)));
+            const { error: insErr } = await supabase.from('projects').insert(await injectOrgId(toSnakeCase(projectsToInsert), 'projects'));
             if (insErr) {
               console.warn('[Self-Healing] 自动补充项目失败:', insErr);
             } else {
@@ -71,7 +71,7 @@ async function ensureReferencedProjectsAndPlansExist(items: any[]) {
           if (plansToInsert.length > 0) {
             // 递归确保计划本身的关联项目也是存在的
             await ensureReferencedProjectsAndPlansExist(plansToInsert);
-            const { error: insErr } = await supabase.from('plans').insert(await injectOrgId(toSnakeCase(plansToInsert)));
+            const { error: insErr } = await supabase.from('plans').insert(await injectOrgId(toSnakeCase(plansToInsert), 'plans'));
             if (insErr) {
               console.warn('[Self-Healing] 自动补充计划失败:', insErr);
             } else {
@@ -102,7 +102,7 @@ export const seedSupabase = async (): Promise<boolean> => {
           ...p,
           managerId: '' // toSnakeCase 映射为 null 绕过 projects_manager_id_fkey
         }));
-        const { error: insErr } = await supabase.from('projects').insert(await injectOrgId(toSnakeCase(projectsToSeed)));
+        const { error: insErr } = await supabase.from('projects').insert(await injectOrgId(toSnakeCase(projectsToSeed), 'projects'));
         if (insErr) console.warn('Projects 表注入失败:', insErr);
         else seededAtLeastOne = true;
       }
@@ -125,7 +125,7 @@ export const seedSupabase = async (): Promise<boolean> => {
         });
         // 确保关联的 project 先存在以避免约束错误
         await ensureReferencedProjectsAndPlansExist(plansToSeed);
-        const { error: insErr } = await supabase.from('plans').insert(await injectOrgId(toSnakeCase(plansToSeed)));
+        const { error: insErr } = await supabase.from('plans').insert(await injectOrgId(toSnakeCase(plansToSeed), 'plans'));
         if (insErr) console.warn('Plans 表注入失败:', insErr);
         else seededAtLeastOne = true;
       }
@@ -148,7 +148,7 @@ export const seedSupabase = async (): Promise<boolean> => {
           return serialized;
         });
         await ensureReferencedProjectsAndPlansExist(tasksToSeed);
-        const { error: insErr } = await supabase.from('tasks').insert(await injectOrgId(toSnakeCase(tasksToSeed)));
+        const { error: insErr } = await supabase.from('tasks').insert(await injectOrgId(toSnakeCase(tasksToSeed), 'tasks'));
         if (insErr) console.warn('Tasks 表注入失败:', insErr);
         else seededAtLeastOne = true;
       }
@@ -171,7 +171,7 @@ export const seedSupabase = async (): Promise<boolean> => {
         });
         // 确保关联的 project 先存在以避免约束错误
         await ensureReferencedProjectsAndPlansExist(outcomesToSeed);
-        const { error: insErr } = await supabase.from('outcomes').insert(await injectOrgId(toSnakeCase(outcomesToSeed)));
+        const { error: insErr } = await supabase.from('outcomes').insert(await injectOrgId(toSnakeCase(outcomesToSeed), 'outcomes'));
         if (insErr) console.warn('Outcomes 表注入失败:', insErr);
         else seededAtLeastOne = true;
       }
@@ -190,7 +190,7 @@ export const seedSupabase = async (): Promise<boolean> => {
         });
         // 确保关联的 project 先存在以避免约束错误
         await ensureReferencedProjectsAndPlansExist(newReqs);
-        const { error: insErr } = await supabase.from('requirements').insert(await injectOrgId(toSnakeCase(newReqs)));
+        const { error: insErr } = await supabase.from('requirements').insert(await injectOrgId(toSnakeCase(newReqs), 'requirements'));
         if (insErr) {
           console.warn('Requirements 表注入失败:', insErr);
         } else {
@@ -206,7 +206,7 @@ export const seedSupabase = async (): Promise<boolean> => {
             }
           });
           if (histories.length > 0) {
-            const { error: histErr } = await supabase.from('requirement_history').insert(await injectOrgId(toSnakeCase(histories)));
+            const { error: histErr } = await supabase.from('requirement_history').insert(await injectOrgId(toSnakeCase(histories), 'requirement_history'));
             if (histErr) console.warn('Requirement_history 注入失败:', histErr);
           }
         }
@@ -287,7 +287,7 @@ export const forceSeedTable = async (tableName: string): Promise<string> => {
     }
 
     // 写入
-    const injected = await injectOrgId(toSnakeCase(dataToInsert));
+    const injected = await injectOrgId(toSnakeCase(dataToInsert), tableName);
     const { error } = await supabase.from(tableName).insert(injected);
     if (error) {
       throw new Error(`写入失败: ${error.message} (代码: ${error.code})。如果此表在您的数据库中不存在，请先登录 Supabase 并运行 SQL 创建该表。`);
@@ -306,7 +306,7 @@ export const forceSeedTable = async (tableName: string): Promise<string> => {
       if (histories.length > 0) {
         try {
           await supabase.from('requirement_history').delete().neq('id', 'force_delete_placeholder');
-          const { error: histErr } = await supabase.from('requirement_history').insert(await injectOrgId(toSnakeCase(histories)));
+          const { error: histErr } = await supabase.from('requirement_history').insert(await injectOrgId(toSnakeCase(histories), 'requirement_history'));
           if (histErr) console.warn('历史关联记录写入失败:', histErr);
         } catch (hErr) {
           console.warn('历史关联清空或写入时发生异常:', hErr);
