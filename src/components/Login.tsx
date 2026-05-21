@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Member } from '../types';
+import Logo from './Logo';
 
 interface LoginProps {
   onLogin: (user: Member) => void;
@@ -8,9 +9,8 @@ interface LoginProps {
 }
 
 export default function Login({ onLogin, authorizedCompanies, members }: LoginProps) {
-  const hasAccountSetup = localStorage.getItem('has_setup_account') === 'true';
-  const [loginMode, setLoginMode] = useState<'account' | 'initial'>(hasAccountSetup ? 'account' : 'account');
-  const [showInitialAnyway, setShowInitialAnyway] = useState(!hasAccountSetup);
+  const lastAccount = localStorage.getItem('login_account') || '';
+  const [loginMode, setLoginMode] = useState<'account' | 'initial'>(lastAccount ? 'account' : 'initial');
   const [company, setCompany] = useState(() => localStorage.getItem('login_company') || '');
   const [name, setName] = useState(() => localStorage.getItem('login_name') || '');
   const [account, setAccount] = useState(() => localStorage.getItem('login_account') || '');
@@ -18,6 +18,15 @@ export default function Login({ onLogin, authorizedCompanies, members }: LoginPr
   const [rememberPwd, setRememberPwd] = useState(() => localStorage.getItem('login_remember') === 'true');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Auto-detect login mode based on registered members
+  React.useEffect(() => {
+    // If the saved account doesn't exist anymore or isn't set up, fallback to 'initial' mode so they can activate easily.
+    const hasAnyActiveMembersWithCreds = members.some(m => m.account && m.password);
+    if (!hasAnyActiveMembersWithCreds) {
+      setLoginMode('initial');
+    }
+  }, [members]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,30 +96,28 @@ export default function Login({ onLogin, authorizedCompanies, members }: LoginPr
   return (
     <div className="min-h-screen w-full bg-[#F0F4F8] flex items-center justify-center font-sans text-[#202124] px-4 selection:bg-[#1A73E8] selection:text-white">
       <div className="w-full max-w-[440px] relative z-10 transition-all duration-500">
-        <form onSubmit={handleSubmit} className="bg-white rounded-[28px] p-8 sm:p-10 shadow-[0_4px_24px_rgba(0,0,0,0.06)] border border-[#E3E3E3] space-y-7">
-          <div className="text-center mb-6">
-            <h1 className="text-3xl font-normal text-[#202124] mb-2 tracking-normal">Sign in</h1>
-            <p className="text-[16px] font-normal text-[#5F6368]">to continue to your workspace</p>
+        <form id="login_form" onSubmit={handleSubmit} className="bg-white rounded-[28px] p-8 sm:p-10 shadow-[0_4px_24px_rgba(0,0,0,0.06)] border border-[#E3E3E3] space-y-7">
+          <div className="flex flex-col items-center justify-center text-center mb-6">
+            <Logo iconSize="md" className="mb-2" />
+            <p className="text-[14px] font-normal text-[#5F6368] mt-1">进入您的智能效率与协作工作区</p>
           </div>
           
-          {showInitialAnyway && (
-            <div className="flex bg-[#F1F3F4] rounded-full p-1 mb-8">
-              <button 
-                type="button" 
-                onClick={() => { setLoginMode('account'); setError(''); }} 
-                className={`flex-1 py-2 text-[14px] font-medium rounded-full transition-all ${loginMode === 'account' ? 'bg-white text-[#202124] shadow-sm' : 'text-[#5F6368] hover:text-[#202124]'}`}
-              >
-                账号登录
-              </button>
-              <button 
-                type="button" 
-                onClick={() => { setLoginMode('initial'); setError(''); }} 
-                className={`flex-1 py-2 text-[14px] font-medium rounded-full transition-all ${loginMode === 'initial' ? 'bg-white text-[#202124] shadow-sm' : 'text-[#5F6368] hover:text-[#202124]'}`}
-              >
-                首次登录 / 重置账号
-              </button>
-            </div>
-          )}
+          <div className="flex bg-[#F1F3F4] rounded-full p-1 mb-8">
+            <button 
+              type="button" 
+              onClick={() => { setLoginMode('account'); setError(''); }} 
+              className={`flex-1 py-2 text-[14px] font-medium rounded-full transition-all ${loginMode === 'account' ? 'bg-white text-[#1A73E8] shadow-sm' : 'text-[#5F6368] hover:text-[#202124]'}`}
+            >
+              账号登录
+            </button>
+            <button 
+              type="button" 
+              onClick={() => { setLoginMode('initial'); setError(''); }} 
+              className={`flex-1 py-2 text-[14px] font-medium rounded-full transition-all ${loginMode === 'initial' ? 'bg-white text-[#1A73E8] shadow-sm' : 'text-[#5F6368] hover:text-[#202124]'}`}
+            >
+              首次登录 / 账号激活
+            </button>
+          </div>
 
           <div className="space-y-4">
             {loginMode === 'account' ? (
@@ -188,13 +195,28 @@ export default function Login({ onLogin, authorizedCompanies, members }: LoginPr
                   />
                   <label htmlFor="name" className="absolute text-[16px] text-[#5F6368] duration-300 transform -translate-y-4 scale-75 top-4 z-10 origin-[0] left-4 peer-placeholder-shown:scale-100 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:top-1/2 peer-focus:top-4 peer-focus:scale-75 peer-focus:-translate-y-4 peer-focus:text-[#1A73E8] bg-white px-1">成员姓名</label>
                 </div>
+                
+                <div className="rounded-xl bg-[#F8F9FA] border border-[#DADCE0] p-4 text-[13px] text-[#5F6368] leading-relaxed space-y-2 mt-2">
+                  <div className="font-semibold flex items-center gap-1.5 text-[14px] text-[#202124]">
+                    <svg className="w-4 h-4 text-[#1A73E8] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span>新成员注册激活指南</span>
+                  </div>
+                  <p className="text-[#3C4043] font-normal">
+                    如果您是新录入系统的团队成员，可在上方输入<strong>【公司名称】和【姓名】</strong>进行初步验证。
+                  </p>
+                  <p className="text-[12px] text-[#5F6368]">
+                    💡 验证校验通过后，为了保障您个人业务数据的私密和安全隔离，系统将立即跳转让您设定专属的登录账户、口令。设置完成后即可使用统一的账号和密码轻松登录。
+                  </p>
+                </div>
               </>
             )}
           </div>
 
           <div className="min-h-[20px]">
             {error && (
-              <p className="text-[#D93025] text-[13px] font-medium animate-in fade-in duration-300 flex items-center gap-1.5">
+              <p className="text-[#D93025] text-[13px] font-medium animate-in fade-in duration-300 flex items-center gap-1.5 animate-bounce">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
                   <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM13 17H11V15H13V17ZM13 13H11V7H13V13Z" />
                 </svg>
@@ -215,29 +237,13 @@ export default function Login({ onLogin, authorizedCompanies, members }: LoginPr
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  <span>验证中...</span>
+                  <span>请稍候...</span>
                 </>
               ) : (
-                '登录'
+                loginMode === 'account' ? '安全登录' : '验证激活'
               )}
             </button>
           </div>
-          
-          {error && !showInitialAnyway && loginMode === 'account' && (
-            <div className="text-right pt-2 border-t border-[#E3E3E3]">
-              <button 
-                type="button"
-                onClick={() => {
-                  setShowInitialAnyway(true);
-                  setLoginMode('initial');
-                  setError('');
-                }}
-                className="text-[13px] text-[#1A73E8] hover:bg-[#E8F0FE] px-2 py-1.5 rounded transition-colors font-medium"
-              >
-                管理员已重置账号？用姓名登录
-              </button>
-            </div>
-          )}
         </form>
       </div>
     </div>

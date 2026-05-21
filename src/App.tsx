@@ -30,6 +30,7 @@ import { seedSupabase, forceSeedTable } from './services/seedService';
 
 import GuideModal from './components/GuideModal';
 import ProfileModal from './components/ProfileModal';
+import Logo from './components/Logo';
 
 const TaskProgressInput = React.memo(({ task, onUpdate }: { task: Task, onUpdate: (val: number) => void }) => {
   const [localVal, setLocalVal] = useState(task.progress.toString());
@@ -451,11 +452,13 @@ export default function App() {
   const [currentView, setCurrentView] = useState<string>('dashboard');
   const [loadingStep, setLoadingStep] = useState<string>('正在对数据服务进行连接初始化...');
   const [useLocalMockMode, setUseLocalMockMode] = useState<boolean>(false);
+  const [isDbLoaded, setIsDbLoaded] = useState(false);
 
   const switchToLocalMockMode = () => {
     console.log('一键切换至纯前端本地 Mock 模式');
     apiService.setLocalMockOverride(true);
     setUseLocalMockMode(true);
+    setIsDbLoaded(true);
     setIsLoadingData(false);
     setDataError(null);
   };
@@ -521,7 +524,11 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('groups', JSON.stringify(groups));
-  }, [groups]);
+    if (isDbLoaded && !useLocalMockMode) {
+      apiService.saveGroups(groups).catch(e => console.warn('自动同步小组到数据库失败:', e));
+    }
+  }, [groups, isDbLoaded, useLocalMockMode]);
+
   const [members, setMembers] = useState(() => {
     const saved = localStorage.getItem('members');
     if (saved && !saved.includes('-')) {
@@ -542,7 +549,11 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('members', JSON.stringify(members));
-  }, [members]);
+    if (isDbLoaded && !useLocalMockMode) {
+      apiService.saveMembers(members).catch(e => console.warn('自动同步成员到数据库失败:', e));
+    }
+  }, [members, isDbLoaded, useLocalMockMode]);
+
   const [quarterGoalsTexts, setQuarterGoalsTexts] = useState<Record<string, string>>({});
   const [editingQuarterGroupIds, setEditingQuarterGroupIds] = useState<string[]>([]);
   
@@ -557,7 +568,16 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('authorizedCompanies', JSON.stringify(authorizedCompanies));
-  }, [authorizedCompanies]);
+    if (isDbLoaded && !useLocalMockMode) {
+      apiService.saveSystemSettings({ authorizedCompanies, annualTargetProfit, guideContent }).catch(e => console.warn('自动同步系统设置失败:', e));
+    }
+  }, [authorizedCompanies, isDbLoaded, useLocalMockMode]);
+
+  useEffect(() => {
+    if (isDbLoaded && !useLocalMockMode) {
+      apiService.saveSystemSettings({ authorizedCompanies, annualTargetProfit, guideContent }).catch(e => console.warn('自动同步利润指标失败:', e));
+    }
+  }, [annualTargetProfit, isDbLoaded, useLocalMockMode]);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
@@ -643,6 +663,7 @@ export default function App() {
         setRequirements(initialRequirements);
         setReleaseGoals([]);
         setProjectTrackings([]);
+        setIsDbLoaded(true);
         setIsLoadingData(false);
         return;
       }
@@ -671,7 +692,10 @@ export default function App() {
           apiService.getOutcomes(),
           apiService.getRequirements(),
           apiService.getReleaseGoals(),
-          apiService.getProjectTrackings()
+          apiService.getProjectTrackings(),
+          apiService.getGroups(),
+          apiService.getMembers(),
+          apiService.getSystemSettings()
         ]);
         
         const timeoutPromise = new Promise((_, reject) => 
@@ -680,7 +704,18 @@ export default function App() {
 
         console.log('fetchData: Waiting for initial fetch');
         const results = await Promise.race([fetchPromise, timeoutPromise]) as any;
-        const [projectsData, plansData, tasksData, outcomesData, requirementsData, releaseGoalsData, trackingsData] = results;
+        let [
+          projectsData, 
+          plansData, 
+          tasksData, 
+          outcomesData, 
+          requirementsData, 
+          releaseGoalsData, 
+          trackingsData,
+          groupsData,
+          membersData,
+          systemSettingsData
+        ] = results;
         console.log('fetchData: Initial fetch done');
 
         if (projectsData.length === 0) {
@@ -697,15 +732,31 @@ export default function App() {
            if (seeded && mounted) {
                console.log('fetchData: Fetching data after seed');
                const seedFetchPromise = Promise.all([
-                 apiService.getProjects(), apiService.getPlans(), apiService.getTasks(), apiService.getOutcomes(), apiService.getRequirements(), apiService.getReleaseGoals(), apiService.getProjectTrackings()
+                 apiService.getProjects(), 
+                 apiService.getPlans(), 
+                 apiService.getTasks(), 
+                 apiService.getOutcomes(), 
+                 apiService.getRequirements(), 
+                 apiService.getReleaseGoals(), 
+                 apiService.getProjectTrackings(),
+                 apiService.getGroups(),
+                 apiService.getMembers(),
+                 apiService.getSystemSettings()
                ]);
                const seedResults = await Promise.race([seedFetchPromise, timeoutPromise]) as any;
-               const [p, pl, t, o, r, rg, tr] = seedResults;
+               const [p, pl, t, o, r, rg, tr, gData, mData, sData] = seedResults;
                
                console.log('fetchData: Seed fetch done');
-               setProjects(p); setPlans(pl); setTasks(t); setOutcomes(o); setRequirements(r); setReleaseGoals(rg || []); setProjectTrackings(tr || []);
-               setIsLoadingData(false);
-               return;
+               projectsData = p;
+               plansData = pl;
+               tasksData = t;
+               outcomesData = o;
+               requirementsData = r;
+               releaseGoalsData = rg || [];
+               trackingsData = tr || [];
+               groupsData = gData;
+               membersData = mData;
+               systemSettingsData = sData;
            }
         }
 
@@ -719,6 +770,37 @@ export default function App() {
           setRequirements(requirementsData);
           setReleaseGoals(releaseGoalsData || []);
           setProjectTrackings(trackingsData || []);
+
+          // 处理核心设置数据的自愈机制
+          let finalGroups = groups;
+          if (groupsData && groupsData.length > 0) {
+            finalGroups = groupsData;
+          } else {
+            console.log('No groups in database, uploading initial ones...');
+            await apiService.saveGroups(groups).catch(e => console.warn('Sync initial groups failed', e));
+          }
+
+          let finalMembers = members;
+          if (membersData && membersData.length > 0) {
+            finalMembers = membersData;
+          } else {
+            console.log('No members in database, uploading initial ones...');
+            await apiService.saveMembers(members).catch(e => console.warn('Sync initial members failed', e));
+          }
+
+          if (systemSettingsData) {
+            setAuthorizedCompanies(systemSettingsData.authorizedCompanies);
+            setAnnualTargetProfit(systemSettingsData.annualTargetProfit);
+            setGuideContent(systemSettingsData.guideContent);
+          } else {
+            console.log('No system settings in database, uploading initial ones...');
+            await apiService.saveSystemSettings({ authorizedCompanies, annualTargetProfit, guideContent }).catch(e => console.warn('Sync initial system settings failed', e));
+          }
+
+          setGroups(finalGroups);
+          setMembers(finalMembers);
+          
+          setIsDbLoaded(true);
           console.log('fetchData: State set successfully');
         }
       } catch (err) {
@@ -739,7 +821,10 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('guideContent', guideContent);
-  }, [guideContent]);
+    if (isDbLoaded && !useLocalMockMode) {
+      apiService.saveSystemSettings({ authorizedCompanies, annualTargetProfit, guideContent }).catch(e => console.warn('自动同步使用说明到数据库失败:', e));
+    }
+  }, [guideContent, isDbLoaded, useLocalMockMode]);
 
   useEffect(() => {
     // Attempt to scroll the active tab into view when it changes
@@ -886,19 +971,7 @@ export default function App() {
       }
       setCurrentUser(parsedUser);
     } else {
-      const defaultAdmin = mockMembers.find(m => m.name === '李克秋');
-      if (defaultAdmin) {
-        const user: Member = {
-          id: defaultAdmin.id,
-          name: defaultAdmin.name,
-          avatar: defaultAdmin.avatar,
-          department: defaultAdmin.department,
-          roles: defaultAdmin.roles,
-          groupId: defaultAdmin.groupId
-        };
-        setCurrentUser(user);
-        localStorage.setItem('currentUser', JSON.stringify(user));
-      }
+      setCurrentUser(null);
     }
     setCurrentUserLoaded(true);
   }, []);
@@ -1904,9 +1977,38 @@ export default function App() {
                  {`alter table "${tabName}" add column if not exists "${colName}" jsonb;`}
                </pre>
                <details className="mt-4 cursor-pointer">
-                 <summary className="font-bold text-[#1A1A1A] underline">如果仍然报错，请点击此处复制完整数据库更新脚本（一键补齐所有缺失字段）</summary>
+                 <summary className="font-bold text-[#1A1A1A] underline">如果仍然报错，请点击此处复制完整数据库更新脚本（一键补齐所有缺失字段与设置表格）</summary>
                  <pre className="mt-2 text-[10px] p-4 bg-black text-green-400 rounded overflow-x-auto whitespace-pre-wrap">
                    {`
+-- 创建系统设置（分组、成员、全局参数配置）表格
+create table if not exists groups (
+  id text primary key,
+  name text,
+  category text,
+  organization_id text
+);
+
+create table if not exists members (
+  id text primary key,
+  name text,
+  avatar text,
+  roles text,
+  department text,
+  group_id text,
+  account text,
+  password text,
+  organization_id text
+);
+
+create table if not exists system_settings (
+  id text primary key,
+  authorized_companies text,
+  annual_target_profit numeric,
+  guide_content text,
+  organization_id text
+);
+
+-- 原核心表格字段补齐
 alter table requirements add column if not exists serial_number text;
 alter table requirements add column if not exists project_id text;
 alter table requirements add column if not exists link_url text;
@@ -1975,6 +2077,9 @@ alter table requirements disable row level security;
 alter table requirement_history disable row level security;
 alter table release_goals disable row level security;
 alter table project_trackings disable row level security;
+alter table groups disable row level security;
+alter table members disable row level security;
+alter table system_settings disable row level security;
 `}
                </pre>
                <p className="mt-3 text-sm text-gray-600">执行位置：进入 <a href="https://supabase.com/dashboard/project/_/sql/new" target="_blank" rel="noreferrer" className="underline hover:text-black font-semibold">Supabase Dashboard</a> -&gt; SQL Editor -&gt; New query -&gt; 粘贴上述代码并点击 <strong>RUN</strong>。</p>
@@ -2004,7 +2109,7 @@ alter table project_trackings disable row level security;
       {/* Header */}
       <header className="flex justify-between items-center px-4 sm:px-6 lg:px-10 py-4 sm:py-6 border-b border-[#1A1A1A] shrink-0 z-40 bg-[#F7F6F2]">
         <div className="flex justify-between items-center w-full md:w-auto">
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-serif italic tracking-tight text-[#1A1A1A]">TrackFlow</h1>
+          <Logo iconSize="md" />
           <div className="flex md:hidden items-center gap-4 text-[11px] font-semibold">
             <button 
               onClick={() => setIsProfileModalOpen(true)}

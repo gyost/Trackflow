@@ -1,7 +1,7 @@
 import { injectOrgId } from '../lib/orgService';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Plan, Task, Outcome, Project, Requirement, RequirementHistory, ReleaseGoal, ProjectTracking, FollowupRecord } from '../types';
-import { mockProjects, mockPlans, mockTasks, mockOutcomes, mockRequirements } from '../mockData';
+import { Plan, Task, Outcome, Project, Requirement, RequirementHistory, ReleaseGoal, ProjectTracking, FollowupRecord, Member, Group } from '../types';
+import { mockProjects, mockPlans, mockTasks, mockOutcomes, mockRequirements, mockMembers, mockGroups } from '../mockData';
 
 // Utility functions for converting between camelCase and snake_case
 const toSnakeCaseStr = (str: string) => str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
@@ -471,6 +471,184 @@ export const apiService = {
       ensureConfigured();
       const { error } = await supabase.from('project_trackings').delete().eq('id', id);
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
+    } catch (e: any) {
+      throw new Error(e.message || String(e));
+    }
+  },
+
+  // Groups
+  getGroups: async (): Promise<Group[]> => {
+    try {
+      if (apiService.isLocalMockActive()) {
+        return getLocalData('groups', []);
+      }
+      ensureConfigured();
+      const { data, error } = await supabase.from('groups').select('*');
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
+      return toCamelCase(data || []);
+    } catch (e: any) {
+      throw new Error(e.message || String(e));
+    }
+  },
+
+  saveGroups: async (groups: Group[]): Promise<void> => {
+    try {
+      if (apiService.isLocalMockActive()) {
+        setLocalData('groups', groups);
+        return;
+      }
+      ensureConfigured();
+      const dataToSave = toSnakeCase(groups);
+      const injected = await injectOrgId(dataToSave, 'groups');
+      const { error } = await supabase.from('groups').upsert(injected);
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): ' + error.message : error.message || JSON.stringify(error));
+    } catch (e: any) {
+      throw new Error(e.message || String(e));
+    }
+  },
+
+  deleteGroup: async (id: string): Promise<void> => {
+    try {
+      if (apiService.isLocalMockActive()) {
+        return;
+      }
+      ensureConfigured();
+      const { error } = await supabase.from('groups').delete().eq('id', id);
+      if (error) throw new Error(error.message || JSON.stringify(error));
+    } catch (e: any) {
+      throw new Error(e.message || String(e));
+    }
+  },
+
+  // Members
+  getMembers: async (): Promise<Member[]> => {
+    try {
+      if (apiService.isLocalMockActive()) {
+        return getLocalData('members', []);
+      }
+      ensureConfigured();
+      const { data, error } = await supabase.from('members').select('*');
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
+      const parsed = toCamelCase(data || []);
+      return parsed.map((m: any) => {
+        let roles: string[] = [];
+        if (Array.isArray(m.roles)) {
+          roles = m.roles;
+        } else if (typeof m.roles === 'string') {
+          try {
+            roles = JSON.parse(m.roles);
+          } catch {
+            roles = m.roles.split(',').filter(Boolean);
+          }
+        }
+        return {
+          ...m,
+          roles
+        };
+      });
+    } catch (e: any) {
+      throw new Error(e.message || String(e));
+    }
+  },
+
+  saveMembers: async (members: Member[]): Promise<void> => {
+    try {
+      if (apiService.isLocalMockActive()) {
+        setLocalData('members', members);
+        return;
+      }
+      ensureConfigured();
+      const dataToSave = members.map(m => {
+        const serialized = { ...m };
+        if (m.roles) {
+          (serialized as any).roles = JSON.stringify(m.roles);
+        }
+        return serialized;
+      });
+      const snaked = toSnakeCase(dataToSave);
+      const injected = await injectOrgId(snaked, 'members');
+      const { error } = await supabase.from('members').upsert(injected);
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): ' + error.message : error.message || JSON.stringify(error));
+    } catch (e: any) {
+      throw new Error(e.message || String(e));
+    }
+  },
+
+  deleteMember: async (id: string): Promise<void> => {
+    try {
+      if (apiService.isLocalMockActive()) {
+        return;
+      }
+      ensureConfigured();
+      const { error } = await supabase.from('members').delete().eq('id', id);
+      if (error) throw new Error(error.message || JSON.stringify(error));
+    } catch (e: any) {
+      throw new Error(e.message || String(e));
+    }
+  },
+
+  // System Settings (授权公司、业务参数、说明书)
+  getSystemSettings: async (): Promise<{
+    authorizedCompanies: string[];
+    annualTargetProfit: number;
+    guideContent: string;
+  } | null> => {
+    try {
+      if (apiService.isLocalMockActive()) {
+        const companies = getLocalData<string[]>('authorizedCompanies', ['Apple Inc.', 'Test Company']);
+        const profit = getLocalData<number>('annualTargetProfit', 1000);
+        const guide = getLocalData<string>('guideContent', '');
+        return { authorizedCompanies: companies, annualTargetProfit: profit, guideContent: guide };
+      }
+      ensureConfigured();
+      const { data, error } = await supabase.from('system_settings').select('*');
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): ' + error.message : error.message || JSON.stringify(error));
+      if (!data || data.length === 0) {
+        return null;
+      }
+      const item = data[0];
+      let authCompanies: string[] = [];
+      if (typeof item.authorized_companies === 'string') {
+        try {
+          authCompanies = JSON.parse(item.authorized_companies);
+        } catch {
+          authCompanies = item.authorized_companies.split(',').filter(Boolean);
+        }
+      } else if (Array.isArray(item.authorized_companies)) {
+        authCompanies = item.authorized_companies;
+      }
+      return {
+        authorizedCompanies: authCompanies,
+        annualTargetProfit: Number(item.annual_target_profit || 1000),
+        guideContent: item.guide_content || ''
+      };
+    } catch (e: any) {
+      throw new Error(e.message || String(e));
+    }
+  },
+
+  saveSystemSettings: async (settings: {
+    authorizedCompanies: string[];
+    annualTargetProfit: number;
+    guideContent: string;
+  }): Promise<void> => {
+    try {
+      if (apiService.isLocalMockActive()) {
+        setLocalData('authorizedCompanies', settings.authorizedCompanies);
+        setLocalData('annualTargetProfit', settings.annualTargetProfit);
+        setLocalData('guideContent', settings.guideContent);
+        return;
+      }
+      ensureConfigured();
+      const payload = {
+        id: 'global_config',
+        authorized_companies: JSON.stringify(settings.authorizedCompanies),
+        annual_target_profit: settings.annualTargetProfit,
+        guide_content: settings.guideContent
+      };
+      const injected = await injectOrgId(payload, 'system_settings');
+      const { error } = await supabase.from('system_settings').upsert(injected);
+      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): ' + error.message : error.message || JSON.stringify(error));
     } catch (e: any) {
       throw new Error(e.message || String(e));
     }
