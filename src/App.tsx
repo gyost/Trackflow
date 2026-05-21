@@ -449,6 +449,7 @@ export default function App() {
   const [currentUserLoaded, setCurrentUserLoaded] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<string>('dashboard');
   const [loadingStep, setLoadingStep] = useState<string>('正在对数据服务进行连接初始化...');
   const [useLocalMockMode, setUseLocalMockMode] = useState<boolean>(false);
@@ -525,7 +526,12 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('groups', JSON.stringify(groups));
     if (isDbLoaded && !useLocalMockMode) {
-      apiService.saveGroups(groups).catch(e => console.warn('自动同步小组到数据库失败:', e));
+      apiService.saveGroups(groups).then(() => {
+        setSyncError(null);
+      }).catch(e => {
+        console.warn('自动同步小组到数据库失败:', e);
+        setSyncError(e.message || String(e));
+      });
     }
   }, [groups, isDbLoaded, useLocalMockMode]);
 
@@ -550,7 +556,12 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('members', JSON.stringify(members));
     if (isDbLoaded && !useLocalMockMode) {
-      apiService.saveMembers(members).catch(e => console.warn('自动同步成员到数据库失败:', e));
+      apiService.saveMembers(members).then(() => {
+        setSyncError(null);
+      }).catch(e => {
+        console.warn('自动同步成员到数据库失败:', e);
+        setSyncError(e.message || String(e));
+      });
     }
   }, [members, isDbLoaded, useLocalMockMode]);
 
@@ -5144,6 +5155,8 @@ alter table system_settings disable row level security;
           setGuideContent={setGuideContent}
           authorizedCompanies={authorizedCompanies}
           setAuthorizedCompanies={setAuthorizedCompanies}
+          syncError={syncError}
+          setSyncError={setSyncError}
         />
       )}
 

@@ -31,6 +31,8 @@ interface SettingsModalProps {
   setGuideContent: (val: string) => void;
   authorizedCompanies: string[];
   setAuthorizedCompanies: React.Dispatch<React.SetStateAction<string[]>>;
+  syncError?: string | null;
+  setSyncError?: (val: string | null) => void;
 }
 
 export default function SettingsModal({
@@ -44,7 +46,9 @@ export default function SettingsModal({
   guideContent,
   setGuideContent,
   authorizedCompanies,
-  setAuthorizedCompanies
+  setAuthorizedCompanies,
+  syncError,
+  setSyncError
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'global' | 'business' | 'groups' | 'members' | 'guide'>('global');
 
@@ -165,6 +169,29 @@ export default function SettingsModal({
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
+          {syncError && (
+            <div className="mb-6 p-4 bg-amber-50 text-[#1A1A1A] border border-amber-300 text-xs flex flex-col gap-3 rounded-xl shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-amber-600 font-bold">⚠️ 云数据库部分表连接受限</span>
+                <span className="opacity-70 text-[10px]">(当前改动已暂存在本地浏览器，完美可用)</span>
+              </div>
+              <p className="opacity-85 text-[11px] leading-relaxed">
+                您的云端数据库对 <code className="bg-black/5 px-1.5 py-0.5 rounded text-red-600 font-mono">groups</code> 或 <code className="bg-black/5 px-1.5 py-0.5 rounded text-red-600 font-mono">members</code> 启用了 Row Level Security (RLS) 安全限流：
+                <br />
+                {syncError}
+                <br />
+                <strong className="text-amber-800">别担心</strong>，所有当前新建、更易的架构设置已直接保存在浏览器本地（localStorage），<strong>您可以正常使用系统的所有功能！</strong>
+              </p>
+              <div className="bg-black/5 p-2.5 rounded font-mono text-[10px]">
+                <p className="font-bold mb-1.5 opacity-70">💡 解除云同步限制：请登录您的 Supabase Dashboard，在 SQL Editor 中执行下述语句后刷新系统：</p>
+                <div className="bg-black text-[#A3E635] p-2.5 rounded overflow-x-auto whitespace-pre-wrap font-mono select-all">
+                  {`alter table groups disable row level security;
+alter table members disable row level security;`}
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'global' && (
             <div className="space-y-8">
               <div>

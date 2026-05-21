@@ -498,10 +498,25 @@ export const apiService = {
         return;
       }
       ensureConfigured();
-      const dataToSave = toSnakeCase(groups);
-      const injected = await injectOrgId(dataToSave, 'groups');
-      const { error } = await supabase.from('groups').upsert(injected);
-      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): ' + error.message : error.message || JSON.stringify(error));
+
+      // Calculate groups to delete (deleted in frontend, need to remove from database)
+      const { data: dbGroups, error: getErr } = await supabase.from('groups').select('id');
+      if (!getErr && dbGroups) {
+        const dbIds = dbGroups.map((g: any) => g.id);
+        const currentIds = groups.map(g => g.id);
+        const toDelete = dbIds.filter(id => !currentIds.includes(id));
+        if (toDelete.length > 0) {
+          const { error: delErr } = await supabase.from('groups').delete().in('id', toDelete);
+          if (delErr) console.warn('自动同步删除小组到数据库失败 (RLS或其他原因):', delErr.message);
+        }
+      }
+
+      if (groups.length > 0) {
+        const dataToSave = toSnakeCase(groups);
+        const injected = await injectOrgId(dataToSave, 'groups');
+        const { error } = await supabase.from('groups').upsert(injected);
+        if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭 groups 表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
+      }
     } catch (e: any) {
       throw new Error(e.message || String(e));
     }
@@ -558,17 +573,25 @@ export const apiService = {
         return;
       }
       ensureConfigured();
-      const dataToSave = members.map(m => {
-        const serialized = { ...m };
-        if (m.roles) {
-          (serialized as any).roles = JSON.stringify(m.roles);
+
+      // Calculate members to delete (deleted in frontend, need to remove from database)
+      const { data: dbMembers, error: getErr } = await supabase.from('members').select('id');
+      if (!getErr && dbMembers) {
+        const dbIds = dbMembers.map((m: any) => m.id);
+        const currentIds = members.map(m => m.id);
+        const toDelete = dbIds.filter(id => !currentIds.includes(id));
+        if (toDelete.length > 0) {
+          const { error: delErr } = await supabase.from('members').delete().in('id', toDelete);
+          if (delErr) console.warn('自动同步删除成员到数据库失败 (RLS或其他原因):', delErr.message);
         }
-        return serialized;
-      });
-      const snaked = toSnakeCase(dataToSave);
-      const injected = await injectOrgId(snaked, 'members');
-      const { error } = await supabase.from('members').upsert(injected);
-      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): ' + error.message : error.message || JSON.stringify(error));
+      }
+
+      if (members.length > 0) {
+        const snaked = toSnakeCase(members);
+        const injected = await injectOrgId(snaked, 'members');
+        const { error } = await supabase.from('members').upsert(injected);
+        if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭 members 表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
+      }
     } catch (e: any) {
       throw new Error(e.message || String(e));
     }
