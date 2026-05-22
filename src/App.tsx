@@ -17,7 +17,7 @@ import {
 } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { HelpCircle, LayoutDashboard, Target, TrendingUp, Code2, ClipboardList, User, Settings, LogOut, Search, Plus, Download, Upload, FileSpreadsheet, Filter } from 'lucide-react';
+import { HelpCircle, LayoutDashboard, Target, TrendingUp, Code2, ClipboardList, User, Settings, LogOut, Search, Plus, Download, Upload, FileSpreadsheet, Filter, Coins, FileText, Wallet, Users, UserX } from 'lucide-react';
 import { mockProjects, mockPlans as initialPlans, mockTasks as initialTasks, mockOutcomes as initialOutcomes, mockMembers, mockGroups, mockRequirements as initialRequirements } from './mockData';
 import { Plan, Task, Outcome, Group, Member, Project, Status, Priority, Requirement, RequirementStatus, RequirementHistory, ReleaseGoal, ProjectTracking, TrackingStatus, FollowupRecord } from './types';
 import { generateId } from './lib/utils';
@@ -653,54 +653,130 @@ const ProjectTrackingView = ({
                </div>
                
                {/* Mobile Card Layout */}
-               <div className="md:hidden flex flex-col gap-4 pb-[calc(120px+env(safe-area-inset-bottom))]">
+               <div className="md:hidden flex flex-col gap-4.5 pb-[calc(110px+env(safe-area-inset-bottom))]">
                  {filtered.map((t, i) => (
-                   <div key={t.id} className="bg-white/80 backdrop-blur-xl border border-black/5 rounded-[24px] p-5 flex flex-col gap-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden active:scale-[0.98] transition-transform" onClick={() => handleAction(t.id, 'details', () => onViewDetails(t))}>
+                   <div 
+                     key={t.id} 
+                     className="bg-white border border-black/[0.06] rounded-[24px] p-5.5 flex flex-col gap-4.5 shadow-[0_4px_24px_rgba(0,0,0,0.02)] active:scale-[0.985] transition-all relative overflow-hidden" 
+                     onClick={() => handleAction(t.id, 'details', () => onViewDetails(t))}
+                   >
                      {/* Header */}
-                     <div className="flex flex-col gap-1.5 pr-14">
-                        <div className="flex items-center gap-2">
-                           <span className={`w-2 h-2 rounded-full ${statusColors[t.status]}`}></span>
-                           <span className="text-[10px] font-mono tracking-widest opacity-50 uppercase">{statusLabels[t.status]}</span>
+                     <div className="flex flex-col gap-2 pr-14">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border
+                             ${t.status === 'followup' ? 'bg-amber-50 border-amber-200 text-amber-700' : 
+                               t.status === 'implementing' ? 'bg-blue-50 border-blue-200 text-blue-700' : 
+                               t.status === 'accepting' ? 'bg-green-50 border-green-200 text-green-700' : 
+                               t.status === 'quoted' ? 'bg-purple-50 border-purple-200 text-purple-700' : 
+                               t.status === 'archived' ? 'bg-stone-50 border-stone-200 text-stone-700' :
+                               'bg-gray-50 border-gray-200 text-gray-700'}`}
+                           >
+                             <span className={`w-1 h-1 rounded-full ${statusColors[t.status]} shrink-0`} />
+                             {statusLabels[t.status]}
+                           </span>
+                           {t.product && (
+                             <span className="bg-zinc-50 border border-zinc-100 text-zinc-500 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                               {t.product}
+                             </span>
+                           )}
                         </div>
-                        <h3 className="font-bold text-[17px] text-[#1A1A1A] leading-snug">
+                        <h3 className="font-bold text-[16px] text-[#1A1A1A] leading-snug tracking-tight">
                           {t.customerName}
                         </h3>
                      </div>
                        
                      {/* Call Action in absolute top right */}
                      {t.contactPhone && (
-                       <button onClick={(e) => { e.stopPropagation(); window.location.href = `tel:${t.contactPhone}`; }} className="absolute top-5 right-5 w-10 h-10 bg-[#1A1A1A]/5 hover:bg-[#1A1A1A]/10 rounded-full flex items-center justify-center transition-colors">
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-[#1A1A1A]"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                       <button 
+                         onClick={(e) => { e.stopPropagation(); window.location.href = `tel:${t.contactPhone}`; }} 
+                         className="absolute top-5.5 right-5.5 w-11 h-11 bg-zinc-50 border border-zinc-100 hover:bg-zinc-100 select-none cursor-pointer rounded-2xl flex items-center justify-center transition-colors active:scale-90"
+                         title="拨打电话"
+                       >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-zinc-600"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
                        </button>
                      )}
                      
                      {/* Metrics Ribbon */}
-                     <div className="flex bg-[#1A1A1A]/[0.03] rounded-2xl p-4 gap-4">
+                     <div className="flex bg-zinc-50 border border-black/[0.02] rounded-[16px] p-3.5 gap-4">
                         <div className="flex-1">
-                           <div className="text-[10px] opacity-40 mb-1 font-bold tracking-widest">预期 (万)</div>
-                           <div className="font-mono text-lg font-medium opacity-80">{t.expectedContractAmount > 0 ? (t.expectedContractAmount / 10000).toFixed(0) : '0'}</div>
+                           <div className="text-[9px] opacity-40 mb-1 font-bold tracking-widest uppercase">预期合同额</div>
+                           <div className="font-mono text-base font-bold text-[#1A1A1A] opacity-95">
+                             {t.expectedContractAmount > 0 ? `¥${(t.expectedContractAmount / 10000).toLocaleString()}万` : '—'}
+                           </div>
                         </div>
-                        <div className="w-[1px] bg-black/5"></div>
+                        <div className="w-[1px] bg-black/[0.05]"></div>
                         <div className="flex-1">
-                           <div className="text-[10px] opacity-40 mb-1 font-bold tracking-widest">达成 (万)</div>
-                           <div className="font-mono text-lg font-bold text-emerald-600">{t.actualContractAmount > 0 ? (t.actualContractAmount / 10000).toFixed(0) : '0'}</div>
+                           <div className="text-[9px] opacity-40 mb-1 font-bold tracking-widest uppercase">实际达成额</div>
+                           <div className="font-mono text-base font-bold text-emerald-800">
+                             {t.actualContractAmount > 0 ? `¥${(t.actualContractAmount / 10000).toLocaleString()}万` : '—'}
+                           </div>
                         </div>
                      </div>
                      
                      {/* Footer Info */}
-                     <div className="flex items-center justify-between mt-1">
-                        <div className="flex items-center gap-1.5 opacity-40">
-                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                           <span className="text-[11px] font-mono font-medium">{t.lastFollowupDate || '无记录'}</span>
+                     <div className="flex items-center justify-between text-[11px] font-mono opacity-60">
+                        <div className="flex items-center gap-1">
+                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                           <span>跟进: {t.lastFollowupDate || '首轮未录入'}</span>
                         </div>
-                        <div className="text-[11px] font-bold opacity-60">
-                           {(t.cityManager || t.projectManager) ? `${t.cityManager || ''} ${t.projectManager || ''}`.trim() : '未指派'}
+                        <div className="font-bold flex items-center gap-1 text-zinc-700">
+                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                           <span>{(t.cityManager || t.projectManager) ? `${t.cityManager || ''} ${t.projectManager || ''}`.trim() : '未分派'}</span>
                         </div>
                      </div>
-                     
-                     {/* Floating Actions */}
-                     <div className="absolute bottom-5 right-5 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-                       {/* This could be hidden on touch devices and mostly rely on clicking the card. But let's show subtle action buttons. */}
+
+                     {/* Mobile Card Action Drawer / Slider Buttons with at least 44px height hit targets */}
+                     <div className="flex items-center gap-2 mt-2 pt-3.5 border-t border-black/[0.04]" onClick={e => e.stopPropagation()}>
+                       <button 
+                         onClick={() => handleAction(t.id, 'followup', () => onAddFollowup(t))} 
+                         disabled={loadingAction !== null || t.status === 'terminated' || t.status === 'archived'}
+                         className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer select-none active:scale-95 ${
+                           t.status === 'terminated' || t.status === 'archived'
+                             ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
+                             : 'bg-emerald-50 text-emerald-800 border border-emerald-200/55 hover:bg-emerald-100/30'
+                         }`}
+                       >
+                         {loadingAction?.id === t.id && loadingAction?.type === 'followup' ? (
+                           <span className="w-3.5 h-3.5 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin"></span>
+                         ) : (
+                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                         )}
+                         <span>新跟进</span>
+                       </button>
+
+                       <button 
+                         onClick={() => handleAction(t.id, 'edit', () => onEdit(t))} 
+                         disabled={loadingAction !== null || t.status === 'terminated' || t.status === 'archived'}
+                         className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer select-none active:scale-95 ${
+                           t.status === 'terminated' || t.status === 'archived'
+                             ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
+                             : 'bg-white hover:bg-zinc-100 border border-black/10 text-zinc-800'
+                         }`}
+                       >
+                         {loadingAction?.id === t.id && loadingAction?.type === 'edit' ? (
+                           <span className="w-3.5 h-3.5 border-2 border-zinc-800 border-t-transparent rounded-full animate-spin"></span>
+                         ) : (
+                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                         )}
+                         <span>修改</span>
+                       </button>
+
+                       <button 
+                         onClick={() => handleAction(t.id, 'delete', () => onDelete(t.id))} 
+                         disabled={loadingAction !== null || t.status === 'terminated' || t.status === 'archived'}
+                         className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer select-none active:scale-95 ${
+                           t.status === 'terminated' || t.status === 'archived'
+                             ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
+                             : 'bg-rose-50 hover:bg-rose-100/50 border border-rose-200/50 text-rose-700'
+                         }`}
+                       >
+                         {loadingAction?.id === t.id && loadingAction?.type === 'delete' ? (
+                           <span className="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></span>
+                         ) : (
+                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                         )}
+                         <span>作废</span>
+                       </button>
                      </div>
                    </div>
                  ))}
@@ -3479,63 +3555,81 @@ alter table system_settings disable row level security;
               />
           )}
           {currentView === 'dashboard' && (
-            <div className="flex-1 w-full space-y-10">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-baseline mb-6 gap-2 sm:gap-0 sm:border-b border-[#1A1A1A]/20 pb-2 sm:pb-4 px-4 sm:px-0 mt-4 sm:mt-0">
-                <div className="flex flex-col gap-1">
-                  <h2 className="text-2xl sm:text-3xl font-serif italic text-[#1A1A1A]">全局看板</h2>
-                  <p className="text-[11px] font-sans text-[#1A1A1A]/50 uppercase tracking-widest hidden sm:block">DATABOARD . V1</p>
+            <div className="flex-1 w-full space-y-8 animate-in fade-in duration-500">
+              {/* Header section (Borderless, sleek, minimal) */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-baseline mb-4 gap-2 sm:gap-0 pb-1 px-4 sm:px-0 mt-2 sm:mt-0">
+                <div className="flex flex-col gap-0.5">
+                  <h2 className="text-2xl sm:text-3xl font-serif italic text-zinc-900 tracking-tight">全局数据看板</h2>
+                  <p className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest hidden sm:block">
+                    Real-time Business & Development Insights . {CURRENT_YEAR}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 self-stretch sm:self-auto justify-between sm:justify-end">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-50 text-emerald-600 uppercase tracking-wider">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                    数据已实时更新
+                  </span>
                 </div>
               </div>
 
-
-              {/* Digital Metrics Board */}
-              <div className="flex flex-col gap-4 mb-2">
-                <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 px-4 sm:px-0 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory scroll-smooth pb-4 -mx-4 sm:mx-0">
+              {/* SECTION 1: 核心财务毛利分析 (Digital Metrics Board) */}
+              <div className="flex flex-col gap-4">
+                <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 px-4 sm:px-0 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory scroll-smooth pb-2 -mx-4 sm:mx-0">
                   
                   {/* 1. Year to Date Profit */}
                   {(() => {
                     const yearProfitRatio = annualTargetProfit > 0 ? currentYearActualProfit / annualTargetProfit : 0;
                     const yearPercentage = (yearProfitRatio * 100).toFixed(1);
                     
-                    let textColor = "text-[#1A1A1A]";
-                    let badgeBg = "bg-[#1A1A1A]/10";
-                    let barColor = "bg-[#1A1A1A]";
+                    let statusColor = "text-zinc-955 font-bold";
+                    let badgeBg = "bg-zinc-100/80 text-zinc-750";
+                    let barColor = "bg-zinc-950";
+                    let iconBg = "bg-zinc-50 border border-zinc-100/50 text-zinc-600";
                     
                     if (currentYearActualProfit > 0) {
                       if (yearProfitRatio >= 1) {
-                        textColor = "text-[#16a34a]";
-                        badgeBg = "bg-[#16a34a]/10";
-                        barColor = "bg-[#16a34a]";
+                        statusColor = "text-emerald-600";
+                        badgeBg = "bg-emerald-50 text-emerald-700";
+                        barColor = "bg-emerald-500";
+                        iconBg = "bg-emerald-50 text-emerald-600 border border-emerald-100/55";
                       } else if (yearProfitRatio >= 0.8) {
-                        textColor = "text-[#d97706]";
-                        badgeBg = "bg-[#d97706]/10";
-                        barColor = "bg-[#d97706]";
-                      } else if (yearProfitRatio > 0 && currentYearActualProfit < annualTargetProfit * (new Date().getMonth()+1)/12 ) { // Just a rough estimate if behind schedule
-                        textColor = "text-[#dc2626]";
-                        badgeBg = "bg-[#dc2626]/10";
-                        barColor = "bg-[#dc2626]";
+                        statusColor = "text-amber-600";
+                        badgeBg = "bg-amber-50 text-amber-700";
+                        barColor = "bg-amber-505";
+                        iconBg = "bg-amber-50 text-amber-600 border border-amber-100/55";
+                      } else if (yearProfitRatio > 0 && currentYearActualProfit < annualTargetProfit * (new Date().getMonth()+1)/12 ) {
+                        statusColor = "text-rose-600";
+                        badgeBg = "bg-rose-50 text-rose-700";
+                        barColor = "bg-rose-500";
+                        iconBg = "bg-rose-50 text-rose-600 border border-rose-100/55";
                       }
                     }
 
                     return (
-                      <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[300px] sm:min-w-0 w-full shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
-                        <div className="absolute -top-4 -right-4 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                          <span className="text-8xl font-serif">¥</span>
-                        </div>
-                        <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A] relative z-10 w-[85%] leading-tight">本年度累计利润 (万) / 目标: {annualTargetProfit}</span>
-                        <div className="flex items-baseline gap-2 relative z-10">
-                          <span className={`text-4xl font-serif italic ${textColor}`}>{currentYearActualProfit}</span>
-                          <span className={`text-[10px] font-mono ${textColor} ${badgeBg} px-1.5 py-0.5 rounded-sm`}>
-                            {yearPercentage}% 达成
+                      <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full min-w-[280px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                        <div className="flex justify-between items-start relative z-10 w-full mb-1">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block max-w-[80%] leading-snug">本年度累计利润 (万)</span>
+                          <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
+                            <Coins className="w-4 h-4" />
                           </span>
                         </div>
+                        <div className="flex items-baseline gap-2 relative z-10">
+                          <span className={`text-3.5xl font-serif italic ${statusColor} tracking-tight leading-none`}>{currentYearActualProfit}</span>
+                          <span className="text-[10px] font-mono text-zinc-400 leading-none">/ 目标 {annualTargetProfit}</span>
+                        </div>
                         
-                        {/* Progress bar */}
-                        <div className="absolute bottom-0 left-0 w-full h-1 bg-[#1A1A1A]/5">
-                          <div 
-                            className={`h-full ${barColor} transition-all duration-1000 ease-out`}
-                            style={{ width: `${Math.min(100, yearProfitRatio * 100)}%` }}
-                          />
+                        {/* Progress indicator */}
+                        <div className="flex flex-col gap-1 w-full mt-2">
+                          <div className="flex justify-between items-center text-[9px] font-mono font-bold text-zinc-400">
+                            <span>年完成比例</span>
+                            <span className={statusColor}>{yearPercentage}%</span>
+                          </div>
+                          <div className="w-full bg-zinc-100/80 h-1.5 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${barColor} transition-all duration-1000 ease-out`}
+                              style={{ width: `${Math.min(100, yearProfitRatio * 100)}%` }}
+                            />
+                          </div>
                         </div>
                       </div>
                     );
@@ -3546,50 +3640,60 @@ alter table system_settings disable row level security;
                     const monthProfitRatio = currentMonthTargetProfit > 0 ? currentMonthActualProfit / currentMonthTargetProfit : 0;
                     const monthPercentage = (monthProfitRatio * 100).toFixed(1);
                     
-                    let textColor = "text-[#1A1A1A]";
-                    let badgeBg = "bg-[#1A1A1A]/10";
-                    let barColor = "bg-[#1A1A1A]";
+                    let statusColor = "text-zinc-950 font-bold";
+                    let badgeBg = "bg-zinc-100/80 text-zinc-700";
+                    let barColor = "bg-zinc-950";
+                    let iconBg = "bg-zinc-50 border border-zinc-100/50 text-zinc-600";
                     
                     if (currentMonthActualProfit > 0) {
                       if (monthProfitRatio >= 1) {
-                        textColor = "text-[#16a34a]";
-                        badgeBg = "bg-[#16a34a]/10";
-                        barColor = "bg-[#16a34a]";
+                        statusColor = "text-emerald-600";
+                        badgeBg = "bg-emerald-50 text-emerald-700";
+                        barColor = "bg-emerald-400";
+                        iconBg = "bg-emerald-50 text-emerald-600 border border-emerald-100/55";
                       } else if (monthProfitRatio >= 0.8) {
-                        textColor = "text-[#d97706]";
-                        badgeBg = "bg-[#d97706]/10";
-                        barColor = "bg-[#d97706]";
+                        statusColor = "text-amber-600";
+                        badgeBg = "bg-amber-50 text-amber-700";
+                        barColor = "bg-amber-400";
+                        iconBg = "bg-amber-50 text-amber-600 border border-amber-100/55";
                       } else {
-                        textColor = "text-[#dc2626]";
-                        badgeBg = "bg-[#dc2626]/10";
-                        barColor = "bg-[#dc2626]";
+                        statusColor = "text-rose-600";
+                        badgeBg = "bg-rose-50 text-rose-700";
+                        barColor = "bg-rose-400";
+                        iconBg = "bg-rose-50 text-rose-600 border border-rose-100/55";
                       }
                     } else if (monthProfitRatio === 0 && currentMonthTargetProfit > 0) {
-                      textColor = "text-[#dc2626]";
-                      badgeBg = "bg-[#dc2626]/10";
-                      barColor = "bg-[#dc2626]";
+                      statusColor = "text-rose-600";
+                      badgeBg = "bg-rose-50 text-rose-700";
+                      barColor = "bg-rose-400";
+                      iconBg = "bg-rose-50 text-rose-600 border border-rose-100/55";
                     }
                     
                     return (
-                      <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[300px] sm:min-w-0 w-full shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
-                        <div className="absolute -top-4 -right-4 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                          <span className="text-8xl font-serif">¥</span>
-                        </div>
-                        <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A] relative z-10 leading-tight">当月利润目标 / 实际 (万)</span>
-                        <div className="flex items-baseline gap-2 relative z-10 mt-2">
-                          <span className={`text-3xl font-serif italic ${textColor}`}>{currentMonthActualProfit}</span>
-                          <span className="text-[10px] font-mono text-[#1A1A1A]/40 uppercase">/ {currentMonthTargetProfit}</span>
-                          <span className={`text-[10px] font-mono ${textColor} ${badgeBg} px-1.5 py-0.5 rounded-sm ml-auto`}>
-                            {monthPercentage}% 达成
+                      <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full min-w-[280px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                        <div className="flex justify-between items-start relative z-10 w-full mb-1">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block max-w-[80%] leading-snug">当月利润完成 (万)</span>
+                          <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
+                            <Wallet className="w-4 h-4" />
                           </span>
                         </div>
+                        <div className="flex items-baseline gap-2 relative z-10">
+                          <span className={`text-3.5xl font-serif italic ${statusColor} tracking-tight leading-none`}>{currentMonthActualProfit}</span>
+                          <span className="text-[10px] font-mono text-zinc-400 leading-none">/ 目标 {currentMonthTargetProfit}</span>
+                        </div>
                         
-                        {/* Progress bar */}
-                        <div className="absolute bottom-0 left-0 w-full h-1 bg-[#1A1A1A]/5">
-                          <div 
-                            className={`h-full ${barColor} transition-all duration-1000 ease-out`} 
-                            style={{ width: `${Math.min(100, monthProfitRatio * 100)}%` }}
-                          />
+                        {/* Progress indicator */}
+                        <div className="flex flex-col gap-1 w-full mt-2">
+                          <div className="flex justify-between items-center text-[9px] font-mono font-bold text-zinc-400">
+                            <span>当月指标进度</span>
+                            <span className={statusColor}>{monthPercentage}%</span>
+                          </div>
+                          <div className="w-full bg-zinc-100/80 h-1.5 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${barColor} transition-all duration-1000 ease-out`} 
+                              style={{ width: `${Math.min(100, monthProfitRatio * 100)}%` }}
+                            />
+                          </div>
                         </div>
                       </div>
                     );
@@ -3600,206 +3704,344 @@ alter table system_settings disable row level security;
                     const monthContractRatio = currentMonthTargetContract > 0 ? currentMonthActualContract / currentMonthTargetContract : 0;
                     const monthPercentage = (monthContractRatio * 100).toFixed(1);
                     
-                    let textColor = "text-[#1A1A1A]";
-                    let badgeBg = "bg-[#1A1A1A]/10";
-                    let barColor = "bg-[#1A1A1A]";
+                    let statusColor = "text-zinc-950 font-bold";
+                    let badgeBg = "bg-zinc-100/80 text-zinc-700";
+                    let barColor = "bg-zinc-950";
+                    let iconBg = "bg-zinc-50 border border-zinc-100/50 text-zinc-600";
                     
                     if (currentMonthActualContract > 0) {
                       if (monthContractRatio >= 1) {
-                        textColor = "text-[#16a34a]";
-                        badgeBg = "bg-[#16a34a]/10";
-                        barColor = "bg-[#16a34a]";
+                        statusColor = "text-emerald-600";
+                        badgeBg = "bg-emerald-50 text-emerald-700";
+                        barColor = "bg-emerald-400";
+                        iconBg = "bg-emerald-50 text-emerald-600 border border-emerald-100/55";
                       } else if (monthContractRatio >= 0.8) {
-                        textColor = "text-[#d97706]";
-                        badgeBg = "bg-[#d97706]/10";
-                        barColor = "bg-[#d97706]";
+                        statusColor = "text-amber-600";
+                        badgeBg = "bg-amber-50 text-amber-700";
+                        barColor = "bg-amber-400";
+                        iconBg = "bg-amber-50 text-amber-600 border border-amber-100/55";
                       } else {
-                        textColor = "text-[#dc2626]";
-                        badgeBg = "bg-[#dc2626]/10";
-                        barColor = "bg-[#dc2626]";
+                        statusColor = "text-rose-600";
+                        badgeBg = "bg-rose-50 text-rose-700";
+                        barColor = "bg-rose-400";
+                        iconBg = "bg-rose-50 text-rose-600 border border-rose-100/55";
                       }
                     } else if (monthContractRatio === 0 && currentMonthTargetContract > 0) {
-                      textColor = "text-[#dc2626]";
-                      badgeBg = "bg-[#dc2626]/10";
-                      barColor = "bg-[#dc2626]";
+                      statusColor = "text-rose-600";
+                      badgeBg = "bg-rose-50 text-rose-700";
+                      barColor = "bg-rose-400";
+                      iconBg = "bg-rose-50 text-rose-600 border border-rose-100/55";
                     }
                     
                     return (
-                      <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[300px] sm:min-w-0 w-full shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
-                        <div className="absolute -top-4 -right-4 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                          <span className="text-8xl font-serif">¥</span>
-                        </div>
-                        <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A] relative z-10 leading-tight">当月合同目标 / 实际 (万)</span>
-                        <div className="flex items-baseline gap-2 relative z-10 mt-2">
-                          <span className={`text-3xl font-serif italic ${textColor}`}>{currentMonthActualContract}</span>
-                          <span className="text-[10px] font-mono text-[#1A1A1A]/40 uppercase">/ {currentMonthTargetContract}</span>
-                          <span className={`text-[10px] font-mono ${textColor} ${badgeBg} px-1.5 py-0.5 rounded-sm ml-auto`}>
-                            {monthPercentage}% 达成
+                      <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full min-w-[280px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                        <div className="flex justify-between items-start relative z-10 w-full mb-1">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block max-w-[80%] leading-snug">当月合同完成 (万)</span>
+                          <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
+                            <FileText className="w-4 h-4" />
                           </span>
                         </div>
+                        <div className="flex items-baseline gap-2 relative z-10">
+                          <span className={`text-3.5xl font-serif italic ${statusColor} tracking-tight leading-none`}>{currentMonthActualContract}</span>
+                          <span className="text-[10px] font-mono text-zinc-400 leading-none">/ 目标 {currentMonthTargetContract}</span>
+                        </div>
                         
-                        {/* Progress bar */}
-                        <div className="absolute bottom-0 left-0 w-full h-1 bg-[#1A1A1A]/5">
-                          <div 
-                            className={`h-full ${barColor} transition-all duration-1000 ease-out`} 
-                            style={{ width: `${Math.min(100, monthContractRatio * 100)}%` }}
-                          />
+                        {/* Progress indicator */}
+                        <div className="flex flex-col gap-1 w-full mt-2">
+                          <div className="flex justify-between items-center text-[9px] font-mono font-bold text-zinc-400">
+                            <span>合同签署进度</span>
+                            <span className={statusColor}>{monthPercentage}%</span>
+                          </div>
+                          <div className="w-full bg-zinc-100/80 h-1.5 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${barColor} transition-all duration-1000 ease-out`} 
+                              style={{ width: `${Math.min(100, monthContractRatio * 100)}%` }}
+                            />
+                          </div>
                         </div>
                       </div>
                     );
                   })()}
 
                   {/* 4. Combined Month Collection */}
-                  <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 flex flex-col justify-between h-32 relative overflow-hidden group shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[300px] sm:min-w-0 w-full shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
-                    <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A] relative z-10 w-[85%] leading-tight">当月回款目标 / 实际 (万)</span>
-                    <div className="flex items-baseline gap-2 relative z-10 mt-2">
-                       <span className="text-3xl font-serif italic text-[#1A1A1A]">{currentMonthActualCollection}</span>
-                       <span className="text-[10px] font-mono text-[#1A1A1A]/40 uppercase">/ {currentMonthTargetCollection}</span>
-                       {(() => {
-                         const collectionRatio = currentMonthTargetCollection > 0 ? currentMonthActualCollection / currentMonthTargetCollection : 0;
-                         const collectionPercentage = (collectionRatio * 100).toFixed(1);
-                         
-                         let textColor = "text-[#1A1A1A]";
-                         let badgeBg = "bg-[#1A1A1A]/10";
-                         
-                         if (currentMonthActualCollection > 0) {
-                           if (collectionRatio >= 1) { textColor = "text-[#16a34a]"; badgeBg = "bg-[#16a34a]/10"; }
-                           else if (collectionRatio >= 0.8) { textColor = "text-[#d97706]"; badgeBg = "bg-[#d97706]/10"; }
-                           else { textColor = "text-[#dc2626]"; badgeBg = "bg-[#dc2626]/10"; }
-                         }
-                         return (
-                           <span className={`text-[10px] font-mono ${textColor} ${badgeBg} px-1.5 py-0.5 rounded-sm ml-auto`}>
-                             {collectionPercentage}% 达成
-                           </span>
-                         )
-                       })()}
-                    </div>
-                    {(() => {
-                      const collectionRatio = currentMonthTargetCollection > 0 ? currentMonthActualCollection / currentMonthTargetCollection : 0;
-                      let barColor = "bg-[#1A1A1A]";
-                      if (collectionRatio >= 1) barColor = "bg-[#16a34a]";
-                      else if (collectionRatio >= 0.8) barColor = "bg-[#d97706]";
-                      else if (collectionRatio > 0) barColor = "bg-[#dc2626]";
-                      return (
-                        <div className="absolute bottom-0 left-0 w-full h-1 bg-[#1A1A1A]/5">
-                          <div 
-                            className={`h-full ${barColor} transition-all duration-1000 ease-out`}
-                            style={{ width: `${Math.min(100, collectionRatio * 100)}%` }}
-                          />
+                  {(() => {
+                    const collectionRatio = currentMonthTargetCollection > 0 ? currentMonthActualCollection / currentMonthTargetCollection : 0;
+                    const collectionPercentage = (collectionRatio * 100).toFixed(1);
+                    
+                    let statusColor = "text-zinc-950 font-bold";
+                    let badgeBg = "bg-zinc-100/80 text-zinc-700";
+                    let barColor = "bg-zinc-950";
+                    let iconBg = "bg-zinc-50 border border-zinc-100/50 text-zinc-600";
+                    
+                    if (currentMonthActualCollection > 0) {
+                      if (collectionRatio >= 1) {
+                        statusColor = "text-emerald-600";
+                        badgeBg = "bg-emerald-50 text-emerald-700";
+                        barColor = "bg-emerald-400";
+                        iconBg = "bg-emerald-50 text-emerald-600 border border-emerald-100/55";
+                      } else if (collectionRatio >= 0.8) {
+                        statusColor = "text-amber-600";
+                        badgeBg = "bg-amber-50 text-amber-700";
+                        barColor = "bg-amber-400";
+                        iconBg = "bg-amber-50 text-amber-600 border border-amber-100/55";
+                      } else {
+                        statusColor = "text-rose-600";
+                        badgeBg = "bg-rose-50 text-rose-700";
+                        barColor = "bg-rose-400";
+                        iconBg = "bg-rose-50 text-rose-600 border border-rose-100/55";
+                      }
+                    }
+                    
+                    return (
+                      <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full min-w-[280px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                        <div className="flex justify-between items-start relative z-10 w-full mb-1">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block max-w-[80%] leading-snug">当月回款完成 (万)</span>
+                          <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
+                            <TrendingUp className="w-4 h-4" />
+                          </span>
                         </div>
-                      );
-                    })()}
-                  </div>
+                        <div className="flex items-baseline gap-2 relative z-10">
+                          <span className={`text-3.5xl font-serif italic ${statusColor} tracking-tight leading-none`}>{currentMonthActualCollection}</span>
+                          <span className="text-[10px] font-mono text-zinc-400 leading-none">/ 目标 {currentMonthTargetCollection}</span>
+                        </div>
+                        
+                        {/* Progress indicator */}
+                        <div className="flex flex-col gap-1 w-full mt-2">
+                          <div className="flex justify-between items-center text-[9px] font-mono font-bold text-zinc-400">
+                            <span>款项收回进度</span>
+                            <span className={statusColor}>{collectionPercentage}%</span>
+                          </div>
+                          <div className="w-full bg-zinc-100/80 h-1.5 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${barColor} transition-all duration-1000 ease-out`}
+                              style={{ width: `${Math.min(100, collectionRatio * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                 </div>
+              </div>
 
-                {/* Client Stats Row */}
-                <div className="flex sm:grid sm:grid-cols-2 md:grid-cols-4 gap-4 px-4 sm:px-0 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory scroll-smooth pb-4 -mx-4 sm:mx-0">
-                  <div className="bg-white/80 backdrop-blur-md border border-black/5 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[260px] sm:min-w-0 shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
-                    <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A]">潜在客户库 (年度累计)</span>
-                    <div className="flex items-baseline gap-2 mt-2">
-                      <span className="text-3xl font-serif italic text-[#1A1A1A]">{yearLeadClients}</span>
-                      <span className="text-[9px] font-mono text-[#1A1A1A]/40 uppercase">Total / {yearTargetLeadClients}</span>
+              {/* SECTION 2: 潜在客户与漏斗累计目标 (Client Stats Row) */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2 px-4 sm:px-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">客群转化动态与漏斗 (年度累计)</span>
+                </div>
+                
+                <div className="flex sm:grid sm:grid-cols-2 md:grid-cols-4 gap-4 px-4 sm:px-0 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory scroll-smooth pb-2 -mx-4 sm:mx-0">
+                  
+                  {/* Lead Clients */}
+                  <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[104px] relative overflow-hidden group shadow-[0_4px_16px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.04)] transition-all duration-300 w-full min-w-[245px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                    <div className="flex justify-between items-start w-full">
+                      <span className="text-[11px] font-medium text-zinc-400">潜在客户库</span>
+                      <span className="w-6 h-6 rounded-lg bg-zinc-50 border border-zinc-100/75 flex items-center justify-center text-zinc-400">
+                        <Users className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5 mt-1">
+                      <span className="text-2.5xl font-serif italic text-zinc-800 tracking-tight">{yearLeadClients}</span>
+                      <span className="text-[9px] font-mono text-zinc-400 font-bold">/ {yearTargetLeadClients} 目标</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
+                      <span className="text-[9px] font-mono text-zinc-400">年度推进指数</span>
+                      <span className="text-[9px] font-mono font-bold text-zinc-600">
+                        {yearTargetLeadClients > 0 ? Math.round((yearLeadClients / yearTargetLeadClients) * 100) : 0}%
+                      </span>
                     </div>
                   </div>
                   
-                  <div className="bg-white/80 backdrop-blur-md border border-black/5 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[260px] sm:min-w-0 shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
-                    <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A]">已开发推进中 (年度累计)</span>
-                    <div className="flex items-baseline gap-2 mt-2">
-                      <span className="text-3xl font-serif italic text-[#16a34a]">{yearActiveClients}</span>
-                      <span className="text-[9px] font-mono text-[#1A1A1A]/40 uppercase">Active / {yearTargetActiveClients}</span>
+                  {/* Active Clients */}
+                  <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[104px] relative overflow-hidden group shadow-[0_4px_16px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.04)] transition-all duration-300 w-full min-w-[245px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                    <div className="flex justify-between items-start w-full">
+                      <span className="text-[11px] font-medium text-zinc-400">已开发推进中</span>
+                      <span className="w-6 h-6 rounded-lg bg-amber-50/55 border border-amber-100/30 flex items-center justify-center text-amber-600">
+                        <TrendingUp className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5 mt-1">
+                      <span className="text-2.5xl font-serif italic text-amber-600 tracking-tight">{yearActiveClients}</span>
+                      <span className="text-[9px] font-mono text-zinc-400 font-bold">/ {yearTargetActiveClients} 目标</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
+                      <span className="text-[9px] font-mono text-zinc-400">活跃推进效率</span>
+                      <span className="text-[9px] font-mono font-bold text-amber-600">
+                        {yearTargetActiveClients > 0 ? Math.round((yearActiveClients / yearTargetActiveClients) * 100) : 0}%
+                      </span>
                     </div>
                   </div>
 
-                  <div className="bg-white/80 backdrop-blur-md border border-black/5 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[260px] sm:min-w-0 shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
-                    <span className="text-[12px] sm:text-[10px] font-semibold opacity-80 text-[#1A1A1A]">已签约成交 (年度累计)</span>
-                    <div className="flex items-baseline gap-2 mt-2">
-                      <span className="text-3xl font-serif italic text-[#1A1A1A]">{yearSignedClients}</span>
-                      <span className="text-[9px] font-mono text-[#1A1A1A]/40 uppercase">Signed / {yearTargetSignedClients}</span>
+                  {/* Signed Clients */}
+                  <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[104px] relative overflow-hidden group shadow-[0_4px_16px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.04)] transition-all duration-300 w-full min-w-[245px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                    <div className="flex justify-between items-start w-full">
+                      <span className="text-[11px] font-medium text-zinc-400">已签约成交</span>
+                      <span className="w-6 h-6 rounded-lg bg-emerald-50/55 border border-emerald-100/30 flex items-center justify-center text-emerald-600">
+                        <FileText className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5 mt-1">
+                      <span className="text-2.5xl font-serif italic text-emerald-600 tracking-tight">{yearSignedClients}</span>
+                      <span className="text-[9px] font-mono text-zinc-400 font-bold">/ {yearTargetSignedClients} 目标</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
+                      <span className="text-[9px] font-mono text-zinc-400">合作达成度</span>
+                      <span className="text-[9px] font-mono font-bold text-emerald-600">
+                        {yearTargetSignedClients > 0 ? Math.round((yearSignedClients / yearTargetSignedClients) * 100) : 0}%
+                      </span>
                     </div>
                   </div>
 
-                  <div className="bg-white/80 backdrop-blur-md border border-black/5 p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-transform active:scale-[0.98] min-w-[260px] sm:min-w-0 shrink-0 snap-center rounded-[24px] sm:rounded-2xl">
-                    <span className="text-[12px] sm:text-[10px] font-medium opacity-60 text-[#1A1A1A]">客户流失 (年度累计)</span>
-                    <div className="flex items-baseline gap-2 mt-2">
-                      <span className="text-3xl font-serif italic text-red-600">{yearLostClients}</span>
-                      <span className="text-[9px] font-mono text-[#1A1A1A]/40 uppercase">Lost / {yearTargetLostClients}</span>
-                    </div>
-                  </div>
+                  {/* Lost Clients */}
+                  {(() => {
+                    const isExceeded = yearTargetLostClients > 0 && yearLostClients > yearTargetLostClients;
+                    return (
+                      <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[104px] relative overflow-hidden group shadow-[0_4px_16px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.04)] transition-all duration-300 w-full min-w-[245px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                        <div className="flex justify-between items-start w-full">
+                          <span className="text-[11px] font-medium text-zinc-400 font-sans">客户流失控制</span>
+                          <span className={`w-6 h-6 rounded-lg flex items-center justify-center ${isExceeded ? 'bg-rose-50 border border-rose-100/30 text-rose-600 animate-pulse' : 'bg-zinc-50 border border-zinc-100/75 text-zinc-400'}`}>
+                            <UserX className="w-3.5 h-3.5" />
+                          </span>
+                        </div>
+                        <div className="flex items-baseline gap-1.5 mt-1">
+                          <span className={`text-2.5xl font-serif italic tracking-tight ${isExceeded ? 'text-rose-600 font-extrabold' : 'text-zinc-800'}`}>
+                            {yearLostClients}
+                          </span>
+                          <span className="text-[9px] font-mono text-zinc-400 font-bold">/ {yearTargetLostClients} 上限</span>
+                        </div>
+                        <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
+                          <span className="text-[9px] font-mono text-zinc-400">风险预警状况</span>
+                          <span className={`text-[9px] font-mono font-bold ${isExceeded ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {isExceeded ? '已超出规划阀值' : '流失率在控制内'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                 </div>
               </div>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 px-4 sm:px-0 mb-8 sm:mb-0">
-                {/* Chart 1: 月度目标完成趋势 (Area Chart) */}
-                <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 rounded-[24px] sm:rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
-                  <h3 id="chart-profit-title" className="text-[11px] uppercase tracking-widest font-bold mb-6 opacity-80 flex items-center gap-2">
-                    <span className="w-2 h-2 bg-[#1A1A1A]" aria-hidden="true"></span> 月度利润趋势分析 ({CURRENT_YEAR}年 / 万)
+
+              {/* SECTION 3: 现代化趋势图表数据面板 */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 px-4 sm:px-0 mb-4">
+                
+                {/* Chart 1: 月度目标完成趋势 */}
+                <div className="bg-white/95 backdrop-blur-md p-5 sm:p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] flex flex-col">
+                  <h3 id="chart-profit-title" className="text-[11px] uppercase tracking-widest font-bold mb-5 text-zinc-500 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-zinc-950 rounded-full" aria-hidden="true" />
+                    月度利润趋势分析 ({CURRENT_YEAR}年 / 万)
                   </h3>
-                  <div className="h-64 w-full focus:outline-none focus:ring-2 focus:ring-[#1A1A1A]" role="figure" aria-labelledby="chart-profit-title" tabIndex={0}>
+                  <div className="h-64 w-full focus:outline-none focus:ring-2 focus:ring-zinc-950/20" role="figure" aria-labelledby="chart-profit-title" tabIndex={0}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={profitTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} role="img" aria-label="月度利润趋势分析面积图">
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" strokeOpacity={0.1} />
-                        <XAxis dataKey="name" fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#1A1A1A', opacity: 0.6}} />
-                        <YAxis fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#1A1A1A', opacity: 0.6}} />
-                        <Tooltip contentStyle={{ backgroundColor: '#F7F6F2', border: '1px solid #1A1A1A', borderRadius: 0, fontSize: '12px' }} />
-                        <Area type="monotone" dataKey="target" stroke="#1A1A1A" strokeWidth={2} fill="#1A1A1A" fillOpacity={0.05} name="目标利润" />
-                        <Area type="monotone" dataKey="actual" stroke="#16a34a" strokeWidth={2} fill="#16a34a" fillOpacity={0.15} name="实际利润" />
+                      <AreaChart data={profitTrendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }} role="img" aria-label="月度利润趋势分析面积图">
+                        <CartesianGrid strokeDasharray="4 4" stroke="#1A1A1A" strokeOpacity={0.03} vertical={false} />
+                        <XAxis dataKey="name" fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#1A1A1A', opacity: 0.5}} />
+                        <YAxis fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#1A1A1A', opacity: 0.5}} />
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '12px',
+                            boxShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.05)',
+                            fontSize: '11px',
+                            padding: '10px 14px'
+                          }} 
+                        />
+                        <Area type="monotone" dataKey="target" stroke="#71717a" strokeWidth={1.5} strokeDasharray="3 3" fill="url(#colorTarget)" fillOpacity={0.02} name="目标利润" />
+                        <Area type="monotone" dataKey="actual" stroke="#10b981" strokeWidth={2} fill="url(#colorActual)" fillOpacity={0.12} name="实际利润" />
+                        
+                        {/* Define gorgeous smooth gradients */}
+                        <defs>
+                          <linearGradient id="colorTarget" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#71717a" stopOpacity={0.1}/>
+                            <stop offset="95%" stopColor="#71717a" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
 
-                {/* Chart 2: 研发推进 & 任务分布 (Pie Chart) */}
-                <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 rounded-[24px] sm:rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
-                  <h3 id="chart-task-title" className="text-[11px] uppercase tracking-widest font-bold mb-6 opacity-80 flex items-center gap-2">
-                    <span className="w-2 h-2 bg-[#1A1A1A]" aria-hidden="true"></span> 月度需求统计
+                {/* Chart 2: 研发推进 & 任务分布 */}
+                <div className="bg-white/95 backdrop-blur-md p-5 sm:p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] flex flex-col">
+                  <h3 id="chart-task-title" className="text-[11px] uppercase tracking-widest font-bold mb-5 text-zinc-500 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-zinc-950 rounded-full" aria-hidden="true" />
+                    月度需求大盘分布
                   </h3>
-                  <div className="h-64 w-full flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-[#1A1A1A]" role="figure" aria-labelledby="chart-task-title" tabIndex={0}>
+                  <div className="h-64 w-full flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-zinc-950/20" role="figure" aria-labelledby="chart-task-title" tabIndex={0}>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart role="img" aria-label="月度需求统计饼图">
                         <Pie 
                           data={[
-                            { name: '总数', value: activeMonthReqs.length },
+                            { name: '总需求数', value: activeMonthReqs.length },
                             { name: '进行中', value: activeMonthReqs.filter(r => ['approved', 'planned'].includes(r.status)).length },
                             { name: '已完成', value: activeMonthReqs.filter(r => r.status === 'completed').length },
                           ]} 
                           dataKey="value" 
                           nameKey="name" 
                           cx="50%" 
-                          cy="50%" 
-                          outerRadius={90} 
-                          innerRadius={50}
+                          cy="48%" 
+                          outerRadius={85} 
+                          innerRadius={55}
                           fill="#1A1A1A" 
+                          paddingAngle={3}
                           label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                           labelLine={false}
-                          stroke="none"
+                          stroke="#FFFFFF"
+                          strokeWidth={2}
                         >
-                          <Cell fill="#a8a29e" />
+                          <Cell fill="#94a3b8" />
                           <Cell fill="#f59e0b" />
-                          <Cell fill="#16a34a" />
+                          <Cell fill="#10b981" />
                         </Pie>
-                        <Tooltip contentStyle={{ backgroundColor: '#F7F6F2', border: '1px solid #1A1A1A', borderRadius: 0, fontSize: '12px' }} />
-                        <Legend wrapperStyle={{ fontSize: '11px', opacity: 0.8, paddingTop: '10px' }} />
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '12px',
+                            boxShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.05)',
+                            fontSize: '11px',
+                            padding: '10px 14px'
+                          }} 
+                        />
+                        <Legend wrapperStyle={{ fontSize: '10px', opacity: 0.7, paddingTop: '10px' }} iconType="circle" />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
 
-                {/* Chart 3: 月度利润统计 (Bar Chart) */}
-                <div className="bg-white/80 backdrop-blur-md border border-black/5 p-6 lg:col-span-2 rounded-[24px] sm:rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
-                  <h3 id="chart-outcome-title" className="text-[11px] uppercase tracking-widest font-bold mb-6 opacity-80 flex items-center gap-2">
-                    <span className="w-2 h-2 bg-[#1A1A1A]" aria-hidden="true"></span> 月度利润统计 ({CURRENT_YEAR}年 / 万)
+                {/* Chart 3: 月度利润统计 (Bar Chart, spanning full-width for gorgeous balance) */}
+                <div className="bg-white/95 backdrop-blur-md p-5 sm:p-6 lg:col-span-2 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] flex flex-col">
+                  <h3 id="chart-outcome-title" className="text-[11px] uppercase tracking-widest font-bold mb-5 text-zinc-500 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-zinc-950 rounded-full" aria-hidden="true" />
+                    月度累计利润效益比 ({CURRENT_YEAR}年 / 万)
                   </h3>
-                  <div className="h-72 w-full focus:outline-none focus:ring-2 focus:ring-[#1A1A1A]" role="figure" aria-labelledby="chart-outcome-title" tabIndex={0}>
+                  <div className="h-64 w-full focus:outline-none focus:ring-2 focus:ring-zinc-950/20" role="figure" aria-labelledby="chart-outcome-title" tabIndex={0}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={profitTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} role="img" aria-label="月度利润统计柱状图">
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" strokeOpacity={0.1} vertical={false} />
-                        <XAxis dataKey="name" fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#1A1A1A', opacity: 0.6}} />
-                        <YAxis fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#1A1A1A', opacity: 0.6}} allowDecimals={false} />
-                        <Tooltip contentStyle={{ backgroundColor: '#F7F6F2', border: '1px solid #1A1A1A', borderRadius: 0, fontSize: '12px' }} cursor={{fill: '#1A1A1A', opacity: 0.05}} />
-                        <Legend wrapperStyle={{ fontSize: '11px', opacity: 0.8, paddingTop: '10px' }} />
-                        <Bar dataKey="target" fill="#1A1A1A" name="目标利润" radius={[2, 2, 0, 0]} maxBarSize={50} />
-                        <Bar dataKey="actual" fill="#16a34a" name="实际利润" radius={[2, 2, 0, 0]} maxBarSize={50} />
+                      <BarChart data={profitTrendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }} role="img" aria-label="月度利润统计柱状图">
+                        <CartesianGrid strokeDasharray="4 4" stroke="#1A1A1A" strokeOpacity={0.03} vertical={false} />
+                        <XAxis dataKey="name" fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#1A1A1A', opacity: 0.5}} />
+                        <YAxis fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#1A1A1A', opacity: 0.5}} allowDecimals={false} />
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '12px',
+                            boxShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.05)',
+                            fontSize: '11px',
+                            padding: '10px 14px'
+                          }} 
+                          cursor={{fill: '#1a1a1a', opacity: 0.02}} 
+                        />
+                        <Legend wrapperStyle={{ fontSize: '10px', opacity: 0.7, paddingTop: '10px' }} iconType="circle" />
+                        <Bar dataKey="target" fill="#64748b" name="目标利润" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                        <Bar dataKey="actual" fill="#10b981" name="实际利润" radius={[4, 4, 0, 0]} maxBarSize={32} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>

@@ -68,6 +68,7 @@ export default function SettingsModal({
   const [avatarDropdownField, setAvatarDropdownField] = useState<'new' | string | null>(null);
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editingMemberState, setEditingMemberState] = useState({ name: '', avatar: '', roles: [] as string[], category: 'marketing' as Category | 'admin', groupId: '' });
+  const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
 
   const handleAddGroup = () => {
     if (!newGroupName.trim()) return;
@@ -548,30 +549,51 @@ alter table members disable row level security;`}
                             {member.department === 'marketing' ? '市场开拓' : member.department === 'rnd' ? '产品研发' : member.department === 'admin' ? '管理' : ''} / {groups.find(g => g.id === member.groupId)?.name || '未分组'}
                           </span>
                         </div>
-                        <div className="flex gap-4 shrink-0 justify-end">
-                           <button 
-                             onClick={() => {
-                               setEditingMemberId(member.id);
-                               setEditingMemberState({ name: member.name, avatar: member.avatar, roles: member.roles, category: member.department as 'marketing' | 'rnd' | 'admin', groupId: member.groupId || '' });
-                             }}
-                             className="text-[#1A1A1A] text-[10px] uppercase tracking-widest hover:underline"
-                           >
-                             修改
-                           </button>
-                           <button 
-                             onClick={() => handleResetAccount(member.id)}
-                             className="text-[#1A73E8] text-[10px] uppercase tracking-widest hover:underline"
-                             title="重置登录账号和密码"
-                           >
-                             重置账号
-                           </button>
-                           <button 
-                             onClick={() => handleDeleteMember(member.id)}
-                             className="text-red-600 text-[10px] uppercase tracking-widest hover:underline"
-                           >
-                             删除
-                           </button>
-                        </div>
+                        {deletingMemberId === member.id ? (
+                          <div className="flex items-center gap-2.5 shrink-0">
+                            <span className="text-[11px] text-red-600 font-bold shrink-0 font-mono">确定将该成员移出吗？</span>
+                            <button 
+                              onClick={() => {
+                                handleDeleteMember(member.id);
+                                setDeletingMemberId(null);
+                              }}
+                              className="bg-red-600 text-white hover:bg-red-700 text-[10px] font-bold py-1.5 px-3 rounded-lg border border-red-600 select-none cursor-pointer tracking-wider h-[32px] flex items-center active:scale-95 transition-all font-mono"
+                            >
+                              确认删除
+                            </button>
+                            <button 
+                              onClick={() => setDeletingMemberId(null)}
+                              className="bg-white hover:bg-zinc-100 border border-[#1A1A1A]/15 text-[#1A1A1A] text-[10px] font-bold py-1.5 px-3 rounded-lg select-none cursor-pointer h-[32px] flex items-center active:scale-95 transition-all font-mono"
+                            >
+                              取消
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-4 shrink-0 justify-end">
+                            <button 
+                              onClick={() => {
+                                setEditingMemberId(member.id);
+                                setEditingMemberState({ name: member.name, avatar: member.avatar, roles: member.roles, category: member.department as 'marketing' | 'rnd' | 'admin', groupId: member.groupId || '' });
+                              }}
+                              className="text-[#1A1A1A] text-[10px] uppercase tracking-widest hover:underline whitespace-nowrap"
+                            >
+                              修改
+                            </button>
+                            <button 
+                              onClick={() => handleResetAccount(member.id)}
+                              className="text-[#1A73E8] text-[10px] uppercase tracking-widest hover:underline whitespace-nowrap"
+                              title="重置登录账号和密码"
+                            >
+                              重置账号
+                            </button>
+                            <button 
+                              onClick={() => setDeletingMemberId(member.id)}
+                              className="text-red-600 text-[10px] uppercase tracking-widest hover:underline whitespace-nowrap"
+                            >
+                              删除
+                            </button>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
