@@ -17,7 +17,7 @@ import {
 } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { HelpCircle, LayoutDashboard, Target, TrendingUp, Code2, ClipboardList, User, Settings, LogOut, Search } from 'lucide-react';
+import { HelpCircle, LayoutDashboard, Target, TrendingUp, Code2, ClipboardList, User, Settings, LogOut, Search, Plus, Download, Upload, FileSpreadsheet, Filter } from 'lucide-react';
 import { mockProjects, mockPlans as initialPlans, mockTasks as initialTasks, mockOutcomes as initialOutcomes, mockMembers, mockGroups, mockRequirements as initialRequirements } from './mockData';
 import { Plan, Task, Outcome, Group, Member, Project, Status, Priority, Requirement, RequirementStatus, RequirementHistory, ReleaseGoal, ProjectTracking, TrackingStatus, FollowupRecord } from './types';
 import { generateId } from './lib/utils';
@@ -25,12 +25,24 @@ import SettingsModal from './components/SettingsModal';
 import RichTextEditor from './components/RichTextEditor';
 import Login from './components/Login';
 import AccountSetupModal from './components/AccountSetupModal';
-import { apiService } from './services/apiService';
+import { apiService, CentralError } from './services/apiService';
 import { seedSupabase, forceSeedTable } from './services/seedService';
 
 import GuideModal from './components/GuideModal';
 import ProfileModal from './components/ProfileModal';
 import Logo from './components/Logo';
+
+function pruneDuplicates<T extends { id: any }>(arr: T[]): T[] {
+  if (!Array.isArray(arr)) return [];
+  const seen = new Set<string>();
+  return arr.filter(item => {
+    if (!item || item.id === undefined || item.id === null) return true;
+    const key = String(item.id);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 const TaskProgressInput = React.memo(({ task, onUpdate }: { task: Task, onUpdate: (val: number) => void }) => {
   const [localVal, setLocalVal] = useState(task.progress.toString());
@@ -88,7 +100,8 @@ const ProjectTrackingView = ({
   filterStatus, setFilterStatus, searchTerm, setSearchTerm,
   statusColors, statusLabels,
   year, month, setYear, setMonth,
-  onAddFollowup, onViewDetails, onStatusChange, annualTargetProfit
+  onAddFollowup, onViewDetails, onStatusChange, annualTargetProfit,
+  onImport
 }: { 
   trackings: ProjectTracking[], onDelete: (id: string) => void, onEdit: (t: ProjectTracking) => void, onAdd: () => void,
   filterStatus: 'all' | TrackingStatus, setFilterStatus: (s: 'all' | TrackingStatus) => void,
@@ -97,20 +110,21 @@ const ProjectTrackingView = ({
   year: number, month: number, setYear: (y: number) => void, setMonth: (m: number) => void,
   onAddFollowup: (t: ProjectTracking) => void, onViewDetails: (t: ProjectTracking) => void,
   onStatusChange: (id: string, status: TrackingStatus) => void,
-  annualTargetProfit: number
+  annualTargetProfit: number,
+  onImport?: (importedTrackings: Omit<ProjectTracking, 'id' | 'updatedAt'>[]) => void
 }) => {
   const monthTrackings = trackings.filter(t => {
     const d = new Date(t.updatedAt);
     return d.getFullYear() === year && (month === 0 || (d.getMonth() + 1) === month);
   });
 
-  const filtered = monthTrackings.filter(t => {
+  const filtered = pruneDuplicates(monthTrackings.filter(t => {
     return (filterStatus === 'all' || t.status === filterStatus) && 
            (t.customerName.includes(searchTerm) || 
             t.product.includes(searchTerm) || 
             (t.cityManager && t.cityManager.includes(searchTerm)) || 
             (t.projectManager && t.projectManager.includes(searchTerm)));
-  });
+  }));
   
   const totalAmount = monthTrackings.reduce((acc, curr) => acc + curr.actualContractAmount, 0);
   const statusCounts = (Object.keys(statusLabels) as TrackingStatus[]).map(s => ({
@@ -119,6 +133,8 @@ const ProjectTrackingView = ({
   }));
 
   const [loadingAction, setLoadingAction] = React.useState<{id: string, type: string} | null>(null);
+  const [importStatus, setImportStatus] = React.useState<{type: 'success' | 'error', message: string} | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleAction = async (id: string, type: string, actionFn: () => void) => {
     setLoadingAction({ id, type });
@@ -128,148 +144,401 @@ const ProjectTrackingView = ({
     setLoadingAction(null);
   };
 
+  const parseCSV = (text: string): string[][] => {
+    const lines: string[][] = [];
+    let row: string[] = [];
+    let inQuotes = false;
+    let currentField = '';
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          currentField += '"';
+          i++; // skip next quote
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        row.push(currentField.trim());
+        currentField = '';
+      } else if ((char === '\r' || char === '\n') && !inQuotes) {
+        row.push(currentField.trim());
+        currentField = '';
+        if (row.length > 0 && row.some(x => x !== '')) {
+          lines.push(row);
+        }
+        row = [];
+        if (char === '\r' && nextChar === '\n') {
+          i++; // skip \n
+        }
+      } else {
+        currentField += char;
+      }
+    }
+    if (currentField || row.length > 0) {
+      row.push(currentField.trim());
+      if (row.some(x => x !== '')) {
+        lines.push(row);
+      }
+    }
+    return lines;
+  };
+
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result;
+        if (typeof text !== 'string') return;
+
+        const lines = parseCSV(text);
+        if (lines.length < 2) {
+          setImportStatus({ type: 'error', message: 'CSV 文件数据行为空或格式不正确' });
+          setTimeout(() => setImportStatus(null), 4000);
+          return;
+        }
+
+        const headers = lines[0].map(h => h.trim().replace(/^\uFEFF/, '')); // 去除 BOM 头
+        
+        // 建立表头映射
+        const colMap: Record<string, number> = {};
+        headers.forEach((h, idx) => {
+          colMap[h] = idx;
+        });
+
+        // 必须字段校验：客户名称
+        if (colMap['客户名称'] === undefined) {
+          setImportStatus({ type: 'error', message: 'CSV 文件缺少必填卡栏：“客户名称”' });
+          setTimeout(() => setImportStatus(null), 4000);
+          return;
+        }
+
+        const importedList: Omit<ProjectTracking, 'id' | 'updatedAt'>[] = [];
+
+        // 从第二行开始解析
+        for (let i = 1; i < lines.length; i++) {
+          const row = lines[i];
+          if (!row || row.length === 0 || (row.length === 1 && row[0] === '')) continue;
+
+          const getVal = (headerName: string) => {
+            const idx = colMap[headerName];
+            return idx !== undefined && row[idx] !== undefined ? row[idx].trim() : '';
+          };
+
+          const customerName = getVal('客户名称');
+          if (!customerName) continue; // 客户名称为空跳过
+
+          const statusStr = getVal('状态');
+          // 中文状态映射到 TrackingStatus
+          let status: TrackingStatus = 'followup';
+          if (statusStr.includes('实施') || statusStr.toLowerCase().includes('implement')) {
+            status = 'implementing';
+          } else if (statusStr.includes('验收') || statusStr.toLowerCase().includes('accept')) {
+            status = 'accepting';
+          } else if (statusStr.includes('报价') || statusStr.toLowerCase().includes('quote')) {
+            status = 'quoted';
+          } else if (statusStr.includes('作废') || statusStr.toLowerCase().includes('terminate')) {
+            status = 'terminated';
+          } else if (statusStr.includes('归档') || statusStr.toLowerCase().includes('archive')) {
+            status = 'archived';
+          }
+
+          const product = getVal('合作意向/产品') || getVal('产品') || '';
+          const cityManager = getVal('市场负责人') || getVal('业务负责人') || '';
+          const projectManager = getVal('项目负责人') || '';
+          
+          // 金额转化：万 -> 元
+          const expectedAmtVal = parseFloat(getVal('预期(万)') || getVal('预期金额(万)') || getVal('预期金额') || '0');
+          const expectedContractAmount = isNaN(expectedAmtVal) ? 0 : expectedAmtVal * 10000;
+
+          const actualAmtVal = parseFloat(getVal('已达成(万)') || getVal('实际金额(万)') || getVal('已达成') || '0');
+          const actualContractAmount = isNaN(actualAmtVal) ? 0 : actualAmtVal * 10000;
+
+          const contactName = getVal('联系人') || getVal('客户联系人') || '';
+          const contactPhone = getVal('联系电话') || getVal('联系方式') || '';
+
+          importedList.push({
+            customerName,
+            status,
+            product,
+            cityManager,
+            projectManager,
+            expectedContractAmount,
+            actualContractAmount,
+            contactName,
+            contactPhone,
+            followupRecords: []
+          });
+        }
+
+        if (importedList.length === 0) {
+          setImportStatus({ type: 'error', message: '未找到有效的项目跟踪数据（请检查是否填写了“客户名称”）' });
+          setTimeout(() => setImportStatus(null), 4000);
+        } else if (onImport) {
+          onImport(importedList);
+          setImportStatus({ type: 'success', message: `成功解析并导入 ${importedList.length} 条项目跟踪记录！` });
+          setTimeout(() => setImportStatus(null), 4000);
+        }
+      } catch (err: any) {
+        setImportStatus({ type: 'error', message: '读取 CSV 失败: ' + err.message });
+        setTimeout(() => setImportStatus(null), 4000);
+      } finally {
+        if (e.target) {
+          e.target.value = ''; // 重置文件 input
+        }
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+  };
+
   return (
     <div className="flex flex-col w-full h-full bg-[#F7F6F2] text-[#1A1A1A] overflow-hidden">
-      {/* Sleek Header & Metric Row */}
-      <div className="bg-[#F7F6F2] border-b border-[#1A1A1A]/5 px-4 sm:px-8 py-4 sm:py-10 flex flex-col lg:flex-row gap-6 sm:gap-10 lg:items-end justify-between pt-6 sm:pt-10">
-        <div>
-          <h2 className="text-3xl sm:text-4xl font-serif italic tracking-tight mb-4 text-[#1A1A1A]">项目跟踪</h2>
-          <div className="flex gap-4 text-xs font-mono uppercase tracking-widest opacity-60">
-             <div className="flex items-center gap-2 border-b border-[#1A1A1A]/20 pb-1 cursor-pointer hover:opacity-100 transition-opacity">
-                <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="bg-transparent outline-none cursor-pointer appearance-none">
-                    {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y} {month === 0 ? '年' : '/'}</option>)}
-                </select>
-             </div>
-             <div className="flex items-center gap-2 border-b border-[#1A1A1A]/20 pb-1 cursor-pointer hover:opacity-100 transition-opacity">
-                <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="bg-transparent outline-none cursor-pointer appearance-none">
-                    <option value={0}>全年</option>
-                    {Array.from({length: 12}, (_, i) => i + 1).map(m => <option key={m} value={m}>{m.toString().padStart(2, '0')}月</option>)}
-                </select>
-             </div>
+      {/* Sleek Header & Metric Row (Unified & Compact) */}
+      <div className="bg-[#F7F6F2] border-b border-[#1A1A1A]/10 px-4 sm:px-8 py-4 sm:py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-8 shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 w-full md:w-auto">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 bg-gradient-to-tr from-[#1A1A1A] to-[#404040] rounded-full shadow-[0_0_8px_rgba(0,0,0,0.25)]"></span>
+              <h2 className="text-xl sm:text-2xl font-serif italic font-bold tracking-tight text-[#1A1A1A]">项目销售跟踪</h2>
+            </div>
+            <p className="text-[9px] opacity-40 uppercase tracking-widest font-mono mt-0.5">Pipeline sales & conversion tracker</p>
+          </div>
+          
+          <div className="flex gap-2 text-xs font-mono uppercase tracking-widest">
+            <div className="flex items-center gap-1.5 bg-white/60 hover:bg-white/90 transition-colors px-2.5 py-1 rounded-lg border border-[#1A1A1A]/5 shadow-sm">
+              <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="bg-transparent font-bold outline-none cursor-pointer appearance-none text-[#1A1A1A] text-[11px] pr-1">
+                 {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y} 年</option>)}
+              </select>
+              <span className="opacity-30 text-[10px]">▼</span>
+            </div>
+            
+            <div className="flex items-center gap-1.5 bg-white/60 hover:bg-white/90 transition-colors px-2.5 py-1 rounded-lg border border-[#1A1A1A]/5 shadow-sm">
+              <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="bg-transparent font-bold outline-none cursor-pointer appearance-none text-[#1A1A1A] text-[11px] pr-1">
+                 <option value={0}>全年</option>
+                 {Array.from({length: 12}, (_, i) => i + 1).map(m => <option key={m} value={m}>{m.toString().padStart(2, '0')}月</option>)}
+              </select>
+              <span className="opacity-30 text-[10px]">▼</span>
+            </div>
           </div>
         </div>
 
-        {/* Global Metrics Inline */}
-        <div className="flex flex-col lg:items-end w-full lg:w-auto">
-           <div className="flex flex-wrap lg:flex-nowrap items-baseline gap-6 sm:gap-12 text-left lg:text-right w-full lg:w-auto mb-6 lg:mb-10">
-             <div>
-                <div className="text-[10px] uppercase font-bold tracking-widest opacity-50 mb-2">客户总数</div>
-                <div className="text-4xl sm:text-5xl font-serif italic">{filtered.length}</div>
-             </div>
-             <div className="flex-1 lg:flex-none pt-4 sm:pt-0 lg:pl-12 lg:border-l border-[#1A1A1A]/10">
-                <div className="text-[10px] uppercase font-bold tracking-widest opacity-50 mb-2">已达成转化</div>
-                <div className="text-4xl sm:text-5xl font-serif italic text-emerald-700">¥{totalAmount.toLocaleString()}</div>
-             </div>
-           </div>
-           
-           <div className="flex overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory pb-4 -mb-4 w-[calc(100vw-32px)] sm:w-full -mx-4 sm:mx-0 px-4 sm:px-0">
-             <div className="flex gap-4 sm:gap-6 shrink-0 pb-2">
-               {statusCounts.map(item => (
-                  <div key={item.status} onClick={() => setFilterStatus(filterStatus === item.status ? 'all' : item.status)} className={`bg-white/60 backdrop-blur-md rounded-2xl p-4 min-w-[120px] shrink-0 snap-start cursor-pointer hover:shadow-sm transition-all ${filterStatus === item.status ? 'shadow-[0_2px_10px_rgb(0,0,0,0.06)] border border-[#1A1A1A]/10 opacity-100 scale-105' : filterStatus !== 'all' ? 'opacity-30 border border-transparent scale-95' : 'opacity-100 border border-[#1A1A1A]/5'}`}>
-                      <div className="text-[10px] uppercase font-bold tracking-widest opacity-50 mb-1.5 flex items-center lg:justify-end gap-1.5">
-                         {statusLabels[item.status]}
-                         <span className={`w-1.5 h-1.5 rounded-full ${statusColors[item.status]}`}></span>
-                      </div>
-                      <div className="text-xl sm:text-2xl font-serif italic">{item.count}</div>
-                  </div>
-               ))}
-             </div>
-           </div>
+        {/* Global Metrics & Status Filter Tags integrated in line */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 sm:gap-6 w-full md:w-auto">
+          {/* Main Counters Row */}
+          <div className="flex items-center gap-6 sm:gap-8 bg-white/40 p-2 px-4 rounded-xl border border-[#1A1A1A]/5 shadow-sm backdrop-blur-sm self-start sm:self-auto">
+            <div>
+              <div className="text-[8px] uppercase font-bold tracking-widest opacity-40 mb-0.5 font-mono">客户总数</div>
+              <div className="text-xl font-serif italic text-[#1A1A1A] font-bold flex items-baseline gap-0.5">
+                {filtered.length} 
+                <span className="text-[10px] font-sans not-italic font-normal opacity-40">户</span>
+              </div>
+            </div>
+            <div className="w-[1px] h-6 bg-[#1A1A1A]/10"></div>
+            <div>
+              <div className="text-[8px] uppercase font-bold tracking-widest opacity-40 mb-0.5 font-mono">已达成转化</div>
+              <div className="text-xl font-serif italic text-emerald-800 font-bold flex items-baseline gap-0.5">
+                ¥{(totalAmount / 10000).toLocaleString()}
+                <span className="text-[10px] font-sans not-italic font-normal opacity-50 ml-0.5">万</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Inline Compact Status Indicator Scroll Row */}
+          <div className="flex overflow-x-auto hide-scrollbar-on-mobile snap-x gap-1.5 p-1 bg-white/50 border border-[#1A1A1A]/5 rounded-xl w-full sm:w-auto max-w-full">
+            {statusCounts.map(item => {
+              const isSelected = filterStatus === item.status;
+              const hasActiveFilters = filterStatus !== 'all';
+              return (
+                <button 
+                  key={item.status} 
+                  onClick={() => setFilterStatus(isSelected ? 'all' : item.status)} 
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all duration-200 shrink-0 snap-start flex items-center gap-1.5 cursor-pointer select-none active:scale-95 ${
+                    isSelected 
+                      ? 'bg-[#1A1A1A] text-white shadow-md scale-102 font-medium' 
+                      : hasActiveFilters 
+                        ? 'opacity-35 hover:opacity-85 hover:bg-white bg-transparent text-[#1A1A1A]' 
+                        : 'bg-white/40 text-[#1A1A1A]/80 hover:bg-white hover:text-[#1A1A1A]'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${statusColors[item.status]} shrink-0 shadow-[0_0_3px_rgba(0,0,0,0.1)]`}></span>
+                  <span className="font-semibold">{statusLabels[item.status]}</span>
+                  <span className={`font-mono text-[9px] ${isSelected ? 'opacity-90 bg-white/15 px-1 py-0.2 rounded-sm' : 'opacity-40'}`}>{item.count}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 p-4 sm:p-8 max-w-7xl mx-auto w-full flex flex-col min-h-0">
         {/* Tool Bar */}
-        <div className="flex flex-col xl:flex-row gap-4 sm:gap-6 mb-6 sm:mb-8 items-start xl:items-center justify-between shrink-0">
-          <div className="w-full xl:w-[320px]">
-            <div className="flex items-center bg-black/5 rounded-xl px-3 py-2 w-full">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-40"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <div className="flex flex-col gap-5 mb-6 sm:mb-8 shrink-0 bg-white/40 p-4 sm:p-6 rounded-2xl border border-[#1A1A1A]/5 backdrop-blur-md">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            
+            {/* Left: Beautiful Custom Search Input */}
+            <div className="w-full md:w-[320px]">
+              <div className="flex items-center bg-white border border-[#1A1A1A]/12 hover:border-[#1A1A1A]/20 focus-within:border-[#1A73E8] focus-within:ring-4 focus-within:ring-[#1A73E8]/10 rounded-xl px-3.5 py-2.5 w-full transition-all duration-250 shadow-[0_2px_8px_rgba(0,0,0,0.03)] group">
+                <Search className="w-4 h-4 opacity-40 group-focus-within:opacity-80 group-focus-within:text-[#1A73E8] transition-all" strokeWidth={2.5} />
+                <input 
+                  placeholder="搜索项目、客户或负责人..." 
+                  value={searchTerm} 
+                  onChange={(e) => setSearchTerm(e.target.value)} 
+                  className="bg-transparent border-none text-[13px] w-full outline-none px-2.5 placeholder:text-[#1A1A1A]/30 text-[#1A1A1A] font-medium" 
+                />
+              </div>
+            </div>
+
+            {/* Right: Modern Actions Suite (Visible on both desktop & mobile) */}
+            <div className="flex flex-wrap items-center gap-2.5 mt-1 md:mt-0">
+              
+              {/* Action: Add Project - Primary Black styled with Icon */}
+              <button 
+                onClick={onAdd} 
+                className="flex-1 sm:flex-none justify-center bg-[#1A1A1A] text-white px-5 py-2.5 text-xs font-bold rounded-xl hover:bg-black transition-all flex items-center gap-2 active:scale-95 shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" strokeWidth={3} />
+                <span>新增项目</span>
+              </button>
+
+              {/* Action: Export CSV - Elegant White Outlined */}
+              <button 
+                onClick={() => {
+                   if (filtered.length === 0) return;
+                   const headers = ['客户名称', '状态', '合作意向/产品', '市场负责人', '项目负责人', '预期(万)', '已达成(万)', '最近跟进', '联系人', '联系电话'];
+                   const rows = filtered.map((t) => [
+                     t.customerName || '',
+                     statusLabels[t.status] || '',
+                     t.product || '',
+                     t.cityManager || '',
+                     t.projectManager || '',
+                     (t.expectedContractAmount > 0 ? (t.expectedContractAmount / 10000).toFixed(2) : '0'),
+                     (t.actualContractAmount > 0 ? (t.actualContractAmount / 10000).toFixed(2) : '0'),
+                     t.lastFollowupDate || '',
+                     t.contactName || '',
+                     t.contactPhone || ''
+                   ]);
+                   const csvContent = [
+                     headers.join(','),
+                     ...rows.map(e => e.map(item => `"${String(item).replace(/"/g, '""')}"`).join(','))
+                   ].join('\n');
+                   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+                   const url = URL.createObjectURL(blob);
+                   const link = document.createElement('a');
+                   link.href = url;
+                   const d = new Date();
+                   link.setAttribute('download', `项目跟踪导出_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.csv`);
+                   document.body.appendChild(link);
+                   link.click();
+                   document.body.removeChild(link);
+                   URL.revokeObjectURL(url);
+                }} 
+                className="flex-1 sm:flex-none justify-center bg-white border border-[#1A1A1A]/15 text-[#1A1A1A] px-4 py-2.5 text-xs font-bold rounded-xl hover:bg-[#1A1A1A]/5 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
+                title="导出下方筛选的数据为 CSV"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <span>导出数据</span>
+              </button>
+              
+              {/* Action: Download Template - Outlined Minimal */}
+              <button 
+                onClick={() => {
+                  const headers = ['客户名称', '状态', '合作意向/产品', '市场负责人', '项目负责人', '预期(万)', '已达成(万)', '联系人', '联系电话'];
+                  const sampleRow = ['示例客户有限公司', '跟进中', '数字化转型综合系统', '陈鹏飞', '梁冬雪', '120.5', '95.0', '李燕', '13988889999'];
+                  const csvContent = [
+                    headers.join(','),
+                    sampleRow.map(item => `"${String(item).replace(/"/g, '""')}"`).join(',')
+                  ].join('\n');
+                  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.setAttribute('download', '项目跟踪导入模板.csv');
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  URL.revokeObjectURL(url);
+                }} 
+                className="flex-1 sm:flex-none justify-center bg-white border border-[#1A1A1A]/15 text-[#1A1A1A] px-4 py-2.5 text-xs font-bold rounded-xl hover:bg-[#1A1A1A]/5 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
+                title="下载标准导入 CSV 格式模板"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <span>下载模板</span>
+              </button>
+
+              {/* Action: Import Data - Highlighted Blue */}
+              <button 
+                onClick={() => fileInputRef.current?.click()} 
+                className="flex-1 sm:flex-none justify-center bg-[#1A73E8] text-white px-4 py-2.5 text-xs font-bold rounded-xl hover:bg-[#1557B0] transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
+              >
+                <Upload className="w-4 h-4" />
+                <span>导入数据</span>
+              </button>
+
               <input 
-                placeholder="搜索项目与客户..." 
-                value={searchTerm} 
-                onChange={(e) => setSearchTerm(e.target.value)} 
-                className="bg-transparent border-none text-[14px] w-full outline-none px-2 placeholder:text-[#1A1A1A]/30 text-[#1A1A1A] font-medium" 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileImport} 
+                accept=".csv" 
+                style={{ display: 'none' }} 
               />
             </div>
           </div>
-          
-          <div className="flex flex-col xl:flex-row xl:flex-wrap items-start xl:items-center gap-4 sm:gap-6 text-[11px] sm:text-[13px] w-full xl:w-auto mt-2 xl:mt-0">
-             
-             {/* Swipeable Tabs for mobile */}
-             <div className="hidden xl:flex w-full xl:w-auto overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory pb-2 -mb-2 gap-4 sm:gap-6 shrink-0">
-               <button 
-                 onClick={() => setFilterStatus('all')}
-                 className={`font-bold whitespace-nowrap shrink-0 snap-start transition-colors ${filterStatus === 'all' ? 'text-[#1A1A1A] border-b-2 border-[#1A1A1A] pb-1' : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]/80 pb-1'}`}
-               >
-                 全部 ({monthTrackings.length})
-               </button>
-               {Object.keys(statusLabels).map(s => {
-                 const st = s as TrackingStatus;
-                 const count = monthTrackings.filter(t => t.status === st).length;
-                 return (
-                   <button 
-                     key={st}
-                     onClick={() => setFilterStatus(st)}
-                     className={`font-bold whitespace-nowrap shrink-0 snap-start transition-colors ${filterStatus === st ? 'text-[#1A1A1A] border-b-2 border-[#1A1A1A] pb-1' : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]/80 pb-1'}`}
-                   >
-                     {statusLabels[st]} ({count})
-                   </button>
-                 );
-               })}
-             </div>
-             
-             <div className="hidden xl:block w-[1px] h-4 bg-[#1A1A1A]/20 ml-2"></div>
-             
-             <div className="flex items-center gap-2 w-full xl:w-auto">
-             
-             {/* Desktop Add Project Button */}
-             <button onClick={onAdd} className="hidden sm:flex bg-[#1A1A1A] text-white px-6 py-2.5 text-[11px] font-bold uppercase tracking-widest hover:bg-black transition-colors shrink-0 items-center gap-2">
-               <span className="text-sm leading-none">+</span> 新增项目
-             </button>
 
-             {/* Mobile Add Project FAB */}
-             <button onClick={onAdd} className="sm:hidden fixed bottom-[calc(90px+env(safe-area-inset-bottom))] right-4 z-40 bg-zinc-800 text-white w-14 h-14 rounded-[22px] shadow-[0_8px_30px_rgb(0,0,0,0.2)] flex items-center justify-center active:scale-95 transition-transform">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-             </button>
-             
-             <button onClick={() => {
-                if (filtered.length === 0) return;
-                const headers = ['客户名称', '状态', '合作意向/产品', '市场负责人', '项目负责人', '预期(万)', '已达成(万)', '最近跟进', '联系人', '联系电话'];
-                const rows = filtered.map((t) => [
-                  t.customerName || '',
-                  statusLabels[t.status] || '',
-                  t.product || '',
-                  t.cityManager || '',
-                  t.projectManager || '',
-                  (t.expectedContractAmount > 0 ? (t.expectedContractAmount / 10000).toFixed(2) : '0'),
-                  (t.actualContractAmount > 0 ? (t.actualContractAmount / 10000).toFixed(2) : '0'),
-                  t.lastFollowupDate || '',
-                  t.contactName || '',
-                  t.contactPhone || ''
-                ]);
-                const csvContent = [
-                  headers.join(','),
-                  ...rows.map(e => e.map(item => `"${String(item).replace(/"/g, '""')}"`).join(','))
-                ].join('\n');
-                const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                const d = new Date();
-                link.setAttribute('download', `项目跟踪导出_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.csv`);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-             }} className="hidden sm:flex bg-white border border-[#1A1A1A]/20 text-[#1A1A1A] px-4 py-2 text-[11px] font-bold hover:bg-[#1A1A1A]/5 transition-colors shrink-0 items-center gap-1 ml-2">
-               导出数据
-             </button>
-
-
-             </div>
+          {/* Sub-bar: Touch-friendly horizontal filter swipe row for both desktop & mobile */}
+          <div className="border-t border-[#1A1A1A]/5 pt-3 mt-1">
+            <div className="flex overflow-x-auto hide-scrollbar snap-x snap-mandatory gap-2 pb-1 shrink-0 -mx-4 sm:-mx-0 px-4 sm:px-0">
+              <button 
+                onClick={() => setFilterStatus('all')}
+                className={`px-4 py-2 text-[11px] font-bold rounded-full transition-all duration-200 cursor-pointer text-nowrap select-none shrink-0 snap-start active:scale-95 ${
+                  filterStatus === 'all' 
+                    ? 'bg-[#1A1A1A] text-white shadow-sm' 
+                    : 'bg-[#1A1A1A]/5 text-[#1A1A1A]/60 hover:bg-[#1A1A1A]/10'
+                }`}
+              >
+                全部阶段 ({monthTrackings.length})
+              </button>
+              {Object.keys(statusLabels).map(s => {
+                const st = s as TrackingStatus;
+                const count = monthTrackings.filter(t => t.status === st).length;
+                return (
+                  <button 
+                    key={st}
+                    onClick={() => setFilterStatus(st)}
+                    className={`px-4 py-2 text-[11px] font-bold rounded-full transition-all duration-200 cursor-pointer text-nowrap select-none shrink-0 snap-start active:scale-95 flex items-center gap-1.5 ${
+                      filterStatus === st 
+                        ? 'bg-[#1A1A1A] text-white shadow-sm' 
+                        : 'bg-[#1A1A1A]/5 text-[#1A1A1A]/60 hover:bg-[#1A1A1A]/10'
+                    }`}
+                  >
+                    <span>{statusLabels[st]}</span>
+                    <span className="opacity-50 text-[9px] font-mono">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
+
+        {importStatus && (
+          <div className={`mb-6 px-5 py-4 rounded-2xl border flex items-center justify-between text-xs font-mono tracking-wide shadow-sm animate-in fade-in slide-in-from-top-4 duration-300 ${
+            importStatus.type === 'success' 
+              ? 'bg-emerald-50 border-emerald-500/20 text-emerald-800' 
+              : 'bg-rose-50 border-rose-500/20 text-rose-800'
+          }`}>
+            <div className="flex items-center gap-3">
+               <span className={`w-2 h-2 rounded-full ${importStatus.type === 'success' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+               <span>{importStatus.message}</span>
+            </div>
+            <button onClick={() => setImportStatus(null)} className="opacity-50 hover:opacity-100 transition-opacity p-1 ml-4 text-sm leading-none">✕</button>
+          </div>
+        )}
 
         {/* Data List Wrapper (scrollable) */}
         <div className="flex-1 overflow-y-auto">
@@ -454,6 +723,14 @@ export default function App() {
   const [loadingStep, setLoadingStep] = useState<string>('正在对数据服务进行连接初始化...');
   const [useLocalMockMode, setUseLocalMockMode] = useState<boolean>(false);
   const [isDbLoaded, setIsDbLoaded] = useState(false);
+  const [apiError, setApiError] = useState<CentralError | null>(null);
+
+  useEffect(() => {
+    const unsub = apiService.onError((err) => {
+      setApiError(err);
+    });
+    return unsub;
+  }, []);
 
   const switchToLocalMockMode = () => {
     console.log('一键切换至纯前端本地 Mock 模式');
@@ -519,8 +796,8 @@ export default function App() {
   };
   const [groups, setGroups] = useState<Group[]>(() => {
     const saved = localStorage.getItem('groups');
-    if (saved && saved.includes('-')) return JSON.parse(saved);
-    return mockGroups;
+    if (saved && saved.includes('-')) return pruneDuplicates(JSON.parse(saved));
+    return pruneDuplicates(mockGroups);
   });
 
   useEffect(() => {
@@ -535,22 +812,22 @@ export default function App() {
     }
   }, [groups, isDbLoaded, useLocalMockMode]);
 
-  const [members, setMembers] = useState(() => {
+  const [members, setMembers] = useState<Member[]>(() => {
     const saved = localStorage.getItem('members');
     if (saved && !saved.includes('-')) {
       localStorage.removeItem('members');
       localStorage.removeItem('groups');
       localStorage.removeItem('currentUser');
-      return mockMembers;
+      return pruneDuplicates(mockMembers);
     }
     if (saved) {
       const parsedMembers = JSON.parse(saved);
-      return parsedMembers.map((m: any) => ({
+      return pruneDuplicates(parsedMembers.map((m: any) => ({
         ...m,
         roles: m.roles || (m.role ? [m.role] : [])
-      }));
+      })));
     }
-    return mockMembers;
+    return pruneDuplicates(mockMembers);
   });
 
   useEffect(() => {
@@ -774,18 +1051,18 @@ export default function App() {
         if (mounted) {
           setLoadingStep('获取核心数据模型成功，正在组装渲染业务看板...');
           console.log('fetchData: Setting state');
-          setProjects(projectsData);
-          setPlans(plansData);
-          setTasks(tasksData);
-          setOutcomes(outcomesData);
-          setRequirements(requirementsData);
-          setReleaseGoals(releaseGoalsData || []);
-          setProjectTrackings(trackingsData || []);
+          setProjects(pruneDuplicates(projectsData));
+          setPlans(pruneDuplicates(plansData));
+          setTasks(pruneDuplicates(tasksData));
+          setOutcomes(pruneDuplicates(outcomesData));
+          setRequirements(pruneDuplicates(requirementsData));
+          setReleaseGoals(pruneDuplicates(releaseGoalsData || []));
+          setProjectTrackings(pruneDuplicates(trackingsData || []));
 
           // 处理核心设置数据的自愈机制
           let finalGroups = groups;
           if (groupsData && groupsData.length > 0) {
-            finalGroups = groupsData;
+            finalGroups = pruneDuplicates(groupsData);
           } else {
             console.log('No groups in database, uploading initial ones...');
             await apiService.saveGroups(groups).catch(e => console.warn('Sync initial groups failed', e));
@@ -793,7 +1070,7 @@ export default function App() {
 
           let finalMembers = members;
           if (membersData && membersData.length > 0) {
-            finalMembers = membersData;
+            finalMembers = pruneDuplicates(membersData);
           } else {
             console.log('No members in database, uploading initial ones...');
             await apiService.saveMembers(members).catch(e => console.warn('Sync initial members failed', e));
@@ -808,8 +1085,8 @@ export default function App() {
             await apiService.saveSystemSettings({ authorizedCompanies, annualTargetProfit, guideContent }).catch(e => console.warn('Sync initial system settings failed', e));
           }
 
-          setGroups(finalGroups);
-          setMembers(finalMembers);
+          setGroups(pruneDuplicates(finalGroups));
+          setMembers(pruneDuplicates(finalMembers));
           
           setIsDbLoaded(true);
           console.log('fetchData: State set successfully');
@@ -1605,58 +1882,94 @@ export default function App() {
   const weekStart = startOfWeek(currentWeekDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentWeekDate, { weekStartsOn: 1 });
 
+  // Check if projectTrackings is actually empty or cleared or has no active/successful business data to handle zeroing out properly
+  const isMarketingCleared = !projectTrackings || 
+    projectTrackings.length === 0 || 
+    (projectTrackings.filter(t => t.status === 'followup').length === 0 && 
+     projectTrackings.filter(t => t.status === 'archived').length === 0 && 
+     projectTrackings.filter(t => ['implementing', 'accepting', 'quoted'].includes(t.status)).length === 0);
+
   const leadPlans = plans.filter(p => p.metric?.funnelStage === 'lead' && p.level === 'month' && p.startDate.startsWith(selectedMonth));
   const activePlans = plans.filter(p => p.metric?.funnelStage === 'active' && p.level === 'month' && p.startDate.startsWith(selectedMonth));
   const signedPlans = plans.filter(p => p.metric?.funnelStage === 'signed' && p.level === 'month' && p.startDate.startsWith(selectedMonth));
   const lostPlans = plans.filter(p => p.metric?.funnelStage === 'lost' && p.level === 'month' && p.startDate.startsWith(selectedMonth));
 
   const targetLeadClients = leadPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  const currentLeadClients = leadPlans.reduce((acc, curr) => acc + (curr.metric?.current || 0), 0) || 0;
+  const currentLeadClients = isMarketingCleared ? 0 : (leadPlans.reduce((acc, curr) => acc + (curr.metric?.current || 0), 0) || 0);
 
   const targetActiveClients = activePlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  const currentActiveClients = activePlans.reduce((acc, curr) => acc + (curr.metric?.current || 0), 0) || 0;
+  const currentActiveClients = isMarketingCleared ? 0 : (activePlans.reduce((acc, curr) => acc + (curr.metric?.current || 0), 0) || 0);
 
   const targetSignedClients = signedPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  const currentSignedClients = signedPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0) || 0;
+  const currentSignedClients = isMarketingCleared ? 0 : (signedPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0) || 0);
 
   const targetLostClients = lostPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  const currentLostClients = lostPlans.reduce((acc, curr) => acc + (curr.metric?.current || 0), 0) || 0;
+  const currentLostClients = isMarketingCleared ? 0 : (lostPlans.reduce((acc, curr) => acc + (curr.metric?.current || 0), 0) || 0);
   
   const currentMonthProfitPlans = plans.filter(p => p.metric?.unit === '万' && p.level === 'month' && p.startDate.startsWith(selectedMonth) && p.title.includes('利润'));
   const currentMonthTargetProfit = currentMonthProfitPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  const currentMonthActualProfit = currentMonthProfitPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
+  const currentMonthActualProfit = isMarketingCleared ? 0 : currentMonthProfitPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
 
   const currentMonthContractPlans = plans.filter(p => p.metric?.unit === '万' && p.level === 'month' && p.startDate.startsWith(selectedMonth) && p.title.includes('合同'));
   const currentMonthTargetContract = currentMonthContractPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  const currentMonthActualContract = currentMonthContractPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
+  
+  // Calculate raw contract amount from tracked projects for current month
+  const mktMonthActualContractVal = projectTrackings
+    .filter(t => t.updatedAt && t.updatedAt.startsWith(selectedMonth))
+    .reduce((acc, curr) => acc + (curr.actualContractAmount || 0), 0) / 10000;
+
+  const currentMonthActualContract = isMarketingCleared ? 0 : mktMonthActualContractVal;
 
   const currentMonthCollectionPlans = plans.filter(p => p.metric?.unit === '万' && p.level === 'month' && p.startDate.startsWith(selectedMonth) && p.title.includes('回款'));
   const currentMonthTargetCollection = currentMonthCollectionPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  const currentMonthActualCollection = currentMonthCollectionPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
+  const currentMonthActualCollection = isMarketingCleared ? 0 : currentMonthCollectionPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
 
   const currentYearProfitPlans = plans.filter(p => p.metric?.unit === '万' && p.level === 'month' && p.startDate.startsWith(CURRENT_YEAR) && p.title.includes('利润'));
-  const currentYearActualProfit = currentYearProfitPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
+  const currentYearActualProfit = isMarketingCleared ? 0 : currentYearProfitPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
 
   const yearLeadPlans = plans.filter(p => p.metric?.funnelStage === 'lead' && p.level === 'month' && p.startDate.startsWith(CURRENT_YEAR));
-  const yearTargetLeadClients = yearLeadPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 50;
-  const yearLeadClients = yearLeadPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0) || 40;
+  const yearTargetLeadClients = isMarketingCleared ? 0 : (yearLeadPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 50);
+  
+  const getTrackingYear = (t: ProjectTracking) => {
+    if (t.updatedAt && typeof t.updatedAt === 'string') {
+      return t.updatedAt.split('-')[0];
+    }
+    return CURRENT_YEAR;
+  };
+
+  // Count pipeline clients from projectTrackings if available and not cleared, otherwise fallback
+  const trackedYearLeadClients = projectTrackings.filter(t => t.status === 'followup' && getTrackingYear(t) === CURRENT_YEAR).length;
+  const yearLeadClients = isMarketingCleared 
+    ? 0 
+    : trackedYearLeadClients;
 
   const yearActivePlans = plans.filter(p => p.metric?.funnelStage === 'active' && p.level === 'month' && p.startDate.startsWith(CURRENT_YEAR));
-  const yearTargetActiveClients = yearActivePlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 30;
-  const yearActiveClients = yearActivePlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0) || 18;
+  const yearTargetActiveClients = isMarketingCleared ? 0 : (yearActivePlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 30);
+  
+  const trackedYearActiveClients = projectTrackings.filter(t => ['implementing', 'accepting', 'quoted'].includes(t.status) && getTrackingYear(t) === CURRENT_YEAR).length;
+  const yearActiveClients = isMarketingCleared
+    ? 0
+    : trackedYearActiveClients;
 
   const yearSignedPlans = plans.filter(p => p.metric?.funnelStage === 'signed' && p.level === 'month' && p.startDate.startsWith(CURRENT_YEAR));
-  const yearTargetSignedClients = yearSignedPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 10;
-  const yearSignedClients = yearSignedPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0) || 6;
+  const yearTargetSignedClients = isMarketingCleared ? 0 : (yearSignedPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 10);
+  
+  const trackedYearSignedClients = projectTrackings.filter(t => t.status === 'archived' && getTrackingYear(t) === CURRENT_YEAR).length;
+  const yearSignedClients = isMarketingCleared
+    ? 0
+    : trackedYearSignedClients;
 
   const yearLostPlans = plans.filter(p => p.metric?.funnelStage === 'lost' && p.level === 'month' && p.startDate.startsWith(CURRENT_YEAR));
-  const yearTargetLostClients = yearLostPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 5;
-  const yearLostClients = yearLostPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0) || 3;
+  const yearTargetLostClients = isMarketingCleared ? 0 : (yearLostPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 5);
+  
+  const trackedYearLostClients = projectTrackings.filter(t => t.status === 'terminated' && getTrackingYear(t) === CURRENT_YEAR).length;
+  const yearLostClients = isMarketingCleared
+    ? 0
+    : trackedYearLostClients;
 
   const funnelData = [
     { name: '潜在线索', value: yearLeadClients },
     { name: '意向沟通', value: yearActiveClients },
-    { name: '方案报价', value: Math.ceil(yearActiveClients / 2) },
     { name: '实际签约', value: yearSignedClients }
   ];
 
@@ -1668,19 +1981,19 @@ export default function App() {
   );
   
   const quarterTargetProfit = globalQuarterPlans.filter(p => p.title.includes('利润')).reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 360;
-  const quarterActualProfit = globalQuarterPlans.filter(p => p.title.includes('利润')).reduce((acc, curr) => acc + (curr.metric?.actualCompleted ?? curr.metric?.current ?? 0), 0);
+  const quarterActualProfit = isMarketingCleared ? 0 : globalQuarterPlans.filter(p => p.title.includes('利润')).reduce((acc, curr) => acc + (curr.metric?.actualCompleted ?? curr.metric?.current ?? 0), 0);
   
   const quarterTargetContract = globalQuarterPlans.filter(p => p.title.includes('合同')).reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 1500;
-  const quarterActualContract = globalQuarterPlans.filter(p => p.title.includes('合同')).reduce((acc, curr) => acc + (curr.metric?.actualCompleted ?? curr.metric?.current ?? 0), 0);
+  const quarterActualContract = isMarketingCleared ? 0 : globalQuarterPlans.filter(p => p.title.includes('合同')).reduce((acc, curr) => acc + (curr.metric?.actualCompleted ?? curr.metric?.current ?? 0), 0);
   
   // Marketing Monthly Calculations
   const marketingProjects = projects.filter(p => p.category === 'marketing');
   const mktProjectIds = marketingProjects.map(p => p.id);
   const marketingMonthPlans = plans.filter(p => p.level === 'month' && p.startDate.startsWith(selectedMonth) && mktProjectIds.includes(p.projectId));
   const mktTargetProfit = marketingMonthPlans.filter(p => p.title.includes('利润')).reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 120;
-  const mktActualProfit = marketingMonthPlans.filter(p => p.title.includes('利润')).reduce((acc, curr) => acc + (curr.metric?.actualCompleted ?? curr.metric?.current ?? 0), 0);
+  const mktActualProfit = isMarketingCleared ? 0 : marketingMonthPlans.filter(p => p.title.includes('利润')).reduce((acc, curr) => acc + (curr.metric?.actualCompleted ?? curr.metric?.current ?? 0), 0);
   const mktTargetContract = marketingMonthPlans.filter(p => p.title.includes('合同')).reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 500;
-  const mktActualContract = marketingMonthPlans.filter(p => p.title.includes('合同')).reduce((acc, curr) => acc + (curr.metric?.actualCompleted ?? curr.metric?.current ?? 0), 0);
+  const mktActualContract = isMarketingCleared ? 0 : mktMonthActualContractVal;
 
   // Generates 12 months of the currently selected year
   const currentYearMonths = Array.from({ length: 12 }).map((_, i) => `${CURRENT_YEAR}-${String(i + 1).padStart(2, '0')}`);
@@ -1699,7 +2012,7 @@ export default function App() {
     name: month.split('-')[1] + '月',
     month: month,
     target: profitMap[month]?.target || 0,
-    actual: profitMap[month]?.actual || 0
+    actual: isMarketingCleared ? 0 : (profitMap[month]?.actual || 0)
   }));
 
   // Chart 2: Task Status Pie Data
@@ -1827,7 +2140,7 @@ export default function App() {
                           {memberTasks.length === 0 ? (
                               <p className="text-sm opacity-50 italic py-2 col-span-2">暂无进行中的任务</p>
                             ) : (
-                              memberTasks.map((task) => {
+                              pruneDuplicates(memberTasks).map((task) => {
                                 return (
                                 <div key={task.id} className={`border-l-2 ${task.status === 'completed' || task.progress === 100 ? 'border-[#1A1A1A]/30 opacity-60 bg-[#1A1A1A]/5' : 'border-[#1A1A1A] bg-white/70'} p-3 hover:bg-[#1A1A1A]/10 transition-colors flex items-start gap-3`}>
                                   <div className="pt-0.5">
@@ -2543,7 +2856,7 @@ alter table system_settings disable row level security;
 
                 <div className="flex flex-col gap-3">
                   {releaseGoals.filter(g => g.targetMonth === selectedMonth && (currentUser.department === 'admin' || currentUser.groupId === g.groupId)).length > 0 ? (
-                    releaseGoals.filter(g => g.targetMonth === selectedMonth && (currentUser.department === 'admin' || currentUser.groupId === g.groupId)).map(goal => {
+                    pruneDuplicates(releaseGoals.filter(g => g.targetMonth === selectedMonth && (currentUser.department === 'admin' || currentUser.groupId === g.groupId))).map(goal => {
                       const group = groups.find(g => g.id === goal.groupId);
                       const canEdit = currentUser.department === 'admin' || (currentUser.groupId === goal.groupId && currentUser.roles.includes('组长'));
                       return (
@@ -2926,7 +3239,7 @@ alter table system_settings disable row level security;
                         </div>
                       </div>
                       <div className="flex flex-col gap-3 min-h-[200px]">
-                        {displayRequirements.filter(r => r.status === status).map((req) => (
+                        {pruneDuplicates(displayRequirements.filter(r => r.status === status)).map((req) => (
                           <div 
                             key={req.id} 
                             onClick={() => {
@@ -3144,6 +3457,25 @@ alter table system_settings disable row level security;
                 setYear={setTrackingYear}
                 setMonth={setTrackingMonth}
                 annualTargetProfit={annualTargetProfit}
+                onImport={async (importedTrackings) => {
+                  try {
+                    const newTrackings: ProjectTracking[] = [];
+                    for (const item of importedTrackings) {
+                      const newTracking: ProjectTracking = {
+                        ...item,
+                        id: generateId(),
+                        updatedAt: new Date().toISOString(),
+                        followupRecords: []
+                      };
+                      await apiService.saveProjectTracking(newTracking);
+                      newTrackings.push(newTracking);
+                    }
+                    setProjectTrackings(prev => [...newTrackings, ...prev]);
+                  } catch (err) {
+                    console.error('Failed to import trackings', err);
+                    throw err;
+                  }
+                }}
               />
           )}
           {currentView === 'dashboard' && (
@@ -4305,7 +4637,7 @@ alter table system_settings disable row level security;
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4">
-                  {requirements.filter(r => r.deleted).map((req) => (
+                  {pruneDuplicates(requirements.filter(r => r.deleted)).map((req) => (
                     <div key={req.id} className="border border-[#1A1A1A]/10 p-5 bg-white flex justify-between items-center group">
                       <div className="flex-1 pr-8">
                         <div className="flex items-center gap-3 mb-2">
@@ -5169,6 +5501,54 @@ alter table system_settings disable row level security;
       )}
       {isGuideModalOpen && (
         <GuideModal onClose={() => setIsGuideModalOpen(false)} content={guideContent} />
+      )}
+
+      {/* Central Database API Warning Toast / Dialog */}
+      {apiError && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm sm:max-w-md w-[calc(100vw-32px)] backdrop-blur-md">
+          <div className="bg-white/95 border border-red-500/30 rounded-2xl shadow-[0_12px_40px_rgba(239,68,68,0.12)] overflow-hidden">
+            <div className="p-4 sm:p-5">
+              <div className="flex items-start gap-3">
+                <div className="bg-red-50 text-red-600 p-2 rounded-xl shrink-0">
+                  <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-[#1A1A1A] font-mono">同步同步异常警告</h4>
+                    <span className="text-[10px] text-[#1A1A1A]/40 font-mono">{apiError.timestamp}</span>
+                  </div>
+                  <p className="text-[11px] text-[#1A1A1A]/50 font-mono mt-1 font-bold">关联模块: {apiError.context}</p>
+                  <p className="text-xs text-red-700/90 font-medium mt-2 leading-relaxed bg-red-50/40 p-2.5 rounded-lg border border-red-100 font-mono break-all line-clamp-4">
+                    {apiError.message}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2.5 mt-4 pt-3 border-t border-[#1A1A1A]/5">
+                {!useLocalMockMode && (
+                  <button 
+                    onClick={() => {
+                      switchToLocalMockMode();
+                      setApiError(null);
+                    }}
+                    className="flex-1 bg-[#1A1A1A] text-white hover:bg-black text-[10px] font-bold py-2 px-3 rounded-lg transition-all text-center uppercase tracking-wider cursor-pointer shadow-sm active:scale-95"
+                  >
+                    切换至前端本地模式
+                  </button>
+                )}
+                <button 
+                  onClick={() => setApiError(null)}
+                  className="bg-white hover:bg-zinc-100 border border-[#1A1A1A]/10 text-[#1A1A1A] text-[10px] font-bold py-2 px-3.5 rounded-lg transition-all cursor-pointer select-none"
+                >
+                  我知道了
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

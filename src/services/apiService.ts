@@ -3,6 +3,19 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Plan, Task, Outcome, Project, Requirement, RequirementHistory, ReleaseGoal, ProjectTracking, FollowupRecord, Member, Group } from '../types';
 import { mockProjects, mockPlans, mockTasks, mockOutcomes, mockRequirements, mockMembers, mockGroups } from '../mockData';
 
+// Central Error Reporting Types
+export interface CentralError {
+  id: string;
+  message: string;
+  context: string;
+  timestamp: string;
+  severity: 'warning' | 'error';
+  originalError?: any;
+}
+
+type ErrorListener = (error: CentralError) => void;
+const listeners = new Set<ErrorListener>();
+
 // Utility functions for converting between camelCase and snake_case
 const toSnakeCaseStr = (str: string) => str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 const toCamelCaseStr = (str: string) => str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
@@ -75,6 +88,57 @@ export function toCamelCase(obj: any): any {
   return obj;
 }
 
+// SQLite Fetch Utility
+const fetchSQLite = async (url: string, options: RequestInit = {}) => {
+  const absoluteUrl = url.startsWith('http') ? url : `${window.location.origin}${url}`;
+  const response = await fetch(absoluteUrl, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`SQLite API response failed with status ${response.status}`);
+  }
+  return response.json();
+};
+
+// Retry Wrap Helper function
+async function executeWithRetry<T>(
+  action: () => Promise<T>,
+  contextName: string,
+  retries = 3,
+  delayMs = 300
+): Promise<T> {
+  let lastError: any;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await action();
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`[DATA SERVICE RETRY] 「${contextName}」尝试 #${attempt} 失败:`, err.message || err);
+      if (attempt < retries) {
+        // Exponential backoff
+        await new Promise(resolve => setTimeout(resolve, delayMs * Math.pow(1.5, attempt - 1)));
+      }
+    }
+  }
+
+  const errMsg = lastError?.message || String(lastError);
+  console.error(`[DATA SERVICE FATAL] 「${contextName}」最终失败:`, errMsg);
+
+  // Trigger centralized error monitors
+  apiService.triggerCentralError(
+    `数据接口异常 [${contextName}]: ${errMsg}`,
+    contextName,
+    lastError,
+    'error'
+  );
+
+  throw lastError;
+}
+
 export const apiService = {
   setLocalMockOverride: (val: boolean) => {
     localMockOverride = val;
@@ -83,35 +147,75 @@ export const apiService = {
     return !isSupabaseConfigured || localMockOverride;
   },
 
+  // Central Error Hook Registration
+  onError: (listener: ErrorListener) => {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  },
+
+  // Centrally dispatch error reports
+  triggerCentralError: (message: string, context: string, originalError?: any, severity: 'warning' | 'error' = 'error') => {
+    const error: CentralError = {
+      id: Math.random().toString(36).substring(2, 9),
+      message,
+      context,
+      timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      severity,
+      originalError
+    };
+    listeners.forEach(l => {
+      try {
+        l(error);
+      } catch (err) {
+        console.error('Error listener execution failed:', err);
+      }
+    });
+  },
+
   // Projects
   getProjects: async (): Promise<Project[]> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
-        return getLocalData('mock_projects', mockProjects);
+        try {
+          const res = await fetchSQLite('/api/projects');
+          return toCamelCase(res);
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] 获取项目失败, 使用本地存储:', sqliteErr);
+          return getLocalData('mock_projects', mockProjects);
+        }
       }
       ensureConfigured();
       const { data, error } = await supabase.from('projects').select('*');
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       return toCamelCase(data || []);
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '获取项目列表');
   },
 
   // Plans
   getPlans: async (): Promise<Plan[]> => {
-    try {
+    return executeWithRetry(async () => {
+      let rawPlans: any[] = [];
       if (apiService.isLocalMockActive()) {
-        const plans = getLocalData<Plan[]>('mock_plans', mockPlans);
-        return plans.map((p: any) => ({
-          ...p,
-          metric: typeof p.metric === 'string' ? JSON.parse(p.metric) : p.metric
-        }));
+        try {
+          rawPlans = await fetchSQLite('/api/plans');
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] 获取计划失败, 使用本地存储:', sqliteErr);
+          const plans = getLocalData<Plan[]>('mock_plans', mockPlans);
+          return plans.map((p: any) => ({
+            ...p,
+            metric: typeof p.metric === 'string' ? JSON.parse(p.metric) : p.metric
+          }));
+        }
+      } else {
+        ensureConfigured();
+        const { data, error } = await supabase.from('plans').select('*');
+        if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
+        rawPlans = data || [];
       }
-      ensureConfigured();
-      const { data, error } = await supabase.from('plans').select('*');
-      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
-      const plans = toCamelCase(data || []);
+
+      const plans = toCamelCase(rawPlans);
       return plans.map((p: any) => {
         let metric = typeof p.metric === 'string' ? JSON.parse(p.metric) : p.metric;
         let title = p.title || '';
@@ -128,15 +232,21 @@ export const apiService = {
           metric
         };
       });
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '获取计划列表');
   },
 
   savePlan: async (plan: Plan): Promise<void> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         upsertLocalItem('mock_plans', plan, mockPlans);
+        try {
+          await fetchSQLite('/api/plans', {
+            method: 'POST',
+            body: JSON.stringify(plan),
+          });
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] 保存计划失败, 本地存储已就绪:', sqliteErr);
+        }
         return;
       }
       ensureConfigured();
@@ -150,22 +260,28 @@ export const apiService = {
       const dataToSave = toSnakeCase(serializedPlan);
       const { error } = await supabase.from('plans').upsert(await injectOrgId(dataToSave, 'plans'));
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '保存开发计划');
   },
 
   // Tasks
   getTasks: async (): Promise<Task[]> => {
-    try {
+    return executeWithRetry(async () => {
+      let rawTasks: any[] = [];
       if (apiService.isLocalMockActive()) {
-        return getLocalData('mock_tasks', mockTasks);
+        try {
+          rawTasks = await fetchSQLite('/api/tasks');
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] 获取任务失败, 使用本地存储:', sqliteErr);
+          return getLocalData('mock_tasks', mockTasks);
+        }
+      } else {
+        ensureConfigured();
+        const { data, error } = await supabase.from('tasks').select('*');
+        if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
+        rawTasks = data || [];
       }
-      ensureConfigured();
-      const { data, error } = await supabase.from('tasks').select('*');
-      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       
-      const parsedTasks = toCamelCase(data || []);
+      const parsedTasks = toCamelCase(rawTasks);
       return parsedTasks.map((t: Task) => {
         const match = t.title.match(/(.*) \[(?:assignee_id|assigneeId):([a-f0-9-]+)\]$/);
         if (match) {
@@ -177,15 +293,21 @@ export const apiService = {
         }
         return t;
       });
-    } catch (e: any) {
-      throw new Error((e.message || String(e)) + ' (URL: ' + import.meta.env.VITE_SUPABASE_URL + ')');
-    }
+    }, '获取任务列表');
   },
 
   saveTask: async (task: Task): Promise<void> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         upsertLocalItem('mock_tasks', task, mockTasks);
+        try {
+          await fetchSQLite('/api/tasks', {
+            method: 'POST',
+            body: JSON.stringify(task),
+          });
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] 保存任务失败, 本地存储已就绪:', sqliteErr);
+        }
         return;
       }
       ensureConfigured();
@@ -198,36 +320,47 @@ export const apiService = {
       
       const { error } = await supabase.from('tasks').upsert(await injectOrgId(toSnakeCase(serializedTask), 'tasks'));
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '保存任务');
   },
 
   deleteTask: async (taskId: string): Promise<void> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         deleteLocalItem('mock_tasks', taskId, mockTasks);
+        try {
+          await fetchSQLite(`/api/tasks/${taskId}`, {
+            method: 'DELETE',
+          });
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] 删除任务失败, 本地存储已被清除:', sqliteErr);
+        }
         return;
       }
       ensureConfigured();
       const { error } = await supabase.from('tasks').delete().eq('id', taskId);
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '删除任务');
   },
 
   // Outcomes
   getOutcomes: async (): Promise<Outcome[]> => {
-    try {
+    return executeWithRetry(async () => {
+      let rawOutcomes: any[] = [];
       if (apiService.isLocalMockActive()) {
-        return getLocalData('mock_outcomes', mockOutcomes);
+        try {
+          rawOutcomes = await fetchSQLite('/api/outcomes');
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] 获取进展失败, 使用本地存储:', sqliteErr);
+          return getLocalData('mock_outcomes', mockOutcomes);
+        }
+      } else {
+        ensureConfigured();
+        const { data, error } = await supabase.from('outcomes').select('*');
+        if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
+        rawOutcomes = data || [];
       }
-      ensureConfigured();
-      const { data, error } = await supabase.from('outcomes').select('*');
-      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       
-      const parsedOutcomes = toCamelCase(data || []);
+      const parsedOutcomes = toCamelCase(rawOutcomes);
       return parsedOutcomes.map((o: any) => {
         let title = o.title || '';
         let date = o.date;
@@ -242,15 +375,21 @@ export const apiService = {
           date
         };
       });
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '获取业务成果进展');
   },
 
   saveOutcome: async (outcome: Outcome): Promise<void> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         upsertLocalItem('mock_outcomes', outcome, mockOutcomes);
+        try {
+          await fetchSQLite('/api/outcomes', {
+            method: 'POST',
+            body: JSON.stringify(outcome),
+          });
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] 保存进展失败, 本地存储已就绪:', sqliteErr);
+        }
         return;
       }
       ensureConfigured();
@@ -263,17 +402,22 @@ export const apiService = {
       
       const { error } = await supabase.from('outcomes').upsert(await injectOrgId(toSnakeCase(serializedOutcome), 'outcomes'));
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '保存业务成果进展');
   },
 
   // Requirements
   getRequirements: async (): Promise<Requirement[]> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
-        return getLocalData('mock_requirements', mockRequirements);
+        try {
+          const res = await fetchSQLite('/api/requirements');
+          return toCamelCase(res);
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] 获取需求库失败, 使用本地存储:', sqliteErr);
+          return getLocalData('mock_requirements', mockRequirements);
+        }
       }
+
       ensureConfigured();
       let reqData: any[] = [];
       try {
@@ -316,40 +460,45 @@ export const apiService = {
         }
       });
       return mergedReqs;
-    } catch (error: any) {
-      console.warn('Failed to query requirements completely. Reverting to empty/mock data.', error);
-      return getLocalData('mock_requirements', mockRequirements);
-    }
+    }, '获取需求规划库');
   },
 
   saveRequirement: async (req: Requirement & { newHistoryEntry?: RequirementHistory }): Promise<void> => {
-    // Synchronously back up to localStorage to guarantee submission success locally under any network/RLS issues
-    const { newHistoryEntry, history, ...rest } = req;
-    const cached = getLocalData<Requirement[]>('mock_requirements', mockRequirements);
-    const idx = cached.findIndex(r => r.id === req.id);
-    
-    const targetReq = { ...rest, history: history || [] };
-    if (newHistoryEntry) {
-      targetReq.history = [...targetReq.history, newHistoryEntry];
-    }
-    
-    if (idx > -1) {
-      cached[idx] = targetReq;
-    } else {
-      cached.push(targetReq);
-    }
-    setLocalData('mock_requirements', cached);
+    return executeWithRetry(async () => {
+      const { newHistoryEntry, history, ...rest } = req;
+      const cached = getLocalData<Requirement[]>('mock_requirements', mockRequirements);
+      const idx = cached.findIndex(r => r.id === req.id);
+      
+      const targetReq = { ...rest, history: history || [] };
+      if (newHistoryEntry) {
+        targetReq.history = [...targetReq.history, newHistoryEntry];
+      }
+      
+      if (idx > -1) {
+        cached[idx] = targetReq;
+      } else {
+        cached.push(targetReq);
+      }
+      setLocalData('mock_requirements', cached);
 
-    if (apiService.isLocalMockActive()) {
-      return;
-    }
+      if (apiService.isLocalMockActive()) {
+        try {
+          await fetchSQLite('/api/requirements', {
+            method: 'POST',
+            body: JSON.stringify(req),
+          });
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] SQLite保存需求失败, 本地存储已就绪:', sqliteErr);
+        }
+        return;
+      }
 
-    try {
       ensureConfigured();
       const reqData = toSnakeCase(rest);
       const { error } = await supabase.from('requirements').upsert(await injectOrgId(reqData, 'requirements'));
       if (error) {
         console.warn('Supabase requirements upsert failed. Saved to local storage fallback only.', error);
+        throw error;
       }
       
       if (newHistoryEntry) {
@@ -359,126 +508,156 @@ export const apiService = {
           const { error: histError } = await supabase.from('requirement_history').upsert(await injectOrgId(histData, 'requirement_history'));
           if (histError) console.warn('Failed to save requirement history:', histError);
         } catch (e) {
-          console.warn('Could not save requirement_history.', e);
+          console.warn('Could not save requirement_history to Supabase.', e);
         }
       } 
-    } catch (error: any) {
-      console.warn('Supabase requirements operation failed. Local storage saved successfully.', error);
-    }
+    }, '保存需求规划和演进状态');
   },
 
   deleteRequirement: async (id: string): Promise<void> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         deleteLocalItem('mock_requirements', id, mockRequirements);
+        try {
+          await fetchSQLite(`/api/requirements/${id}`, {
+            method: 'DELETE',
+          });
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] SQLite删除需求失败, 本地存储已清除:', sqliteErr);
+        }
         return;
       }
       ensureConfigured();
       const { error } = await supabase.from('requirements').delete().eq('id', id);
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '删除开发需求');
   },
 
   // Release Goals
   getReleaseGoals: async (): Promise<ReleaseGoal[]> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
-        return getLocalData('mock_release_goals', []);
+        try {
+          const res = await fetchSQLite('/api/releaseGoals');
+          return toCamelCase(res);
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] 获取发布计划失败, 使用本地存储:', sqliteErr);
+          return getLocalData('mock_release_goals', []);
+        }
       }
       ensureConfigured();
       const { data, error } = await supabase.from('release_goals').select('*');
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       return toCamelCase(data || []);
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '获取发布版目标计划');
   },
 
   saveReleaseGoal: async (goal: ReleaseGoal): Promise<void> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         upsertLocalItem('mock_release_goals', goal, []);
+        try {
+          await fetchSQLite('/api/releaseGoals', {
+            method: 'POST',
+            body: JSON.stringify(goal),
+          });
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] SQLite保存目标失败, 本地存储已准备:', sqliteErr);
+        }
         return;
       }
       ensureConfigured();
       const { error } = await supabase.from('release_goals').upsert(await injectOrgId(toSnakeCase(goal), 'release_goals'));
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '保存版本发布目标');
   },
 
   deleteReleaseGoal: async (id: string): Promise<void> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         deleteLocalItem('mock_release_goals', id, []);
+        try {
+          await fetchSQLite(`/api/releaseGoals/${id}`, {
+            method: 'DELETE',
+          });
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] SQLite删除目标失败, 本地存储已删除:', sqliteErr);
+        }
         return;
       }
       ensureConfigured();
       const { error } = await supabase.from('release_goals').delete().eq('id', id);
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '删除版本发布目标');
   },
 
   // Project Trackings
   getProjectTrackings: async (): Promise<ProjectTracking[]> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
-        return getLocalData('mock_project_trackings', []);
+        try {
+          const res = await fetchSQLite('/api/projectTrackings');
+          return toCamelCase(res);
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] 获取客户跟踪失败, 使用本地存储:', sqliteErr);
+          return getLocalData('mock_project_trackings', []);
+        }
       }
       ensureConfigured();
       const { data, error } = await supabase.from('project_trackings').select('*');
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       return toCamelCase(data || []);
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '获取销售跟进项目列表');
   },
 
   saveProjectTracking: async (track: ProjectTracking): Promise<void> => {
-    try {
-      if (apiService.isLocalMockActive()) {
-        const trackData: any = { ...track };
-        if (trackData.signedDate === "") trackData.signedDate = null;
-        if (trackData.followupDate === "") trackData.followupDate = null;
-        if (trackData.lastFollowupDate === "") trackData.lastFollowupDate = null;
-        upsertLocalItem('mock_project_trackings', trackData, []);
-        return;
-      }
-      ensureConfigured();
+    return executeWithRetry(async () => {
       const trackData: any = { ...track };
       if (trackData.signedDate === "") trackData.signedDate = null;
       if (trackData.followupDate === "") trackData.followupDate = null;
       if (trackData.lastFollowupDate === "") trackData.lastFollowupDate = null;
 
+      if (apiService.isLocalMockActive()) {
+        upsertLocalItem('mock_project_trackings', trackData, []);
+        try {
+          await fetchSQLite('/api/projectTrackings', {
+            method: 'POST',
+            body: JSON.stringify(trackData),
+          });
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] SQLite保存跟进项目失败, 本地存储已同步:', sqliteErr);
+        }
+        return;
+      }
+      ensureConfigured();
+
       const { error } = await supabase.from('project_trackings').upsert(await injectOrgId(toSnakeCase(trackData), 'project_trackings'));
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '保存销售项目跟进信息');
   },
 
   deleteProjectTracking: async (id: string): Promise<void> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         deleteLocalItem('mock_project_trackings', id, []);
+        try {
+          await fetchSQLite(`/api/projectTrackings/${id}`, {
+            method: 'DELETE',
+          });
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] SQLite删除跟进项目失败, 本地存储已更新:', sqliteErr);
+        }
         return;
       }
       ensureConfigured();
       const { error } = await supabase.from('project_trackings').delete().eq('id', id);
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '删除销售项目跟进');
   },
 
   // Groups
   getGroups: async (): Promise<Group[]> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         return getLocalData('groups', []);
       }
@@ -486,20 +665,18 @@ export const apiService = {
       const { data, error } = await supabase.from('groups').select('*');
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       return toCamelCase(data || []);
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '获取业务小组架构');
   },
 
   saveGroups: async (groups: Group[]): Promise<void> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         setLocalData('groups', groups);
         return;
       }
       ensureConfigured();
 
-      // Calculate groups to delete (deleted in frontend, need to remove from database)
+      // Calculate groups to delete
       const { data: dbGroups, error: getErr } = await supabase.from('groups').select('id');
       if (!getErr && dbGroups) {
         const dbIds = dbGroups.map((g: any) => g.id);
@@ -517,27 +694,23 @@ export const apiService = {
         const { error } = await supabase.from('groups').upsert(injected);
         if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭 groups 表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       }
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '保存业务团队架构');
   },
 
   deleteGroup: async (id: string): Promise<void> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         return;
       }
       ensureConfigured();
       const { error } = await supabase.from('groups').delete().eq('id', id);
       if (error) throw new Error(error.message || JSON.stringify(error));
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '删除小组架构');
   },
 
   // Members
   getMembers: async (): Promise<Member[]> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         return getLocalData('members', []);
       }
@@ -561,20 +734,18 @@ export const apiService = {
           roles
         };
       });
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '获取团队成员名册');
   },
 
   saveMembers: async (members: Member[]): Promise<void> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         setLocalData('members', members);
         return;
       }
       ensureConfigured();
 
-      // Calculate members to delete (deleted in frontend, need to remove from database)
+      // Calculate members to delete
       const { data: dbMembers, error: getErr } = await supabase.from('members').select('id');
       if (!getErr && dbMembers) {
         const dbIds = dbMembers.map((m: any) => m.id);
@@ -592,31 +763,27 @@ export const apiService = {
         const { error } = await supabase.from('members').upsert(injected);
         if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭 members 表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
       }
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '保存团队成员');
   },
 
   deleteMember: async (id: string): Promise<void> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         return;
       }
       ensureConfigured();
       const { error } = await supabase.from('members').delete().eq('id', id);
       if (error) throw new Error(error.message || JSON.stringify(error));
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '移出团队成员');
   },
 
-  // System Settings (授权公司、业务参数、说明书)
+  // System Settings
   getSystemSettings: async (): Promise<{
     authorizedCompanies: string[];
     annualTargetProfit: number;
     guideContent: string;
   } | null> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         const companies = getLocalData<string[]>('authorizedCompanies', ['Apple Inc.', 'Test Company']);
         const profit = getLocalData<number>('annualTargetProfit', 1000);
@@ -645,9 +812,7 @@ export const apiService = {
         annualTargetProfit: Number(item.annual_target_profit || 1000),
         guideContent: item.guide_content || ''
       };
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '获取业务指标与系统设置');
   },
 
   saveSystemSettings: async (settings: {
@@ -655,7 +820,7 @@ export const apiService = {
     annualTargetProfit: number;
     guideContent: string;
   }): Promise<void> => {
-    try {
+    return executeWithRetry(async () => {
       if (apiService.isLocalMockActive()) {
         setLocalData('authorizedCompanies', settings.authorizedCompanies);
         setLocalData('annualTargetProfit', settings.annualTargetProfit);
@@ -672,8 +837,6 @@ export const apiService = {
       const injected = await injectOrgId(payload, 'system_settings');
       const { error } = await supabase.from('system_settings').upsert(injected);
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): ' + error.message : error.message || JSON.stringify(error));
-    } catch (e: any) {
-      throw new Error(e.message || String(e));
-    }
+    }, '保存业务指标与系统设置');
   }
 };
