@@ -98,6 +98,332 @@ const TaskProgressInput = React.memo(({ task, onUpdate, disabled = false }: { ta
   );
 });
 
+interface TaskItemProps {
+  task: Task;
+  assigneeId: string;
+  currentUser: Member;
+  setSelectedTask: (task: Task) => void;
+  setIsTaskDetailModalOpen: (open: boolean) => void;
+  setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
+}
+
+const TaskItemCard = React.memo(({ 
+  task, 
+  assigneeId, 
+  currentUser, 
+  setSelectedTask, 
+  setIsTaskDetailModalOpen, 
+  setTasks 
+}: TaskItemProps) => {
+  const isSelf = currentUser.id === assigneeId;
+  const isCompleted = task.status === 'completed' || task.progress === 100;
+
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isSelf) return;
+    const checked = e.target.checked;
+    const updatedTask: Task = { 
+      ...task, 
+      progress: checked ? 100 : (task.progress === 100 ? 0 : task.progress),
+      status: (checked ? 'completed' : 'in_progress') as Status
+    };
+    if (checked && !task.actualEndDate) updatedTask.actualEndDate = new Date().toISOString().split('T')[0];
+    apiService.saveTask(updatedTask);
+    setTasks(prev => prev.map(t => t.id === task.id ? updatedTask : t));
+  };
+
+  const handleProgressUpdate = (val: number) => {
+    const updatedTask: Task = {
+      ...task,
+      progress: val,
+      status: (val === 100 ? 'completed' : (val > 0 ? 'in_progress' : 'not_started')) as Status
+    };
+    if (val > 0 && !task.actualStartDate) updatedTask.actualStartDate = new Date().toISOString().split('T')[0];
+    if (val === 100 && !task.actualEndDate) updatedTask.actualEndDate = new Date().toISOString().split('T')[0];
+    apiService.saveTask(updatedTask);
+    setTasks(prev => prev.map(t => t.id === task.id ? updatedTask : t));
+  };
+
+  return (
+    <div className={`border-l-2 ${isCompleted ? 'border-[#1A1A1A]/30 opacity-60 bg-[#1A1A1A]/5' : 'border-[#1A1A1A] bg-white/70'} p-3 hover:bg-[#1A1A1A]/10 transition-colors flex items-start gap-3`}>
+      <div className="pt-0.5">
+        <input 
+          type="checkbox" 
+          checked={isCompleted}
+          disabled={!isSelf}
+          onChange={handleCheckboxChange}
+          className="h-3.5 w-3.5 accent-[#1A1A1A] cursor-pointer disabled:cursor-not-allowed mt-1" 
+          title={isCompleted ? "标记为未完成" : "标记为完成"}
+        />
+      </div>
+      <div 
+        className="flex-1 cursor-pointer"
+        onClick={() => { setSelectedTask(task); setIsTaskDetailModalOpen(true); }}
+      >
+        <div className="flex justify-between items-start gap-2 mb-2">
+          <p className={`text-sm font-bold leading-snug ${isCompleted ? 'line-through' : ''}`}>
+            {task.title}
+            {task.projectName && <span className="ml-2 text-[10px] bg-[#1A1A1A]/10 px-1.5 py-0.5 text-[#1A1A1A]/80 border border-[#1A1A1A]/20 font-normal tracking-wide inline-block">{task.projectName}</span>}
+          </p>
+          
+          <TaskProgressInput 
+            task={task} 
+            disabled={!isSelf} 
+            onUpdate={handleProgressUpdate} 
+          />
+        </div>
+        
+        {task.outcome && (
+          <div className="mt-2 mb-2 bg-[#1A1A1A]/5 p-2 border border-[#1A1A1A]/10">
+            <p className="text-[10px] font-bold opacity-60 uppercase mb-1">产出成果</p>
+            <div 
+              className="text-xs opacity-80 font-serif line-clamp-2 [&>p]:m-0"
+              dangerouslySetInnerHTML={{ __html: task.outcome }}
+            />
+          </div>
+        )}
+        
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 opacity-50">
+          {task.startDate && <p className="text-[10px] uppercase tracking-wider">计划开始: {task.startDate}</p>}
+          <p className="text-[10px] uppercase tracking-wider">计划截止: {task.endDate}</p>
+          {(task.plannedProgress !== undefined && task.plannedProgress > 0) && <p className="text-[10px] uppercase tracking-wider">预计进度: {task.plannedProgress}%</p>}
+        </div>
+      </div>
+    </div>
+  );
+});
+TaskItemCard.displayName = 'TaskItemCard';
+
+interface MemberTaskCardProps {
+  assigneeId: string;
+  assignee: Member | undefined;
+  memberTasks: Task[];
+  department: 'marketing' | 'rnd';
+  currentUser: Member;
+  openTaskModal: (memberId: string, dept: 'marketing' | 'rnd') => void;
+  setSelectedTask: (task: Task) => void;
+  setIsTaskDetailModalOpen: (open: boolean) => void;
+  setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
+}
+
+const MemberTaskCard = React.memo(({
+  assigneeId,
+  assignee,
+  memberTasks,
+  department,
+  currentUser,
+  openTaskModal,
+  setSelectedTask,
+  setIsTaskDetailModalOpen,
+  setTasks
+}: MemberTaskCardProps) => {
+  const isSelf = currentUser.id === assigneeId;
+  const prunedTasks = React.useMemo(() => pruneDuplicates(memberTasks), [memberTasks]);
+
+  return (
+    <div className="bg-[#EBE9E4]/30 border border-[#1A1A1A]/10 p-5 sm:p-6 transition-colors hover:bg-[#EBE9E4]/60">
+      <div className="flex flex-col lg:flex-row gap-6">
+        
+        {/* Left Sidebar (Avatar, Name, Stats) */}
+        <div className="flex flex-row lg:flex-col items-center lg:items-start gap-4 lg:w-48 shrink-0">
+          <img src={assignee?.avatar} alt={assignee?.name} className="w-12 h-12 lg:w-16 lg:h-16 rounded-full border border-[#1A1A1A]/20 shrink-0 object-cover bg-white" referrerPolicy="no-referrer" />
+          <div className="min-w-0">
+            <p className="text-base lg:text-lg font-bold truncate">{assignee?.name}</p>
+            <p className="text-[10px] opacity-60 uppercase tracking-widest truncate">{assignee?.roles?.join(', ')}</p>
+          </div>
+          <div className="flex lg:flex-col gap-5 lg:gap-6 ml-auto lg:ml-0 lg:mt-2 lg:w-full border-l lg:border-l-0 lg:border-t border-[#1A1A1A]/10 pl-5 lg:pl-0 lg:pt-5">
+            <div className="flex flex-col items-center lg:items-start shrink-0">
+              <span className="text-2xl lg:text-3xl font-serif italic leading-none">{memberTasks.length}</span>
+              <p className="text-[9px] uppercase tracking-widest opacity-50 mt-1 whitespace-nowrap">行动项目</p>
+            </div>
+            <div className="flex flex-col items-center lg:items-start shrink-0">
+              <span className="text-2xl lg:text-3xl font-serif italic leading-none">{memberTasks.filter(t => !!t.outcome).length}</span>
+              <p className="text-[9px] uppercase tracking-widest opacity-50 mt-1 whitespace-nowrap">产出成果</p>
+            </div>
+          </div>
+        </div>
+        
+        {/* Right Content */}
+        <div className="flex-1 min-w-0 lg:border-l border-[#1A1A1A]/10 lg:pl-6">
+          <h5 className="text-[10px] uppercase tracking-widest font-bold opacity-60 mb-4 flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2">
+            <span className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-[#1A1A1A]"></span> 
+              任务与成果项 (Tasks & Outcomes)
+            </span>
+            {isSelf && (
+              <button 
+                onClick={() => openTaskModal(assigneeId, department)} 
+                className="text-[9px] hover:text-[#1A1A1A] hover:font-bold opacity-70 hover:opacity-100 transition-colors border border-transparent hover:border-[#1A1A1A] px-1"
+              >
+                + 添加
+              </button>
+            )}
+          </h5>
+          <div className="space-y-4 lg:grid lg:grid-cols-1 xl:grid-cols-2 lg:space-y-0 lg:gap-6">
+            {prunedTasks.length === 0 ? (
+              <p className="text-sm opacity-50 italic py-2 col-span-2">暂无进行中的任务</p>
+            ) : (
+              prunedTasks.map((task) => (
+                <TaskItemCard
+                  key={task.id}
+                  task={task}
+                  assigneeId={assigneeId}
+                  currentUser={currentUser}
+                  setSelectedTask={setSelectedTask}
+                  setIsTaskDetailModalOpen={setIsTaskDetailModalOpen}
+                  setTasks={setTasks}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+MemberTaskCard.displayName = 'MemberTaskCard';
+
+interface TaskDepartmentGroupsProps {
+  tasks: Task[];
+  department: 'marketing' | 'rnd';
+  groups: Group[];
+  isSystemAdmin: boolean;
+  currentUser: Member;
+  members: Member[];
+  selectedTaskGroupIds: Record<string, string>;
+  setSelectedTaskGroupIds: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  outcomes: Outcome[];
+  projects: Project[];
+  openTaskModal: (memberId: string, dept: 'marketing' | 'rnd') => void;
+  setSelectedTask: (task: Task) => void;
+  setIsTaskDetailModalOpen: (open: boolean) => void;
+  setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
+}
+
+const TaskDepartmentGroups = React.memo(({
+  tasks,
+  department,
+  groups,
+  isSystemAdmin,
+  currentUser,
+  members,
+  selectedTaskGroupIds,
+  setSelectedTaskGroupIds,
+  outcomes,
+  projects,
+  openTaskModal,
+  setSelectedTask,
+  setIsTaskDetailModalOpen,
+  setTasks
+}: TaskDepartmentGroupsProps) => {
+  // 1. Get all groups that belong to this department
+  const departmentGroups = React.useMemo(() => {
+    return groups.filter(g => g.category === department)
+      .filter(g => isSystemAdmin || g.id === currentUser.groupId);
+  }, [groups, department, isSystemAdmin, currentUser.groupId]);
+
+  // 2. Find any tasks belonging to this department that have unassigned/unknown group
+  const taskGroupIds = React.useMemo(() => {
+    return new Set(tasks.map(t => {
+      const member = members.find(m => m.id === t.assigneeId);
+      return member?.groupId || 'unassigned';
+    }));
+  }, [tasks, members]);
+
+  // Combined department groups and unassigned/unknown groups from tasks
+  const allGroupIds = React.useMemo(() => {
+    let ids = Array.from(new Set([
+      ...departmentGroups.map(g => g.id),
+      ...Array.from(taskGroupIds).filter(id => id === 'unassigned' || !groups.find(g => g.id === id && g.category !== department))
+    ]));
+    if (!isSystemAdmin) {
+      ids = ids.filter(id => id === currentUser.groupId);
+    }
+    return ids;
+  }, [departmentGroups, taskGroupIds, groups, department, isSystemAdmin, currentUser.groupId]);
+
+  const selectedGroupId = selectedTaskGroupIds[department] || allGroupIds[0];
+  const groupId = allGroupIds.includes(selectedGroupId) ? selectedGroupId : allGroupIds[0];
+
+  const groupTasks = React.useMemo(() => {
+    if (!groupId) return [];
+    return tasks.filter(t => {
+      const member = members.find(m => m.id === t.assigneeId);
+      return (member?.groupId || 'unassigned') === groupId;
+    });
+  }, [tasks, members, groupId]);
+
+  const groupMembers = React.useMemo(() => {
+    if (!groupId) return [];
+    const groupMembersList = members.filter(m => (m.groupId || 'unassigned') === groupId && m.department === department);
+    const taskMembersIds = groupTasks.map(t => t.assigneeId);
+    let ids = Array.from(new Set([...groupMembersList.map(m => m.id), ...taskMembersIds]));
+
+    const canViewAllInGroup = isSystemAdmin || (currentUser.roles.includes('组长') && currentUser.groupId === groupId);
+    if (!canViewAllInGroup) {
+      ids = ids.filter(id => id === currentUser.id);
+    }
+    return ids;
+  }, [members, groupId, department, groupTasks, isSystemAdmin, currentUser.roles, currentUser.groupId, currentUser.id]);
+
+  if (allGroupIds.length === 0) {
+    return <p className="text-sm opacity-50 italic px-2">暂无进行中的任务或无权限查看</p>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="border-b border-[#1A1A1A]/10 flex overflow-x-auto custom-scrollbar hide-scrollbar-on-mobile mb-6">
+        <div className="flex gap-6 min-w-max px-2">
+          {allGroupIds.map(id => {
+            const name = id === 'unassigned' ? '未分组' : (groups.find(g => g.id === id)?.name || '未知小组');
+            const isSelected = groupId === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setSelectedTaskGroupIds(prev => ({ ...prev, [department]: id }))}
+                className={`text-[12px] font-bold uppercase tracking-widest pb-3 px-1 transition-all border-b-2 whitespace-nowrap ${isSelected ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-[#1A1A1A]/40 hover:text-[#1A1A1A]/80'}`}
+              >
+                {name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div key={groupId}>
+        {groupMembers.length === 0 ? (
+          <p className="text-sm opacity-50 italic px-2">该小组暂无进行中的任务</p>
+        ) : (
+          <div className="space-y-6">
+            {groupMembers.map(assigneeId => {
+              const assignee = members.find(m => m.id === assigneeId);
+              // Filter assignee tasks precisely inside groupTasks
+              const memberTasks = groupTasks.filter(t => t.assigneeId === assigneeId)
+                .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
+
+              return (
+                <MemberTaskCard
+                  key={assigneeId}
+                  assigneeId={assigneeId}
+                  assignee={assignee}
+                  memberTasks={memberTasks}
+                  department={department}
+                  currentUser={currentUser}
+                  openTaskModal={openTaskModal}
+                  setSelectedTask={setSelectedTask}
+                  setIsTaskDetailModalOpen={setIsTaskDetailModalOpen}
+                  setTasks={setTasks}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+TaskDepartmentGroups.displayName = 'TaskDepartmentGroups';
+
 const ProjectTrackingView = ({ 
   trackings, onDelete, onEdit, onAdd, 
   filterStatus, setFilterStatus, searchTerm, setSearchTerm,
@@ -1043,61 +1369,118 @@ export default function App() {
     const saved = localStorage.getItem('guideContent');
     if (saved) return saved;
     return `
-      <section>
-        <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
-          <span class="w-1.5 h-1.5 bg-[#1A1A1A] inline-block"></span>
-          系统定位
-        </h3>
-        <p>
-          《项目跟踪系统（Air版本）》是一个轻量级的协同管理中枢，旨在帮助团队将抽象的季度目标转化为具体的周执行计划，并对项目和任务的进展进行透明化跟踪。本系统抛弃了繁重的管理流程，专注于“目标—拆解—执行—反馈”的敏捷循环。
-        </p>
-      </section>
-
-      <section>
-        <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
-          <span class="w-1.5 h-1.5 bg-[#1A1A1A] inline-block"></span>
-          模块概览
-        </h3>
-        <ul class="list-disc pl-5 space-y-2 opacity-90">
-          <li><strong>全局看板（Dashboard）：</strong>展现核心业务指标（包含营业目标达成度、客户漏斗等）及年度核心经营测算，帮助管理者总览全局。</li>
-          <li><strong>部门跟进（如市场部、研发部等）：</strong>展示特定部门的周执行简报以及个人产出，细化到各负责人的具体任务和交付物。</li>
-          <li><strong>季度核心目标（侧边栏）：</strong>用于记录各小组或部门的季度OKR，支持富文本编辑，确保方向始终对齐。</li>
-        </ul>
-      </section>
-
-      <section>
-        <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
-          <span class="w-1.5 h-1.5 bg-[#1A1A1A] inline-block"></span>
-          核心操作说明
-        </h3>
-        <div class="space-y-4">
-          <div>
-            <h4 class="font-bold mb-1 opacity-100">1. 编辑季度目标</h4>
-            <p>在左侧边栏“季度核心目标”区域，点击相应小组右上方的“编辑”按钮，可进入富文本编辑模式，修改当前小组的季度目标内容，完成后点击“保存”。</p>
-          </div>
-          <div>
-            <h4 class="font-bold mb-1 opacity-100">2. 录入与调整营业目标 (全局看板)</h4>
-            <p>在“核心业务指标与目标管理”卡片右上角或对应月份，点击设置图标或“录入实际”按钮，可更新每月的指标目标值及实际完成情况。</p>
-          </div>
-          <div>
-            <h4 class="font-bold mb-1 opacity-100">3. 任务与进度管理</h4>
-            <p>在部门跟进视图中，点击成员卡片内的“推进”按钮更新任务进度（10%-100%）。点击右上侧的“+ 新增任务”为特定成员分配新任务。</p>
-          </div>
-          <div>
-            <h4 class="font-bold mb-1 opacity-100">4. 产出物登记</h4>
-            <p>任务完成后或阶段性交付时，在个人卡片下的“核心产出交付”区域，点击“+ 登记新产出”并填写说明及链接。</p>
-          </div>
+      <div class="space-y-8 text-stone-800">
+        <!-- 头部导览 -->
+        <div class="border-l-4 border-[#1A1A1A] pl-4 py-2 bg-[#1A1A1A]/5 rounded-r">
+          <p class="text-[10px] font-mono uppercase tracking-widest text-[#1A1A1A]/50">COLLABORATION SYSTEM MANUAL</p>
+          <h3 class="text-xl font-serif italic text-[#1A1A1A] mt-0.5 font-bold">面向高效团队的敏捷协同中枢</h3>
+          <p class="text-xs text-stone-500 mt-1">本指南将帮助您快速熟悉系统的四大核心工作流与高效协作技巧，建立起“目标-执行-交付-反馈”的高效循环。</p>
         </div>
-      </section>
 
-      <section class="bg-gray-50 border border-[#1A1A1A]/10 p-4">
-        <h3 class="font-bold mb-2 flex items-center gap-2 text-[#1A1A1A]">
-          注意事項
-        </h3>
-        <p class="text-xs opacity-75">
-          本Air版本采用前端本地化存储或简化状态管理进行演示验证，刷新页面后如果未接后端，数据可能恢复初始状态。实际使用中请确保绑定您的账号（已通过手机号码登入）。如需系统设置调整（编排人员、定制年度利润等），请点击右上角的齿轮图标进入系统设置。
-        </p>
-      </section>
+        <!-- 核心定位 -->
+        <section>
+          <h4 class="font-bold text-sm uppercase tracking-wider text-[#1A1A1A] mb-3 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 bg-[#1A1A1A] inline-block"></span>
+            一、 核心设计理念
+          </h4>
+          <p class="text-xs leading-relaxed text-stone-600 mb-3">
+            项目跟踪系统抛弃了繁重的管理流程，提倡<strong>“目标对齐、透明管理、敏捷交付”</strong>。通过轻量、美观的响应式页面，确保团队管理者和执行人员无缝对接核心资源、进度完成度和项目交付指标。
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="p-3 bg-stone-50 border border-stone-200/60 rounded">
+              <span class="text-xs font-bold block text-[#1A1A1A]">🎯 战略对齐</span>
+              <span class="text-[11px] text-stone-500 leading-snug block mt-1">季度核心目标纵向拆解为可量化的周计划指标（Plan），确保每一项工作皆服务于全局。</span>
+            </div>
+            <div class="p-3 bg-stone-50 border border-stone-200/60 rounded">
+              <span class="text-xs font-bold block text-[#1A1A1A]">⚡ 敏捷交付</span>
+              <span class="text-[11px] text-stone-500 leading-snug block mt-1">个人任务进度滑块无级调节，支持任务一键点选勾选完成，自动记录实际起止时间闭环。</span>
+            </div>
+            <div class="p-3 bg-stone-50 border border-stone-200/60 rounded">
+              <span class="text-xs font-bold block text-[#1A1A1A]">📊 经营透视</span>
+              <span class="text-[11px] text-stone-500 leading-snug block mt-1">结合项目合同总额、签约日期、客户漏斗及预期奋斗指标，全局看清公司整体经营与利润率状况。</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 详细功能指南 -->
+        <section>
+          <h4 class="font-bold text-sm uppercase tracking-wider text-[#1A1A1A] mb-4 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 bg-[#1A1A1A] inline-block"></span>
+            二、 四大典型工作流操作要领
+          </h4>
+          
+          <div class="space-y-5">
+            <!-- 看板管理 -->
+            <div class="group">
+              <h5 class="font-bold text-xs text-[#1A1A1A] flex items-center gap-2 mb-1.5">
+                <span class="w-1 h-3 bg-[#1A1A1A]/30 group-hover:bg-[#1A1A1A] transition-colors inline-block"></span>
+                1. 经营分析与指标配置 (全局看板)
+              </h5>
+              <div class="pl-3 text-xs text-stone-600 space-y-1">
+                <p>• <strong>多维度指标分析：</strong> 顶部的经营仪表盘汇总了财务、利润率与销售商机漏斗。通过切换年度/季度/月份，可实现对任意区间的历史追溯与指标核验。</p>
+                <p>• <strong>目标/实际数值录入：</strong> 在每个经营指标卡片右侧，点击设置图标或“规划/调整实际”按钮。所有数值将使用高精度本地持久化存储（并完美适配后端同步）。</p>
+              </div>
+            </div>
+
+            <!-- OKR管理 -->
+            <div class="group">
+              <h5 class="font-bold text-xs text-[#1A1A1A] flex items-center gap-2 mb-1.5">
+                <span class="w-1 h-3 bg-[#1A1A1A]/30 group-hover:bg-[#1A1A1A] transition-colors inline-block"></span>
+                2. 季度核心目标编排 (OKR 规划)
+              </h5>
+              <div class="pl-3 text-xs text-stone-600 space-y-1">
+                <p>• <strong>富文本目标设定：</strong> 点击左侧边栏对应团队或小组右上角的“编辑”按钮，可进入极简富文本状态。输入目标大纲后，点击“保存”即可实时呈现给团队。</p>
+                <p>• <strong>目标树状对齐拆解：</strong> 每一项季度 OKR 可以和当前周或历史周计划进行紧密联动。可根据进展实时监控具体周计划的执行数值。</p>
+              </div>
+            </div>
+
+            <!-- 任务协同 -->
+            <div class="group">
+              <h5 class="font-bold text-xs text-[#1A1A1A] flex items-center gap-2 mb-1.5">
+                <span class="w-1 h-3 bg-[#1A1A1A]/30 group-hover:bg-[#1A1A1A] transition-colors inline-block"></span>
+                3. 周计划执行与个人任务微调 (部门视图)
+              </h5>
+              <div class="pl-3 text-xs text-stone-600 space-y-1">
+                <p>• <strong>创建与指派任务：</strong> 进入相应部门（如研发部、市场部、运营部），在项目成员卡片内点击“+ 添加/新增任务项”可以指派责任人、对应项目、任务起止预期并设置交付成果物标准。</p>
+                <p>• <strong>无级进度滑动与一键验收：</strong> 通过流畅的范围调节条，负责人可以随时反馈任务实际完成进度（10%-100%）。当进度滑至 100% 或在卡片列表里直接点击勾选框，系统将一键完成任务并自动记录当前的实际完成日期。</p>
+              </div>
+            </div>
+
+            <!-- 交付跟进 -->
+            <div class="group">
+              <h5 class="font-bold text-xs text-[#1A1A1A] flex items-center gap-2 mb-1.5">
+                <span class="w-1 h-3 bg-[#1A1A1A]/30 group-hover:bg-[#1A1A1A] transition-colors inline-block"></span>
+                4. 项目和客户跟踪管理 (跟进看板)
+              </h5>
+              <div class="pl-3 text-xs text-stone-600 space-y-1">
+                <p>• <strong>跟进详情弹窗：</strong> 支持快捷筛查未跟进、跟进中、重要跟进、已签约、已丢单等不同状态的商机及项目。可以集中管理联系人、预期签单总额与签约月份。</p>
+                <p>• <strong>复合追加历史备注：</strong> 点击项目行的“跟进记录”，即可划出右侧抽屉，随时输入并追加跟进历史。每一次记录都会被打上创建时间戳，便于后期追溯与销售漏斗分析。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 交互与技巧 -->
+        <section>
+          <h4 class="font-bold text-sm uppercase tracking-wider text-[#1A1A1A] mb-3 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 bg-[#1A1A1A] inline-block"></span>
+            三、 界面交互特色及使用技巧
+          </h4>
+          <div class="bg-stone-50 border border-stone-200/60 p-4 rounded space-y-2.5 text-xs text-stone-600">
+            <p>💡 <strong class="text-[#1A1A1A]">统一高质感立体提交按钮：</strong> 全局所有表单的常规提交、“保存”、“确认提交”以及“确定完成”按钮均经过高精度重构，并引入了 <code>shadow-[3px_3px_0px_0px_rgba(26,26,26,0.15)]</code> 立体力学微阴影，并在 <code>active:translate-x-[2px] active:translate-y-[2px]</code> 的作用下提供生动灵敏的物理按下触觉反馈。</p>
+            <p>💡 <strong class="text-[#1A1A1A]">多终端自适应舒适度：</strong> 响应式布局自适应桌面电脑、平板与移动端操作。任何对话框表单及操作按键均严格遵守 <code>min-h-[44px]</code> 或 <code>min-h-[40px]</code> 的最小触摸间距，避免任何误触现象。</p>
+            <p>💡 <strong class="text-[#1A1A1A]">系统配置与自定义权值：</strong> 您可以点击顶部导航卡片右上方的“设置齿轮”图标自定义允许访问此系统的授权企业列表，实时调增年度总奋斗指标，也可修改本说明文档的内容进行团队定制。</p>
+          </div>
+        </section>
+
+        <!-- 声明备注 -->
+        <section class="bg-[#1A1A1A]/5 border border-[#1A1A1A]/10 p-4 rounded text-xs text-stone-600 leading-relaxed">
+          <p class="font-bold text-[#1A1A1A] mb-1.5">🔒 数据持久化与版本管理</p>
+          <p>
+            本系统由现代 React 进行驱动，默认在您浏览器的 <code>localStorage</code> 中保持状态，任何更改都可以实时保存，无惧误触刷新。对于多人协作环境，系统提供了自动连接云端托管数据库的极速接入接口，保障高并发安全性及企业资产完整。
+          </p>
+        </section>
+      </div>
     `;
   });
 
@@ -3739,7 +4122,22 @@ alter table system_settings disable row level security;
                   <span className="text-[10px] px-2 py-0.5 border border-[#1A1A1A] font-bold tracking-widest">市场开拓序列</span>
                   <div className="h-[1px] flex-1 bg-[#1A1A1A] opacity-10"></div>
                 </div>
-                {renderTaskGroups(marketingTasks, 'marketing')}
+                <TaskDepartmentGroups
+                  tasks={marketingTasks}
+                  department="marketing"
+                  groups={groups}
+                  isSystemAdmin={isSystemAdmin}
+                  currentUser={currentUser}
+                  members={members}
+                  selectedTaskGroupIds={selectedTaskGroupIds}
+                  setSelectedTaskGroupIds={setSelectedTaskGroupIds}
+                  outcomes={outcomes}
+                  projects={projects}
+                  openTaskModal={openTaskModal}
+                  setSelectedTask={setSelectedTask}
+                  setIsTaskDetailModalOpen={setIsTaskDetailModalOpen}
+                  setTasks={setTasks}
+                />
               </div>
             )}
 
@@ -3784,7 +4182,22 @@ alter table system_settings disable row level security;
                   <span className="text-[10px] px-2 py-0.5 border border-[#1A1A1A] font-bold tracking-widest">产品研发序列</span>
                   <div className="h-[1px] flex-1 bg-[#1A1A1A] opacity-10"></div>
                 </div>
-                {renderTaskGroups(rndTasks, 'rnd')}
+                <TaskDepartmentGroups
+                  tasks={rndTasks}
+                  department="rnd"
+                  groups={groups}
+                  isSystemAdmin={isSystemAdmin}
+                  currentUser={currentUser}
+                  members={members}
+                  selectedTaskGroupIds={selectedTaskGroupIds}
+                  setSelectedTaskGroupIds={setSelectedTaskGroupIds}
+                  outcomes={outcomes}
+                  projects={projects}
+                  openTaskModal={openTaskModal}
+                  setSelectedTask={setSelectedTask}
+                  setIsTaskDetailModalOpen={setIsTaskDetailModalOpen}
+                  setTasks={setTasks}
+                />
               </div>
             )}
           </div>
@@ -4504,7 +4917,10 @@ alter table system_settings disable row level security;
                 </div>
               )}
 
-              <button type="submit" className="w-full bg-[#1A1A1A] text-white py-3 font-bold tracking-widest uppercase text-xs hover:bg-black transition-colors mt-4">
+              <button 
+                type="submit" 
+                className="w-full flex items-center justify-center gap-2 bg-[#1A1A1A] text-white text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-6 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A] shadow-[3px_3px_0px_0px_rgba(26,26,26,0.15)] hover:shadow-none hover:bg-white hover:text-[#1A1A1A] active:bg-[#1A1A1A] active:text-white active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all duration-200 mt-4"
+              >
                 {editingReleaseGoal ? '保存更改' : '确认设定'}
               </button>
             </form>
@@ -4618,17 +5034,17 @@ alter table system_settings disable row level security;
                 </div>
               </div>
               
-              <div className="pt-4 flex justify-end gap-4">
+              <div className="pt-5 flex justify-end gap-3.5 border-t border-[#1A1A1A]/10 mt-2">
                 <button 
                   type="button"
                   onClick={() => setIsGoalModalOpen(false)}
-                  className="text-xs uppercase tracking-widest px-4 py-2 opacity-60 hover:opacity-100"
+                  className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200"
                 >
                   取消
                 </button>
                 <button 
                   type="submit"
-                  className="text-[10px] font-bold uppercase tracking-widest bg-[#1A1A1A] text-white px-6 py-2.5 hover:bg-black transition-colors"
+                  className="flex items-center justify-center gap-2 bg-[#1A1A1A] text-white text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-6 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A] shadow-[3px_3px_0px_0px_rgba(26,26,26,0.15)] hover:shadow-none hover:bg-white hover:text-[#1A1A1A] active:bg-[#1A1A1A] active:text-white active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all duration-200"
                 >
                   确认保存
                 </button>
@@ -4664,17 +5080,17 @@ alter table system_settings disable row level security;
                   required
                 />
               </div>
-              <div className="pt-4 flex justify-end gap-4">
+              <div className="pt-5 flex justify-end gap-3.5 border-t border-[#1A1A1A]/10 mt-2">
                 <button 
                   type="button"
                   onClick={() => { setIsEditModalOpen(false); setEditingPlan(null); }}
-                  className="text-xs uppercase tracking-widest px-4 py-2 opacity-60 hover:opacity-100"
+                  className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200"
                 >
                   取消
                 </button>
                 <button 
                   type="submit"
-                  className="text-[10px] font-bold uppercase tracking-widest bg-[#1A1A1A] text-white px-6 py-2.5 hover:bg-black transition-colors"
+                  className="flex items-center justify-center gap-2 bg-[#1A1A1A] text-white text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-6 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A] shadow-[3px_3px_0px_0px_rgba(26,26,26,0.15)] hover:shadow-none hover:bg-white hover:text-[#1A1A1A] active:bg-[#1A1A1A] active:text-white active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all duration-200"
                 >
                   确认修改
                 </button>
@@ -4713,17 +5129,17 @@ alter table system_settings disable row level security;
                   required
                 />
               </div>
-              <div className="pt-4 flex justify-end gap-4">
+              <div className="pt-5 flex justify-end gap-3.5 border-t border-[#1A1A1A]/10 mt-2">
                 <button 
                   type="button"
                   onClick={() => { setIsActualModalOpen(false); setEditingPlan(null); }}
-                  className="text-xs uppercase tracking-widest px-4 py-2 opacity-60 hover:opacity-100"
+                  className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200"
                 >
                   取消
                 </button>
                 <button 
                   type="submit"
-                  className="text-[10px] font-bold uppercase tracking-widest bg-[#1A1A1A] text-white px-6 py-2.5 hover:bg-black transition-colors"
+                  className="flex items-center justify-center gap-2 bg-[#1A1A1A] text-white text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-6 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A] shadow-[3px_3px_0px_0px_rgba(26,26,26,0.15)] hover:shadow-none hover:bg-white hover:text-[#1A1A1A] active:bg-[#1A1A1A] active:text-white active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all duration-200"
                 >
                   确认验收
                 </button>
@@ -4857,21 +5273,21 @@ alter table system_settings disable row level security;
                 <button 
                   type="button"
                   onClick={() => setTaskForms([...taskForms, { id: generateId(), title: '', plannedProgress: '0', startDate: format(new Date(), 'yyyy-MM-dd'), endDate: format(currentWeekDate, 'yyyy-MM-dd'), projectName: '', outcome: '' }])}
-                  className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A] px-3 py-2 border border-[#1A1A1A]/30 hover:bg-[#1A1A1A] hover:text-white transition-colors"
+                  className="flex items-center justify-center text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.1em] px-4 py-2 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white transition-all active:translate-y-px"
                 >
                   + 添加任务项
                 </button>
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   <button 
                     type="button"
                     onClick={() => setIsTaskModalOpen(false)}
-                    className="text-xs uppercase tracking-widest px-4 py-2 opacity-60 hover:opacity-100"
+                    className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200"
                   >
                     取消
                   </button>
                   <button 
                     type="submit"
-                    className="text-[10px] font-bold uppercase tracking-widest bg-[#1A1A1A] text-white px-6 py-2.5 hover:bg-black transition-colors"
+                    className="flex items-center justify-center gap-2 bg-[#1A1A1A] text-white text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-6 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A] shadow-[3px_3px_0px_0px_rgba(26,26,26,0.15)] hover:shadow-none hover:bg-white hover:text-[#1A1A1A] active:bg-[#1A1A1A] active:text-white active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all duration-200"
                   >
                     保存 ({taskForms.length})
                   </button>
@@ -4958,21 +5374,21 @@ alter table system_settings disable row level security;
                 <button 
                   type="button"
                   onClick={() => setOutcomeForms([...outcomeForms, { id: generateId(), title: '', description: '', date: format(currentWeekDate, 'yyyy-MM-dd') }])}
-                  className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A] px-3 py-2 border border-[#1A1A1A]/30 hover:bg-[#1A1A1A] hover:text-white transition-colors"
+                  className="flex items-center justify-center text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.1em] px-4 py-2 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white transition-all active:translate-y-px"
                 >
                   + 添加成果项
                 </button>
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   <button 
                     type="button"
                     onClick={() => setIsOutcomeModalOpen(false)}
-                    className="text-xs uppercase tracking-widest px-4 py-2 opacity-60 hover:opacity-100"
+                    className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200"
                   >
                     取消
                   </button>
                   <button 
                     type="submit"
-                    className="text-[10px] font-bold uppercase tracking-widest bg-[#1A1A1A] text-white px-6 py-2.5 hover:bg-black transition-colors"
+                    className="flex items-center justify-center gap-2 bg-[#1A1A1A] text-white text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-6 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A] shadow-[3px_3px_0px_0px_rgba(26,26,26,0.15)] hover:shadow-none hover:bg-white hover:text-[#1A1A1A] active:bg-[#1A1A1A] active:text-white active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all duration-200"
                   >
                     归档总结 ({outcomeForms.length})
                   </button>
@@ -5106,7 +5522,7 @@ alter table system_settings disable row level security;
                   placeholder="详细描述需求场景、痛点及预期效果..."
                 />
               </div>
-              <div className="pt-4 flex justify-end gap-4">
+              <div className="pt-5 flex justify-end gap-3.5 border-t border-[#1A1A1A]/10 mt-2">
                 <button 
                   type="button"
                   onClick={() => {
@@ -5114,18 +5530,18 @@ alter table system_settings disable row level security;
                     setEditingRequirementId(null);
                     setRequirementForm({ title: '', description: '', linkUrl: '', priority: 'medium', source: 'customer', customerName: '', internalSourceDetail: '', assigneeId: '' });
                   }}
-                  className="text-xs uppercase tracking-widest px-4 py-2 opacity-60 hover:opacity-100"
+                  className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200"
                 >
                   取消
                 </button>
                 <button 
                   type="submit"
                   disabled={isSubmittingRequirement}
-                  className={`text-[10px] font-bold uppercase tracking-widest bg-[#1A1A1A] text-white px-6 py-2.5 hover:bg-black transition-all flex items-center gap-2 ${isSubmittingRequirement ? 'opacity-50 cursor-not-allowed translate-y-0.5' : 'active:translate-y-0.5'}`}
+                  className={`flex items-center justify-center gap-2 bg-[#1A1A1A] text-white text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-6 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A] shadow-[3px_3px_0px_0px_rgba(26,26,26,0.15)] hover:shadow-none hover:bg-white hover:text-[#1A1A1A] active:bg-[#1A1A1A] active:text-white active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all duration-200 ${isSubmittingRequirement ? 'opacity-50 cursor-not-allowed translate-y-0.5' : 'active:translate-y-0.5'}`}
                 >
                   {isSubmittingRequirement ? (
                     <>
-                      <span className="w-2 h-2 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin shrink-0" />
                       正在提交
                     </>
                   ) : (editingRequirementId ? '保存更改' : '确认提交')}
@@ -5209,16 +5625,16 @@ alter table system_settings disable row level security;
             <p className="text-sm opacity-80 mb-6 leading-relaxed">
               确定要退出当前系统吗？
             </p>
-            <div className="flex justify-end gap-3 mt-4">
+            <div className="flex justify-end gap-3.5 mt-6 pt-5 border-t border-[#1A1A1A]/5">
               <button 
                 onClick={() => setIsLogoutModalOpen(false)}
-                className="px-4 py-2 text-xs uppercase tracking-widest font-bold hover:bg-gray-100 transition-colors"
+                className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200"
               >
                 取消
               </button>
               <button 
                 onClick={confirmLogout}
-                className="px-4 py-2 text-xs uppercase tracking-widest font-bold bg-[#1A1A1A] text-white hover:bg-black transition-colors"
+                className="flex items-center justify-center gap-2 bg-[#1A1A1A] text-white text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-6 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A] shadow-[3px_3px_0px_0px_rgba(26,26,26,0.15)] hover:shadow-none hover:bg-white hover:text-[#1A1A1A] active:bg-[#1A1A1A] active:text-white active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all duration-200"
               >
                 确认退出
               </button>
@@ -5269,13 +5685,16 @@ alter table system_settings disable row level security;
             {trackingError && (
               <div className="mt-4 text-red-500 text-xs font-bold">{trackingError}</div>
             )}
-            <div className="flex justify-end gap-3 mt-8">
+            <div className="flex justify-end gap-3.5 mt-8 pt-5 border-t border-[#1A1A1A]/10">
               <button 
                 onClick={() => {
                   setIsTrackingModalOpen(false);
                   setTrackingError('');
                 }} 
-                className="text-xs uppercase px-4 py-2 opacity-60">取消</button>
+                className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200"
+              >
+                取消
+              </button>
               <button 
                 onClick={() => {
                   /* Basic Validation */
@@ -5290,7 +5709,10 @@ alter table system_settings disable row level security;
                   setTrackingError('');
                   saveTracking({ ...trackingForm, id: editingTrackingId || generateId(), updatedAt: new Date().toISOString() });
                 }} 
-                className="bg-[#1A1A1A] text-white text-xs uppercase px-6 py-2.5">保存</button>
+                className="flex items-center justify-center gap-2 bg-[#1A1A1A] text-white text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-6 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A] shadow-[3px_3px_0px_0px_rgba(26,26,26,0.15)] hover:shadow-none hover:bg-white hover:text-[#1A1A1A] active:bg-[#1A1A1A] active:text-white active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all duration-200"
+              >
+                保存
+              </button>
             </div>
           </div>
         </div>
@@ -5325,14 +5747,20 @@ alter table system_settings disable row level security;
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-3 mt-8 shrink-0 pt-4 border-t border-[#1A1A1A]/10">
+            <div className="flex justify-end gap-3.5 mt-8 shrink-0 pt-5 border-t border-[#1A1A1A]/10">
               <button 
                 onClick={() => setIsFollowupModalOpen(false)} 
-                className="text-xs uppercase px-4 py-2 opacity-60">取消</button>
+                className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200"
+              >
+                取消
+              </button>
               <button 
                 onClick={saveFollowup} 
                 disabled={!followupForm.content}
-                className="bg-[#1A1A1A] text-white text-xs uppercase px-6 py-2.5 disabled:opacity-50">保存记录</button>
+                className="flex items-center justify-center gap-2 bg-[#1A1A1A] text-white text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-6 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A] shadow-[3px_3px_0px_0px_rgba(26,26,26,0.15)] hover:shadow-none hover:bg-white hover:text-[#1A1A1A] active:bg-[#1A1A1A] active:text-white active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all duration-200 disabled:opacity-50 disabled:shadow-none disabled:pointer-events-none"
+              >
+                保存记录
+              </button>
             </div>
           </div>
         </div>
