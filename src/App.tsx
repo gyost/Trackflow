@@ -2376,9 +2376,10 @@ export default function App() {
                                         {task.title}
                                         {task.projectName && <span className="ml-2 text-[10px] bg-[#1A1A1A]/10 px-1.5 py-0.5 text-[#1A1A1A]/80 border border-[#1A1A1A]/20 font-normal tracking-wide inline-block">{task.projectName}</span>}
                                       </p>
+                                      
                                       <TaskProgressInput 
                                         task={task} 
-                                        disabled={currentUser.id !== assigneeId}
+                                        disabled={currentUser.id !== assigneeId} 
                                         onUpdate={(val) => {
                                           const updatedTask: Task = {
                                             ...task,
@@ -2392,6 +2393,7 @@ export default function App() {
                                         }} 
                                       />
                                     </div>
+                                    
                                     {task.outcome && (
                                       <div className="mt-2 mb-2 bg-[#1A1A1A]/5 p-2 border border-[#1A1A1A]/10">
                                         <p className="text-[10px] font-bold opacity-60 uppercase mb-1">产出成果</p>
@@ -2401,6 +2403,7 @@ export default function App() {
                                         />
                                       </div>
                                     )}
+                                    
                                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 opacity-50">
                                       {task.startDate && <p className="text-[10px] uppercase tracking-wider">计划开始: {task.startDate}</p>}
                                       <p className="text-[10px] uppercase tracking-wider">计划截止: {task.endDate}</p>
@@ -2500,15 +2503,20 @@ export default function App() {
           
           {isMissingColumn && (
              <div className="mt-4 mb-4 bg-gray-100 p-4 rounded-xl text-left max-w-2xl w-full text-[#1A1A1A]">
-               <p className="font-bold mb-2">💡 解决方案：请在您的 Supabase 项目中执行以下 SQL 语句，补充缺失的字段：</p>
-               <pre className="text-xs p-4 bg-black text-green-400 rounded overflow-x-auto whitespace-pre-wrap">
-                 {`alter table "${tabName}" add column if not exists "${colName}" jsonb;`}
-               </pre>
-               <details className="mt-4 cursor-pointer">
-                 <summary className="font-bold text-[#1A1A1A] underline">如果仍然报错，请点击此处复制完整数据库更新脚本（一键补齐所有缺失字段与设置表格）</summary>
-                 <pre className="mt-2 text-[10px] p-4 bg-black text-green-400 rounded overflow-x-auto whitespace-pre-wrap">
-                   {`
--- 创建系统设置（分组、成员、全局参数配置）表格
+                <p className="font-bold mb-2">💡 解决方案：请在您的 Supabase 项目中执行以下 SQL 语句，补充缺失的字段：</p>
+                <pre className="text-xs p-4 bg-black text-green-400 rounded overflow-x-auto whitespace-pre-wrap">
+                  {`alter table "${tabName}" add column if not exists "${colName}" jsonb;`}
+                </pre>
+                <details className="mt-4 cursor-pointer">
+                  <summary className="font-bold text-[#1A1A1A] underline">如果仍然报错，请点击此处复制完整数据库更新脚本（一键补齐所有缺失字段与设置表格）</summary>
+                  <pre className="mt-2 text-[10px] p-4 bg-black text-green-400 rounded overflow-x-auto whitespace-pre-wrap">
+                    {`
+-- 1. 创建核心基础设施与业务表格
+create table if not exists organizations (
+  id text primary key,
+  name text
+);
+
 create table if not exists groups (
   id text primary key,
   name text,
@@ -2536,7 +2544,132 @@ create table if not exists system_settings (
   organization_id text
 );
 
--- 原核心表格字段补齐
+create table if not exists role_permissions (
+  role_name text primary key,
+  permissions text,
+  organization_id text
+);
+
+create table if not exists projects (
+  id text primary key,
+  title text not null,
+  description text,
+  category text,
+  manager_id text,
+  organization_id text
+);
+
+create table if not exists plans (
+  id text primary key,
+  project_id text,
+  title text not null,
+  level text,
+  parent_id text,
+  start_date text,
+  end_date text,
+  status text,
+  progress numeric,
+  metric jsonb,
+  organization_id text
+);
+
+create table if not exists tasks (
+  id text primary key,
+  project_id text,
+  plan_id text,
+  title text not null,
+  assignee_id text,
+  status text,
+  priority text,
+  progress numeric,
+  planned_progress numeric,
+  start_date text,
+  actual_start_date text,
+  actual_end_date text,
+  end_date text,
+  outcome text,
+  project_name text,
+  organization_id text
+);
+
+create table if not exists outcomes (
+  id text primary key,
+  project_id text,
+  title text not null,
+  description text,
+  submitter_id text,
+  date text,
+  status text,
+  file_url text,
+  organization_id text
+);
+
+create table if not exists release_goals (
+  id text primary key,
+  group_id text,
+  title text not null,
+  target_month text,
+  target_date text,
+  actual_version text,
+  actual_release_date text,
+  status text,
+  note text,
+  created_at text,
+  organization_id text
+);
+
+create table if not exists project_trackings (
+  id text primary key,
+  customer_name text not null,
+  status text,
+  product text,
+  city_manager text,
+  project_manager text,
+  expected_contract_amount numeric,
+  actual_contract_amount numeric,
+  contact_name text,
+  contact_phone text,
+  last_followup_date text,
+  followup_records jsonb,
+  organization_id text,
+  updated_at timestamp with time zone,
+  signed_date text,
+  followup_date text
+);
+
+create table if not exists requirements (
+  id text primary key,
+  project_id text,
+  title text not null,
+  description text,
+  priority text,
+  status text,
+  source text,
+  submitter_id text,
+  assignee_id text,
+  created_at text,
+  updated_at text,
+  serial_number text,
+  link_url text,
+  customer_name text,
+  internal_source_detail text,
+  deleted boolean default false,
+  deleted_at timestamp with time zone,
+  org_id text,
+  organization_id text
+);
+
+create table if not exists requirement_history (
+  id text primary key,
+  requirement_id text,
+  status text,
+  timestamp text,
+  note text,
+  org_id text,
+  organization_id text
+);
+
+-- 2. 字段兼容性自愈修复（针对已有旧表补全缺失列）
 alter table requirements add column if not exists serial_number text;
 alter table requirements add column if not exists project_id text;
 alter table requirements add column if not exists link_url text;
@@ -2546,7 +2679,9 @@ alter table requirements add column if not exists submitter_id text;
 alter table requirements add column if not exists assignee_id text;
 alter table requirements add column if not exists deleted boolean;
 alter table requirements add column if not exists deleted_at timestamp with time zone;
+alter table requirements add column if not exists org_id text;
 alter table requirements add column if not exists organization_id text;
+
 alter table tasks add column if not exists project_name text;
 alter table tasks add column if not exists plan_id text;
 alter table tasks add column if not exists title text;
@@ -2561,13 +2696,17 @@ alter table tasks add column if not exists actual_end_date text;
 alter table tasks add column if not exists end_date text;
 alter table tasks add column if not exists outcome text;
 alter table tasks add column if not exists organization_id text;
+
 alter table plans add column if not exists metric jsonb;
 alter table plans add column if not exists organization_id text;
+
 alter table requirement_history add column if not exists requirement_id text;
 alter table requirement_history add column if not exists status text;
 alter table requirement_history add column if not exists timestamp text;
 alter table requirement_history add column if not exists note text;
+alter table requirement_history add column if not exists org_id text;
 alter table requirement_history add column if not exists organization_id text;
+
 alter table project_trackings add column if not exists followup_records jsonb;
 alter table project_trackings add column if not exists organization_id text;
 alter table project_trackings add column if not exists updated_at timestamp with time zone;
@@ -2578,20 +2717,39 @@ alter table project_trackings add column if not exists expected_contract_amount 
 alter table project_trackings add column if not exists actual_contract_amount numeric;
 alter table project_trackings add column if not exists contact_name text;
 alter table project_trackings add column if not exists contact_phone text;
+
 alter table release_goals add column if not exists actual_version text;
 alter table release_goals add column if not exists actual_release_date text;
 alter table release_goals add column if not exists note text;
 alter table release_goals add column if not exists organization_id text;
+
 alter table outcomes add column if not exists file_url text;
 alter table outcomes add column if not exists organization_id text;
+
 alter table organizations add column if not exists name text;
 alter table projects add column if not exists manager_id text;
+
+-- 3. 关闭行安全策略限制（RLS），授予读写权限一键自愈
+alter table organizations disable row level security;
+alter table groups disable row level security;
+alter table members disable row level security;
+alter table system_settings disable row level security;
+alter table role_permissions disable row level security;
+alter table projects disable row level security;
+alter table plans disable row level security;
+alter table tasks disable row level security;
+alter table outcomes disable row level security;
+alter table release_goals disable row level security;
+alter table project_trackings disable row level security;
+alter table requirements disable row level security;
+alter table requirement_history disable row level security;
 `}
-                 </pre>
-               </details>
-               <p className="mt-3 text-sm text-gray-600">执行位置：进入 <a href="https://supabase.com/dashboard/project/_/sql/new" target="_blank" rel="noreferrer" className="underline hover:text-black font-semibold">Supabase Dashboard</a> -&gt; SQL Editor -&gt; New query -&gt; 粘贴代码并点击 <strong>RUN</strong>。</p>
+                  </pre>
+                </details>
+                <p className="mt-3 text-sm text-gray-600">执行位置：进入 <a href="https://supabase.com/dashboard/project/_/sql/new" target="_blank" rel="noreferrer" className="underline hover:text-black font-semibold">Supabase Dashboard</a> -&gt; SQL Editor -&gt; New query -&gt; 粘贴代码并点击 <strong>RUN</strong>。</p>
              </div>
-          )}
+          )}�
+
           {isRlsError && (
              <div className="mt-4 mb-8 bg-gray-100 p-4 rounded-xl text-left max-w-2xl w-full text-[#1A1A1A]">
                <p className="font-bold mb-2">💡 解决方案：请在您的 Supabase 项目中执行以下 SQL 语句，关闭全表的安全策略限制：</p>
