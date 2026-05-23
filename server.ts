@@ -111,7 +111,49 @@ function migrate() {
       lastFollowupDate TEXT,
       updatedAt TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS role_permissions (
+      roleName TEXT PRIMARY KEY,
+      permissions TEXT NOT NULL
+    );
   `);
+
+  
+  // Seed default role permissions if empty
+  try {
+    const countRP = db.prepare("SELECT COUNT(*) as count FROM role_permissions").get() as any;
+    if (!countRP || countRP.count === 0) {
+      const defaultRPs = [
+        { roleName: '系统管理员', permissions: JSON.stringify(['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE']) },
+        { roleName: '项目经理', permissions: JSON.stringify(['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE']) },
+        { roleName: '部门经理', permissions: JSON.stringify(['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE']) },
+        { roleName: '产品总监', permissions: JSON.stringify(['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL']) },
+        { roleName: '市场总监', permissions: JSON.stringify(['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL']) },
+        { roleName: '组长', permissions: JSON.stringify(['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL', 'MANAGE_PLAN_TASK']) },
+        { roleName: '产品经理', permissions: JSON.stringify(['VIEW_DASHBOARD', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT']) },
+        { roleName: '研发经理', permissions: JSON.stringify(['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK']) },
+        { roleName: '测试经理', permissions: JSON.stringify(['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK']) },
+        { roleName: '市场人员', permissions: JSON.stringify(['VIEW_DASHBOARD', 'VIEW_MARKETING']) }
+      ];
+      const insert = db.prepare("INSERT INTO role_permissions (roleName, permissions) VALUES (?, ?)");
+      for (const rp of defaultRPs) {
+        insert.run(rp.roleName, rp.permissions);
+      }
+      console.log("Seeded default role permissions to SQLite.");
+    } else {
+      // Self-heal: ensure '系统管理员' is present even if some roles are already there
+      const checkAdmin = db.prepare("SELECT COUNT(*) as count FROM role_permissions WHERE roleName = '系统管理员'").get() as any;
+      if (!checkAdmin || checkAdmin.count === 0) {
+        db.prepare("INSERT INTO role_permissions (roleName, permissions) VALUES (?, ?)").run(
+          '系统管理员',
+          JSON.stringify(['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'])
+        );
+        console.log("Self-healed: '系统管理员' added to SQLite role_permissions.");
+      }
+    }
+  } catch (err) {
+    console.error("Failed to seed default role permissions:", err);
+  }
 
   
   // Migration check for missing columns
@@ -427,6 +469,43 @@ app.post("/api/projectTrackings", (req, res) => {
 app.delete("/api/projectTrackings/:id", (req, res) => {
   try {
     db.prepare("DELETE FROM project_trackings WHERE id = ?").run(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/permissions", (req, res) => {
+  try {
+    const raw = db.prepare("SELECT * FROM role_permissions").all() as any[];
+    const formatted = raw.map(rp => ({
+      roleName: rp.roleName,
+      permissions: JSON.parse(rp.permissions)
+    }));
+    res.json(formatted);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/permissions", (req, res) => {
+  try {
+    const rolesData = req.body;
+    if (!Array.isArray(rolesData)) {
+      throw new Error("Invalid request body. Expected an array of role permissions.");
+    }
+
+    const deleteStmt = db.prepare("DELETE FROM role_permissions");
+    const insertStmt = db.prepare("INSERT INTO role_permissions (roleName, permissions) VALUES (?, ?)");
+
+    const runTransaction = db.transaction((data) => {
+      deleteStmt.run();
+      for (const item of data) {
+        insertStmt.run(item.roleName, JSON.stringify(item.permissions));
+      }
+    });
+
+    runTransaction(rolesData);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

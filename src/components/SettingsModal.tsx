@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Member, Group, Category } from '../types';
+import { Member, Group, Category, RolePermission } from '../types';
 import { generateId } from '../lib/utils';
 import RichTextEditor from './RichTextEditor';
+import { Search, ChevronDown, ChevronUp, Shield, Sliders, Check, RefreshCw } from 'lucide-react';
 
 const PRESET_AVATARS = [
   'https://api.dicebear.com/7.x/notionists/svg?seed=Annie&backgroundColor=e5e7eb',
@@ -33,7 +34,21 @@ interface SettingsModalProps {
   setAuthorizedCompanies: React.Dispatch<React.SetStateAction<string[]>>;
   syncError?: string | null;
   setSyncError?: (val: string | null) => void;
+  rolePermissions: RolePermission[];
+  setRolePermissions: React.Dispatch<React.SetStateAction<RolePermission[]>>;
 }
+
+const PERMISSION_DEFINITIONS = [
+  { key: 'VIEW_DASHBOARD', label: '全局大盘', desc: '查看全局和各组的核心指标统计数据、历史数据与目标进度', category: '菜单访问' },
+  { key: 'VIEW_TRACKING', label: '项目跟踪', desc: '查看并配置客户项目销售阶段、合同金额与每日跟进记录', category: '菜单访问' },
+  { key: 'VIEW_MARKETING', label: '市场开拓', desc: '查看和编制市场组的考核指标、推进明细和月度发布目标', category: '菜单访问' },
+  { key: 'VIEW_RND', label: '产品研发', desc: '查看研发项目大纲、状态进度、版本计划以及研发小组发布目标', category: '菜单访问' },
+  { key: 'VIEW_REQUIREMENTS', label: '需求管理', desc: '完整查看客户和产品相关的多维需求和关联版本状态列表', category: '菜单访问' },
+  { key: 'EDIT_RELEASE_GOAL', label: '目标编制', desc: '赋予在“市场/研发”版块中增加或修改小组年度/月度发布目标的权利', category: '业务操作' },
+  { key: 'MANAGE_PLAN_TASK', label: '编制规划任务', desc: '赋予在“全局/市场/研发”中对季度/月度计划做任务分解、指派及状态维护的权利', category: '业务操作' },
+  { key: 'MANAGE_REQUIREMENT', label: '管理需求', desc: '赋予新建、流转状态、编辑或直接在系统物理删除原始需求的权利', category: '业务操作' },
+  { key: 'REVIEW_DELIVERABLE', label: '审核成果产出', desc: '对小组提交的任务产出交付物(outcomes)执行审核通过、重做或驳回的审批权', category: '业务操作' },
+];
 
 export default function SettingsModal({
   onClose,
@@ -48,9 +63,11 @@ export default function SettingsModal({
   authorizedCompanies,
   setAuthorizedCompanies,
   syncError,
-  setSyncError
+  setSyncError,
+  rolePermissions,
+  setRolePermissions
 }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'global' | 'business' | 'groups' | 'members' | 'guide'>('global');
+  const [activeTab, setActiveTab] = useState<'global' | 'business' | 'groups' | 'members' | 'guide' | 'permissions'>('global');
 
   // Group State
   const [newGroupName, setNewGroupName] = useState('');
@@ -69,6 +86,11 @@ export default function SettingsModal({
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editingMemberState, setEditingMemberState] = useState({ name: '', avatar: '', roles: [] as string[], category: 'marketing' as Category | 'admin', groupId: '' });
   const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
+
+  // 权限配置标签专属状态
+  const [roleSearchQuery, setRoleSearchQuery] = useState('');
+  const [isMenuAccessExpanded, setIsMenuAccessExpanded] = useState(true);
+  const [isBusinessOpExpanded, setIsBusinessOpExpanded] = useState(true);
 
   const handleAddGroup = () => {
     if (!newGroupName.trim()) return;
@@ -106,10 +128,11 @@ export default function SettingsModal({
 
   const handleUpdateMember = () => {
     if (!editingMemberState.name.trim() || !editingMemberId) return;
+    const { category, ...restState } = editingMemberState;
     setMembers(members.map(m => m.id === editingMemberId ? { 
       ...m, 
-      ...editingMemberState, 
-      department: editingMemberState.category,
+      ...restState, 
+      department: category,
       groupId: editingMemberState.groupId || undefined
     } : m));
     setEditingMemberId(null);
@@ -166,6 +189,12 @@ export default function SettingsModal({
             onClick={() => setActiveTab('guide')}
           >
             使用说明
+          </button>
+          <button 
+            className={`pb-3 border-b-2 whitespace-nowrap ${activeTab === 'permissions' ? 'border-[#1A1A1A]' : 'border-transparent opacity-50 hover:opacity-100'}`}
+            onClick={() => setActiveTab('permissions')}
+          >
+            权限配置
           </button>
         </div>
 
@@ -408,7 +437,7 @@ alter table members disable row level security;`}
                 <div>
                   <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">职位 / 角色</label>
                   <div className="flex flex-wrap gap-2">
-                    {['项目经理', '部门经理', '产品总监', '市场总监', '组长', '产品经理', '研发经理', '测试经理', '市场人员'].map(role => (
+                    {['系统管理员', '项目经理', '部门经理', '产品总监', '市场总监', '组长', '产品经理', '研发经理', '测试经理', '市场人员'].map(role => (
                       <button
                         key={role}
                         type="button"
@@ -495,7 +524,7 @@ alter table members disable row level security;`}
                            className="bg-transparent border-b border-[#1A1A1A] outline-none py-1 text-sm font-medium"
                          />
                          <div className="flex flex-wrap gap-1 items-center">
-                           {['项目经理', '部门经理', '产品总监', '市场总监', '组长', '产品经理', '研发经理', '测试经理', '市场人员'].map(role => (
+                           {['系统管理员', '项目经理', '部门经理', '产品总监', '市场总监', '组长', '产品经理', '研发经理', '测试经理', '市场人员'].map(role => (
                              <button
                                key={role}
                                type="button"
@@ -601,6 +630,428 @@ alter table members disable row level security;`}
               </div>
             </div>
           )}
+
+          {activeTab === 'permissions' && (() => {
+            const allRoles = Array.from(new Set([
+              '系统管理员', '项目经理', '部门经理', '产品总监', '市场总监', '组长', '产品经理', '研发经理', '测试经理', '市场人员',
+              ...members.flatMap(m => m.roles || [])
+            ])).filter(Boolean);
+
+            const filteredRoles = allRoles.filter(role =>
+              role.toLowerCase().includes(roleSearchQuery.trim().toLowerCase())
+            );
+
+            const menuAccessDefinitions = PERMISSION_DEFINITIONS.filter(p => p.category === '菜单访问');
+            const businessOpDefinitions = PERMISSION_DEFINITIONS.filter(p => p.category === '业务操作');
+
+            const updateRolePermissions = (role: string, nextPerms: string[]) => {
+              setRolePermissions(prev => {
+                const exists = prev.find(r => r.roleName === role);
+                if (exists) {
+                  return prev.map(r => r.roleName === role ? { ...r, permissions: nextPerms } : r);
+                } else {
+                  return [...prev, { roleName: role, permissions: nextPerms }];
+                }
+              });
+            };
+
+            return (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1A1A1A]/10 pb-4">
+                  <div>
+                    <h4 className="font-bold text-sm text-[#1A1A1A]">管理员控制台 — 角色权限分配矩阵</h4>
+                    <p className="text-xs opacity-60 mt-1 leading-relaxed">
+                      灵活切换各个系统职务对功能视窗与操作权利的安全授权。完成更改后即时写入底层主数据库并自动同步。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm('确定要恢复系统出厂自带的角色权限配置吗？此操作会覆盖当前的所有修改。')) {
+                        const defaults = [
+                          { roleName: '系统管理员', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
+                          { roleName: '项目经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
+                          { roleName: '部门经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
+                          { roleName: '产品总监', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL'] },
+                          { roleName: '市场总监', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL'] },
+                          { roleName: '组长', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL', 'MANAGE_PLAN_TASK'] },
+                          { roleName: '产品经理', permissions: ['VIEW_DASHBOARD', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT'] },
+                          { roleName: '研发经理', permissions: ['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK'] },
+                          { roleName: '测试经理', permissions: ['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK'] },
+                          { roleName: '市场人员', permissions: ['VIEW_DASHBOARD', 'VIEW_MARKETING'] }
+                        ];
+                        setRolePermissions(defaults);
+                      }
+                    }}
+                    className="bg-stone-200 border border-[#1A1A1A]/15 text-[#1A1A1A] hover:bg-stone-300 text-xs px-3 py-1.5 font-bold tracking-wider rounded transition-all shrink-0 uppercase whitespace-nowrap self-start sm:self-center cursor-pointer active:scale-95"
+                  >
+                    恢复出厂默认值
+                  </button>
+                </div>
+
+                {/* 搜索过滤工具栏 */}
+                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between bg-stone-100/50 border border-[#1A1A1A]/10 p-3 rounded-lg">
+                  <div className="relative flex-1 max-w-sm">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-stone-400">
+                      <Search className="w-4 h-4" />
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="快学检索，输入特定角色名称进行过滤配置..."
+                      value={roleSearchQuery}
+                      onChange={(e) => setRoleSearchQuery(e.target.value)}
+                      className="w-full bg-white border border-[#1A1A1A]/15 focus:border-[#1A1A1A]/40 rounded pl-9 pr-8 py-1.5 text-xs outline-none transition-colors placeholder:text-stone-400 text-[#1A1A1A] font-medium"
+                    />
+                    {roleSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setRoleSearchQuery('')}
+                        className="absolute inset-y-0 right-0 flex items-center pr-2.5 text-stone-400 hover:text-black transition-colors"
+                      >
+                        <span className="text-sm font-bold">×</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-stone-500 font-mono">
+                    <span>系统角色: <strong>{allRoles.length}</strong> 组</span>
+                    <span className="opacity-30">|</span>
+                    <span>已筛选: <strong>{filteredRoles.length}</strong> 组</span>
+                  </div>
+                </div>
+
+                {filteredRoles.length === 0 ? (
+                  <div className="text-center py-10 border border-stone-200 border-dashed rounded bg-white/40">
+                    <p className="text-xs text-stone-400 font-medium">无匹配的系统角色名 “{roleSearchQuery}”</p>
+                    <button 
+                      type="button" 
+                      onClick={() => setRoleSearchQuery('')}
+                      className="mt-3 text-[10px] text-[#1A1A1A] font-bold border border-[#1A1A1A]/30 px-2 py-0.5 uppercase hover:bg-[#1A1A1A] hover:text-[#F7F6F2] transition-colors"
+                    >
+                      取消检索
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {/* DESKTOP VIEW */}
+                    <div className="hidden md:block space-y-5">
+                      {/* 菜单访问分组面板 */}
+                      <div className="border border-[#1A1A1A]/10 rounded-xl bg-white shadow-xs overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setIsMenuAccessExpanded(!isMenuAccessExpanded)}
+                          className="w-full text-left p-4 bg-stone-100 hover:bg-stone-200/60 transition-colors flex items-center justify-between border-b border-[#1A1A1A]/10 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Shield className="w-4 h-4 text-stone-600" />
+                            <span className="font-bold text-xs text-[#1A1A1A] uppercase tracking-wider">层级 A：菜单访问配置组 (Menus Access Scope)</span>
+                            <span className="text-[9px] bg-[#1A1A1A]/10 text-[#1A1A1A] font-mono font-bold px-1.5 py-0.5 rounded-sm">5项</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-stone-500 font-medium">
+                            <span>{isMenuAccessExpanded ? '折叠此分类' : '展开展平此分类'}</span>
+                            {isMenuAccessExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          </div>
+                        </button>
+                        {isMenuAccessExpanded && (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[650px]">
+                              <thead>
+                                <tr className="bg-stone-50 border-b border-[#1A1A1A]/10 text-[9px] tracking-wider uppercase font-bold text-[#1A1A1A]/70">
+                                  <th className="py-2.5 px-4 sticky left-0 bg-stone-50 w-36 border-r border-[#1A1A1A]/10 z-10">系统角色 / 职能</th>
+                                  {menuAccessDefinitions.map(p => (
+                                    <th key={p.key} className="py-2.5 px-2 text-center" title={`${p.label}: ${p.desc}`}>
+                                      <div className="text-[10px] leading-tight font-bold text-stone-800">{p.label}</div>
+                                      <span className="text-[8px] opacity-40 font-normal block mt-0.5 leading-tight">{p.desc}</span>
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {filteredRoles.map(role => {
+                                  const currentRp = rolePermissions.find(r => r.roleName === role);
+                                  const currentRpPermissions = currentRp ? currentRp.permissions : [];
+                                  const groupKeys = menuAccessDefinitions.map(p => p.key);
+                                  const isAllSelected = groupKeys.every(pk => currentRpPermissions.includes(pk));
+
+                                  const toggleAllInGroup = () => {
+                                    let nextPerms: string[];
+                                    if (isAllSelected) {
+                                      nextPerms = currentRpPermissions.filter(pk => !groupKeys.includes(pk));
+                                    } else {
+                                      nextPerms = Array.from(new Set([...currentRpPermissions, ...groupKeys]));
+                                    }
+                                    updateRolePermissions(role, nextPerms);
+                                  };
+
+                                  return (
+                                    <tr key={role} className="border-b border-[#1A1A1A]/5 hover:bg-stone-50/50 transition-colors">
+                                      <td className="py-3 px-4 font-bold text-[#1a1a1a] text-xs sticky left-0 bg-white border-r border-[#1A1A1A]/10 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                                        <div className="flex flex-col gap-1">
+                                          <span>{role}</span>
+                                          <button
+                                            type="button"
+                                            onClick={toggleAllInGroup}
+                                            className="text-[9px] text-stone-400 hover:text-black uppercase text-left tracking-wider hover:underline font-mono"
+                                          >
+                                            {isAllSelected ? '清空菜单栏' : '一键勾选组'}
+                                          </button>
+                                        </div>
+                                      </td>
+                                      {menuAccessDefinitions.map(p => {
+                                        const isChecked = currentRpPermissions.includes(p.key);
+                                        const handleToggle = () => {
+                                          const nextPerms = isChecked
+                                            ? currentRpPermissions.filter(pk => pk !== p.key)
+                                            : [...currentRpPermissions, p.key];
+                                          updateRolePermissions(role, nextPerms);
+                                        };
+                                        return (
+                                          <td key={p.key} className="p-2.5 text-center vertical-middle">
+                                            <label className="inline-flex items-center justify-center cursor-pointer p-1">
+                                              <input
+                                                type="checkbox"
+                                                checked={isChecked}
+                                                onChange={handleToggle}
+                                                className="accent-[#1A1A1A] h-4 w-4 rounded-sm border-stone-300 focus:ring-black cursor-pointer"
+                                              />
+                                            </label>
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 业务操作分组面板 */}
+                      <div className="border border-[#1A1A1A]/10 rounded-xl bg-white shadow-xs overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setIsBusinessOpExpanded(!isBusinessOpExpanded)}
+                          className="w-full text-left p-4 bg-stone-100 hover:bg-stone-200/60 transition-colors flex items-center justify-between border-b border-[#1A1A1A]/10 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Sliders className="w-4 h-4 text-stone-600" />
+                            <span className="font-bold text-xs text-[#1A1A1A] uppercase tracking-wider">层级 B：业务操作权限组 (Operations & Access)</span>
+                            <span className="text-[9px] bg-[#1A1A1A]/10 text-[#1A1A1A] font-mono font-bold px-1.5 py-0.5 rounded-sm">4项</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-stone-500 font-medium">
+                            <span>{isBusinessOpExpanded ? '折叠此分类' : '展开展平此分类'}</span>
+                            {isBusinessOpExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          </div>
+                        </button>
+                        {isBusinessOpExpanded && (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[650px]">
+                              <thead>
+                                <tr className="bg-stone-50 border-b border-[#1A1A1A]/10 text-[9px] tracking-wider uppercase font-bold text-[#1A1A1A]/70">
+                                  <th className="py-2.5 px-4 sticky left-0 bg-stone-50 w-36 border-r border-[#1A1A1A]/10 z-10">系统角色 / 职能</th>
+                                  {businessOpDefinitions.map(p => (
+                                    <th key={p.key} className="py-2.5 px-2 text-center" title={`${p.label}: ${p.desc}`}>
+                                      <div className="text-[10px] leading-tight font-bold text-stone-800">{p.label}</div>
+                                      <span className="text-[8px] opacity-40 font-normal block mt-0.5 leading-tight">{p.desc}</span>
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {filteredRoles.map(role => {
+                                  const currentRp = rolePermissions.find(r => r.roleName === role);
+                                  const currentRpPermissions = currentRp ? currentRp.permissions : [];
+                                  const groupKeys = businessOpDefinitions.map(p => p.key);
+                                  const isAllSelected = groupKeys.every(pk => currentRpPermissions.includes(pk));
+
+                                  const toggleAllInGroup = () => {
+                                    let nextPerms: string[];
+                                    if (isAllSelected) {
+                                      nextPerms = currentRpPermissions.filter(pk => !groupKeys.includes(pk));
+                                    } else {
+                                      nextPerms = Array.from(new Set([...currentRpPermissions, ...groupKeys]));
+                                    }
+                                    updateRolePermissions(role, nextPerms);
+                                  };
+
+                                  return (
+                                    <tr key={role} className="border-b border-[#1A1A1A]/5 hover:bg-stone-50/50 transition-colors">
+                                      <td className="py-3 px-4 font-bold text-[#1a1a1a] text-xs sticky left-0 bg-white border-r border-[#1A1A1A]/10 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                                        <div className="flex flex-col gap-1">
+                                          <span>{role}</span>
+                                          <button
+                                            type="button"
+                                            onClick={toggleAllInGroup}
+                                            className="text-[9px] text-stone-400 hover:text-black uppercase text-left tracking-wider hover:underline font-mono"
+                                          >
+                                            {isAllSelected ? '清空操作权' : '一键勾选组'}
+                                          </button>
+                                        </div>
+                                      </td>
+                                      {businessOpDefinitions.map(p => {
+                                        const isChecked = currentRpPermissions.includes(p.key);
+                                        const handleToggle = () => {
+                                          const nextPerms = isChecked
+                                            ? currentRpPermissions.filter(pk => pk !== p.key)
+                                            : [...currentRpPermissions, p.key];
+                                          updateRolePermissions(role, nextPerms);
+                                        };
+                                        return (
+                                          <td key={p.key} className="p-2.5 text-center vertical-middle">
+                                            <label className="inline-flex items-center justify-center cursor-pointer p-1">
+                                              <input
+                                                type="checkbox"
+                                                checked={isChecked}
+                                                onChange={handleToggle}
+                                                className="accent-[#1A1A1A] h-4 w-4 rounded-sm border-stone-300 focus:ring-black cursor-pointer"
+                                              />
+                                            </label>
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* MOBILE VIEW */}
+                    <div className="block md:hidden space-y-4">
+                      <p className="text-[10px] opacity-40 italic">正在使用移动端显示模式，通过角色卡片对 <b>菜单访问 (5项) & 业务操作 (4项)</b> 执行分层管理：</p>
+                      {filteredRoles.map(role => {
+                        const currentRp = rolePermissions.find(r => r.roleName === role);
+                        const currentRpPermissions = currentRp ? currentRp.permissions : [];
+
+                        return (
+                          <details
+                            key={role}
+                            className="group bg-white border border-[#1A1A1A]/10 rounded-xl overflow-hidden transition-all duration-300 [&_summary::-webkit-details-marker]:hidden open:shadow-md"
+                          >
+                            <summary className="flex items-center justify-between p-4 cursor-pointer select-none font-bold text-xs text-[#1A1A1A] hover:bg-stone-50">
+                              <div className="flex items-center gap-2">
+                                <span className="w-1.5 h-3 bg-[#1A1A1A] rounded-full"></span>
+                                <span>{role}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-normal opacity-50 font-mono">
+                                  授权 {currentRpPermissions.length} / {PERMISSION_DEFINITIONS.length}
+                                </span>
+                                <span className="transition-transform duration-300 group-open:rotate-180 transform block text-[8px]">▼</span>
+                              </div>
+                            </summary>
+
+                            <div className="p-4 border-t border-[#1A1A1A]/5 bg-stone-50/50 space-y-4">
+                              <div className="flex justify-between items-center bg-stone-100 p-2 rounded-lg border border-[#1A1A1A]/5">
+                                <span className="text-[9px] font-bold text-[#1A1A1A]/60 uppercase tracking-widest font-mono">复合一键授权</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const allPerms = PERMISSION_DEFINITIONS.map(p => p.key);
+                                    const isAllSelected = allPerms.every(pk => currentRpPermissions.includes(pk));
+                                    const nextPerms = isAllSelected ? [] : allPerms;
+                                    updateRolePermissions(role, nextPerms);
+                                  }}
+                                  className="text-[9px] font-bold text-[#1A1A1A]/70 hover:text-black bg-white border border-[#1A1A1A]/10 px-2 py-1 rounded font-mono active:scale-95 transition-all shadow-xs"
+                                >
+                                  {PERMISSION_DEFINITIONS.map(p => p.key).every(pk => currentRpPermissions.includes(pk)) ? '一键清空' : '一键全选'}
+                                </button>
+                              </div>
+
+                              {/* 1. 菜单访问授权 (5项) */}
+                              <div>
+                                <div className="border-l-2 border-stone-800 pl-2 mb-2 text-[10px] font-bold text-stone-600 uppercase tracking-wider flex items-center justify-between">
+                                  <span>1. 菜单访问分组控制</span>
+                                  <span className="text-[8px] font-mono opacity-50">({menuAccessDefinitions.filter(p => currentRpPermissions.includes(p.key)).length}/5 项已授)</span>
+                                </div>
+                                <div className="grid grid-cols-1 gap-2.5">
+                                  {menuAccessDefinitions.map(p => {
+                                    const isChecked = currentRpPermissions.includes(p.key);
+                                    const handleToggleMobile = () => {
+                                      const nextPerms = isChecked
+                                        ? currentRpPermissions.filter(pk => pk !== p.key)
+                                        : [...currentRpPermissions, p.key];
+                                      updateRolePermissions(role, nextPerms);
+                                    };
+
+                                    return (
+                                      <div key={p.key} className="flex justify-between items-start gap-4 p-2.5 bg-white rounded-lg border border-[#1A1A1A]/5 shadow-sm hover:border-[#1A1A1A]/20 transition-all">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="text-xs font-bold text-[#1A1A1A]">{p.label}</span>
+                                          </div>
+                                          <p className="text-[10px] opacity-50 mt-1 leading-relaxed break-words">{p.desc}</p>
+                                        </div>
+                                        <div className="flex items-center justify-center p-1">
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={handleToggleMobile}
+                                            className="accent-black h-4.5 w-4.5 cursor-pointer rounded border-stone-400"
+                                          />
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* 2. 业务操作授权 (4项) */}
+                              <div className="pt-2">
+                                <div className="border-l-2 border-stone-800 pl-2 mb-2 text-[10px] font-bold text-stone-600 uppercase tracking-wider flex items-center justify-between">
+                                  <span>2. 业务操作分组控制</span>
+                                  <span className="text-[8px] font-mono opacity-50">({businessOpDefinitions.filter(p => currentRpPermissions.includes(p.key)).length}/4 项已授)</span>
+                                </div>
+                                <div className="grid grid-cols-1 gap-2.5">
+                                  {businessOpDefinitions.map(p => {
+                                    const isChecked = currentRpPermissions.includes(p.key);
+                                    const handleToggleMobile = () => {
+                                      const nextPerms = isChecked
+                                        ? currentRpPermissions.filter(pk => pk !== p.key)
+                                        : [...currentRpPermissions, p.key];
+                                      updateRolePermissions(role, nextPerms);
+                                    };
+
+                                    return (
+                                      <div key={p.key} className="flex justify-between items-start gap-4 p-2.5 bg-white rounded-lg border border-[#1A1A1A]/5 shadow-sm hover:border-[#1A1A1A]/20 transition-all">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="text-xs font-bold text-[#1A1A1A]">{p.label}</span>
+                                          </div>
+                                          <p className="text-[10px] opacity-50 mt-1 leading-relaxed break-words">{p.desc}</p>
+                                        </div>
+                                        <div className="flex items-center justify-center p-1">
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={handleToggleMobile}
+                                            className="accent-black h-4.5 w-4.5 cursor-pointer rounded border-stone-400"
+                                          />
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </details>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {/* Status footer inside the tab */}
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] p-3 rounded-lg flex items-center gap-2 font-medium">
+                  <span className="w-1.5 h-1.5 bg-emerald-600 rounded-full animate-ping"></span>
+                  <span>配置同步就绪：保存的数据将直接存入 SQLite 数据库及本地。所有成员的操作权限都会跟随当前安全规则实时更新！</span>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>

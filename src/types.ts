@@ -150,3 +150,9 @@ export interface Outcome {
   date: string;
   status: 'pending_review' | 'approved' | 'rejected';
 }
+
+export interface RolePermission {
+  roleName: string;
+  permissions: string[];
+}
+

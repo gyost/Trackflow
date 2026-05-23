@@ -19,7 +19,7 @@ import { zhCN } from 'date-fns/locale';
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { HelpCircle, LayoutDashboard, Target, TrendingUp, Code2, ClipboardList, User, Settings, LogOut, Search, Plus, Download, Upload, FileSpreadsheet, Filter, Coins, FileText, Wallet, Users, UserX } from 'lucide-react';
 import { mockProjects, mockPlans as initialPlans, mockTasks as initialTasks, mockOutcomes as initialOutcomes, mockMembers, mockGroups, mockRequirements as initialRequirements } from './mockData';
-import { Plan, Task, Outcome, Group, Member, Project, Status, Priority, Requirement, RequirementStatus, RequirementHistory, ReleaseGoal, ProjectTracking, TrackingStatus, FollowupRecord } from './types';
+import { Plan, Task, Outcome, Group, Member, Project, Status, Priority, Requirement, RequirementStatus, RequirementHistory, ReleaseGoal, ProjectTracking, TrackingStatus, FollowupRecord, RolePermission } from './types';
 import { generateId } from './lib/utils';
 import SettingsModal from './components/SettingsModal';
 import RichTextEditor from './components/RichTextEditor';
@@ -44,7 +44,7 @@ function pruneDuplicates<T extends { id: any }>(arr: T[]): T[] {
   });
 }
 
-const TaskProgressInput = React.memo(({ task, onUpdate }: { task: Task, onUpdate: (val: number) => void }) => {
+const TaskProgressInput = React.memo(({ task, onUpdate, disabled = false }: { task: Task, onUpdate: (val: number) => void, disabled?: boolean }) => {
   const [localVal, setLocalVal] = useState(task.progress.toString());
   
   useEffect(() => {
@@ -55,7 +55,7 @@ const TaskProgressInput = React.memo(({ task, onUpdate }: { task: Task, onUpdate
 
   return (
     <div 
-      className="flex items-center gap-0.5 shrink-0 bg-[#EBE9E4] px-1 py-0.5 border border-[#1A1A1A]/10"
+      className={`flex items-center gap-0.5 shrink-0 bg-[#EBE9E4] px-1 py-0.5 border border-[#1A1A1A]/10 ${disabled ? 'opacity-80 cursor-not-allowed select-none' : ''}`}
       onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
@@ -67,10 +67,12 @@ const TaskProgressInput = React.memo(({ task, onUpdate }: { task: Task, onUpdate
         value={localVal}
         min="0"
         max="100"
-        onFocus={(e) => e.target.select()}
+        disabled={disabled}
+        onFocus={(e) => !disabled && e.target.select()}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
         onChange={(e) => {
+          if (disabled) return;
           setLocalVal(e.target.value);
           if (e.target.value === '') {
             onUpdate(0);
@@ -83,12 +85,13 @@ const TaskProgressInput = React.memo(({ task, onUpdate }: { task: Task, onUpdate
           }
         }}
         onBlur={() => {
+          if (disabled) return;
           if (localVal === '') {
             setLocalVal('0');
             onUpdate(0);
           }
         }}
-        className="w-7 text-[10px] font-mono opacity-80 bg-transparent outline-none border-b border-transparent hover:border-[#1A1A1A]/30 focus:border-[#1A1A1A]/50 text-right hide-number-arrows"
+        className={`w-7 text-[10px] font-mono opacity-80 bg-transparent outline-none border-b border-transparent ${disabled ? '' : 'hover:border-[#1A1A1A]/30 focus:border-[#1A1A1A]/50'} text-right hide-number-arrows`}
       />
       <span className="text-[10px] font-mono opacity-80">%</span>
     </div>
@@ -791,6 +794,13 @@ const ProjectTrackingView = ({
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
+  const isSystemAdmin = React.useMemo(() => {
+    if (!currentUser) return false;
+    return currentUser.department === 'admin' || 
+           currentUser.name === 'Admin' || 
+           currentUser.roles?.includes('管理员') || 
+           currentUser.roles?.includes('系统管理员');
+  }, [currentUser]);
   const [currentUserLoaded, setCurrentUserLoaded] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -801,12 +811,86 @@ export default function App() {
   const [isDbLoaded, setIsDbLoaded] = useState(false);
   const [apiError, setApiError] = useState<CentralError | null>(null);
 
+  const [rolePermissions, setRolePermissions] = useState<RolePermission[]>(() => {
+    const saved = localStorage.getItem('role_permissions');
+    if (saved) return JSON.parse(saved);
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('role_permissions', JSON.stringify(rolePermissions));
+    if (isDbLoaded && !useLocalMockMode && rolePermissions.length > 0) {
+      apiService.savePermissions(rolePermissions).then(() => {
+        setSyncError(null);
+      }).catch(e => {
+        console.warn('自动同步权限矩阵到数据库失败:', e);
+        setSyncError(e.message || String(e));
+      });
+    }
+  }, [rolePermissions, isDbLoaded, useLocalMockMode]);
+
   useEffect(() => {
     const unsub = apiService.onError((err) => {
       setApiError(err);
     });
     return unsub;
   }, []);
+
+  const currentUserPermissions = React.useMemo(() => {
+    if (!currentUser) return [];
+    
+    if (isSystemAdmin) {
+      return [
+        'VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS',
+        'EDIT_RELEASE_GOAL', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'REVIEW_DELIVERABLE'
+      ];
+    }
+    
+    const userRoles = currentUser.roles || [];
+    const activePerms = new Set<string>();
+    
+    userRoles.forEach(r => {
+      const rpObj = rolePermissions.find(p => p.roleName === r);
+      if (rpObj) {
+        rpObj.permissions.forEach(pKey => activePerms.add(pKey));
+      } else {
+        const defaultRoleDefaults: Record<string, string[]> = {
+          '系统管理员': ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'],
+          '项目经理': ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'],
+          '部门经理': ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'],
+          '产品总监': ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL'],
+          '市场总监': ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL'],
+          '组长':     ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL', 'MANAGE_PLAN_TASK'],
+          '产品经理': ['VIEW_DASHBOARD', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT'],
+          '研发经理': ['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK'],
+          '测试经理': ['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK'],
+          '市场人员': ['VIEW_DASHBOARD', 'VIEW_MARKETING']
+        };
+        const defaults = defaultRoleDefaults[r] || [];
+        defaults.forEach(pKey => activePerms.add(pKey));
+      }
+    });
+    
+    return Array.from(activePerms);
+  }, [currentUser, rolePermissions]);
+
+  useEffect(() => {
+    if (!currentUser || !isDbLoaded) return;
+    const viewUpper = 'VIEW_' + currentView.toUpperCase();
+    if (!currentUserPermissions.includes(viewUpper)) {
+      const possibleViews = [
+        { view: 'dashboard', permission: 'VIEW_DASHBOARD' },
+        { view: 'tracking', permission: 'VIEW_TRACKING' },
+        { view: 'marketing', permission: 'VIEW_MARKETING' },
+        { view: 'rnd', permission: 'VIEW_RND' },
+        { view: 'requirements', permission: 'VIEW_REQUIREMENTS' },
+      ];
+      const fallback = possibleViews.find(v => currentUserPermissions.includes(v.permission));
+      if (fallback) {
+        setCurrentView(fallback.view);
+      }
+    }
+  }, [currentUser, currentUserPermissions, isDbLoaded, currentView]);
 
   const switchToLocalMockMode = () => {
     console.log('一键切换至纯前端本地 Mock 模式');
@@ -917,6 +1001,8 @@ export default function App() {
       });
     }
   }, [members, isDbLoaded, useLocalMockMode]);
+
+
 
   const [quarterGoalsTexts, setQuarterGoalsTexts] = useState<Record<string, string>>({});
   const [editingQuarterGroupIds, setEditingQuarterGroupIds] = useState<string[]>([]);
@@ -1059,7 +1145,8 @@ export default function App() {
           apiService.getProjectTrackings(),
           apiService.getGroups(),
           apiService.getMembers(),
-          apiService.getSystemSettings()
+          apiService.getSystemSettings(),
+          apiService.getPermissions()
         ]);
         
         const timeoutPromise = new Promise((_, reject) => 
@@ -1078,7 +1165,8 @@ export default function App() {
           trackingsData,
           groupsData,
           membersData,
-          systemSettingsData
+          systemSettingsData,
+          permissionsData
         ] = results;
         console.log('fetchData: Initial fetch done');
 
@@ -1105,10 +1193,11 @@ export default function App() {
                  apiService.getProjectTrackings(),
                  apiService.getGroups(),
                  apiService.getMembers(),
-                 apiService.getSystemSettings()
+                 apiService.getSystemSettings(),
+                 apiService.getPermissions()
                ]);
                const seedResults = await Promise.race([seedFetchPromise, timeoutPromise]) as any;
-               const [p, pl, t, o, r, rg, tr, gData, mData, sData] = seedResults;
+               const [p, pl, t, o, r, rg, tr, gData, mData, sData, permData] = seedResults;
                
                console.log('fetchData: Seed fetch done');
                projectsData = p;
@@ -1121,6 +1210,7 @@ export default function App() {
                groupsData = gData;
                membersData = mData;
                systemSettingsData = sData;
+               permissionsData = permData;
            }
         }
 
@@ -1163,6 +1253,27 @@ export default function App() {
 
           setGroups(pruneDuplicates(finalGroups));
           setMembers(pruneDuplicates(finalMembers));
+
+          // 开启默认角色分配权限
+          if (permissionsData && permissionsData.length > 0) {
+            setRolePermissions(permissionsData);
+          } else {
+            console.log('No permissions rules found, uploading initial ones...');
+            const defaults = [
+              { roleName: '系统管理员', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
+              { roleName: '项目经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
+              { roleName: '部门经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
+              { roleName: '产品总监', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL'] },
+              { roleName: '市场总监', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL'] },
+              { roleName: '组长', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL', 'MANAGE_PLAN_TASK'] },
+              { roleName: '产品经理', permissions: ['VIEW_DASHBOARD', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT'] },
+              { roleName: '研发经理', permissions: ['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK'] },
+              { roleName: '测试经理', permissions: ['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK'] },
+              { roleName: '市场人员', permissions: ['VIEW_DASHBOARD', 'VIEW_MARKETING'] }
+            ];
+            setRolePermissions(defaults);
+            await apiService.savePermissions(defaults).catch(e => console.warn('Sync initial permissions failed', e));
+          }
           
           setIsDbLoaded(true);
           console.log('fetchData: State set successfully');
@@ -1310,11 +1421,15 @@ export default function App() {
       if (updatedMember) {
         if (
           updatedMember.department !== currentUser.department ||
+          updatedMember.name !== currentUser.name ||
+          updatedMember.avatar !== currentUser.avatar ||
           JSON.stringify(updatedMember.roles) !== JSON.stringify(currentUser.roles) ||
           updatedMember.groupId !== currentUser.groupId
         ) {
           const newUser = {
             ...currentUser,
+            name: updatedMember.name,
+            avatar: updatedMember.avatar,
             department: updatedMember.department,
             roles: updatedMember.roles,
             groupId: updatedMember.groupId,
@@ -1379,6 +1494,9 @@ export default function App() {
 
   const handleGoalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentUser.department !== 'marketing' || !currentUser.roles.includes('组长')) {
+      return;
+    }
     const newPlans: Plan[] = [];
     // We will update existing plans if they exist, or create new ones
     const baseDateStr = `${selectedMonth}-01`;
@@ -1565,6 +1683,10 @@ export default function App() {
   const handleReleaseGoalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!releaseGoalForm.title || !releaseGoalForm.groupId || !releaseGoalForm.targetMonth || !releaseGoalForm.targetDate) return;
+    const isRndLeader = currentUser.department === 'rnd' && currentUser.roles.includes('组长') && currentUser.groupId === releaseGoalForm.groupId;
+    if (!isRndLeader) {
+      return;
+    }
 
     try {
       const isNew = !editingReleaseGoal;
@@ -1597,6 +1719,11 @@ export default function App() {
   };
 
   const deleteReleaseGoal = async (id: string) => {
+    const goal = releaseGoals.find(g => g.id === id);
+    if (!goal) return;
+    const isRndLeader = currentUser.department === 'rnd' && currentUser.roles.includes('组长') && currentUser.groupId === goal.groupId;
+    if (!isRndLeader) return;
+
     try {
       await apiService.deleteReleaseGoal(id);
       setReleaseGoals(releaseGoals.filter(g => g.id !== id));
@@ -2102,7 +2229,7 @@ export default function App() {
   const renderTaskGroups = (tasks: Task[], department: 'marketing' | 'rnd') => {
     // 1. Get all groups that belong to this department
     const departmentGroups = groups.filter(g => g.category === department)
-      .filter(g => currentUser.department === 'admin' || g.id === currentUser.groupId);
+      .filter(g => isSystemAdmin || g.id === currentUser.groupId);
     
     // 2. Find any tasks belonging to this department that have unassigned/unknown group
     const taskGroupIds = new Set(tasks.map(t => {
@@ -2116,7 +2243,7 @@ export default function App() {
       ...Array.from(taskGroupIds).filter(id => id === 'unassigned' || !groups.find(g => g.id === id && g.category !== department))
     ]));
 
-    if (currentUser.department !== 'admin') {
+    if (!isSystemAdmin) {
       allGroupIds = allGroupIds.filter(id => id === currentUser.groupId);
     }
 
@@ -2136,7 +2263,7 @@ export default function App() {
     const taskMembersIds = groupTasks.map(t => t.assigneeId);
     let groupMembers = Array.from(new Set([...groupMembersList.map(m => m.id), ...taskMembersIds]));
 
-    const canViewAllInGroup = currentUser.department === 'admin' || (currentUser.roles.includes('组长') && currentUser.groupId === groupId);
+    const canViewAllInGroup = isSystemAdmin || (currentUser.roles.includes('组长') && currentUser.groupId === groupId);
     if (!canViewAllInGroup) {
       groupMembers = groupMembers.filter(id => id === currentUser.id);
     }
@@ -2208,7 +2335,7 @@ export default function App() {
                       <div className="flex-1 min-w-0 lg:border-l border-[#1A1A1A]/10 lg:pl-6">
                         <h5 className="text-[10px] uppercase tracking-widest font-bold opacity-60 mb-4 flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2">
                           <span className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-[#1A1A1A]"></span> 任务与成果项 (Tasks & Outcomes)</span>
-                          {(currentUser.department === 'admin' || currentUser.id === assigneeId) && (
+                          {currentUser.id === assigneeId && (
                             <button onClick={() => openTaskModal(assigneeId, department)} className="text-[9px] hover:text-[#1A1A1A] hover:font-bold opacity-70 hover:opacity-100 transition-colors border border-transparent hover:border-[#1A1A1A] px-1">+ 添加</button>
                           )}
                         </h5>
@@ -2223,9 +2350,9 @@ export default function App() {
                                       <input 
                                         type="checkbox" 
                                         checked={task.status === 'completed' || task.progress === 100}
-                                        disabled={currentUser.department !== 'admin' && currentUser.id !== assigneeId}
+                                        disabled={currentUser.id !== assigneeId}
                                         onChange={(e) => {
-                                          if (currentUser.department !== 'admin' && currentUser.id !== assigneeId) return;
+                                          if (currentUser.id !== assigneeId) return;
                                           const checked = e.target.checked;
                                           const updatedTask: Task = { 
                                             ...task, 
@@ -2251,6 +2378,7 @@ export default function App() {
                                       </p>
                                       <TaskProgressInput 
                                         task={task} 
+                                        disabled={currentUser.id !== assigneeId}
                                         onUpdate={(val) => {
                                           const updatedTask: Task = {
                                             ...task,
@@ -2288,15 +2416,15 @@ export default function App() {
                     </div>
                   );
                 })}
-              </div>
-            )}
+            </div>
+          )}
         </div>
       </div>
     );
   };
 
   // R&D Release Stats Calculation
-  const rndVisibleGroupsList = groups.filter(g => g.category === 'rnd' && (currentUser?.department === 'admin' || g.id === currentUser?.groupId));
+  const rndVisibleGroupsList = groups.filter(g => g.category === 'rnd' && (isSystemAdmin || g.id === currentUser?.groupId));
   const currentMonthReleaseGoals = releaseGoals.filter(g => g.targetMonth === selectedMonth && rndVisibleGroupsList.some(vg => vg.id === g.groupId));
   
   const rndReleaseStats = {
@@ -2523,7 +2651,7 @@ alter table system_settings disable row level security;
             >
               <HelpCircle className="w-5 h-5" />
             </button>
-            {currentUser.department === 'admin' && (
+            {isSystemAdmin && (
               <button 
                 onClick={() => setIsSettingsModalOpen(true)}
                 className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center"
@@ -2542,14 +2670,16 @@ alter table system_settings disable row level security;
         
         <div className="hidden md:flex w-full md:w-auto overflow-x-auto custom-scrollbar pb-1">
           <div className="flex gap-2 items-center text-[12px] uppercase tracking-widest font-bold whitespace-nowrap min-w-max">
-            <button 
-              onClick={() => setCurrentView('dashboard')}
-              className={`px-3 py-1.5 rounded-full transition-all duration-200 ${currentView === 'dashboard' ? 'bg-[#1A1A1A] text-white shadow-md' : 'opacity-60 hover:opacity-100 hover:bg-[#1A1A1A]/5'}`}
-            >
-              全局总览
-            </button>
+            {currentUserPermissions.includes('VIEW_DASHBOARD') && (
+              <button 
+                onClick={() => setCurrentView('dashboard')}
+                className={`px-3 py-1.5 rounded-full transition-all duration-200 ${currentView === 'dashboard' ? 'bg-[#1A1A1A] text-white shadow-md' : 'opacity-60 hover:opacity-100 hover:bg-[#1A1A1A]/5'}`}
+              >
+                全局总览
+              </button>
+            )}
             
-            {(currentUser.roles.includes('项目经理') || currentUser.department === 'admin') && (
+            {currentUserPermissions.includes('VIEW_TRACKING') && (
               <button 
                 onClick={() => setCurrentView('tracking')}
                 className={`px-3 py-1.5 rounded-full transition-all duration-200 ${currentView === 'tracking' ? 'bg-[#1A1A1A] text-white shadow-md' : 'opacity-60 hover:opacity-100 hover:bg-[#1A1A1A]/5'}`}
@@ -2558,12 +2688,8 @@ alter table system_settings disable row level security;
               </button>
             )}
             
-            {[{id: 'marketing', name: '市场开拓'}, {id: 'rnd', name: '产品研发'}, {id: 'requirements', name: '需求池'}]
-              .filter(dept => {
-                if (currentUser.department === 'admin') return true;
-                if (dept.id === 'requirements') return true;
-                return currentUser.department === dept.id;
-              })
+            {[{id: 'marketing', name: '市场开拓', perm: 'VIEW_MARKETING'}, {id: 'rnd', name: '产品研发', perm: 'VIEW_RND'}, {id: 'requirements', name: '需求池', perm: 'VIEW_REQUIREMENTS'}]
+              .filter(dept => currentUserPermissions.includes(dept.perm))
               .map(dept => (
               <button 
                 key={dept.id}
@@ -2586,7 +2712,7 @@ alter table system_settings disable row level security;
             <HelpCircle className="w-3.5 h-3.5" />
             <span>说明</span>
           </button>
-          {currentUser.department === 'admin' && (
+          {isSystemAdmin && (
             <button 
               onClick={() => setIsSettingsModalOpen(true)}
               className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center"
@@ -2631,7 +2757,7 @@ alter table system_settings disable row level security;
                     ))}
                   </div>
                 )}
-                {currentView === 'marketing' && (currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.roles.includes('组长'))) && (
+                 {currentView === 'marketing' && (currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
                   <button 
                     onClick={openGoalModal}
                     className="text-[9px] border border-[#1A1A1A] px-2 py-1 uppercase tracking-widest hover:bg-[#1A1A1A] hover:text-white transition-colors cursor-pointer shrink-0"
@@ -2768,7 +2894,7 @@ alter table system_settings disable row level security;
                           <span className="text-[9px] font-mono text-[#1A1A1A]/50 uppercase leading-none">/ {currentMonthTargetProfit} 目标</span>
                       </div>
                       <div className="w-[40px] flex justify-end shrink-0">
-                        {(currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.roles.includes('组长'))) && (
+                        {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
                           <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
                         )}
                       </div>
@@ -2788,7 +2914,7 @@ alter table system_settings disable row level security;
                           <span className="text-[9px] font-mono text-[#1A1A1A]/50 uppercase leading-none">/ {currentMonthTargetContract} 目标</span>
                       </div>
                       <div className="w-[40px] flex justify-end shrink-0">
-                        {(currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.roles.includes('组长'))) && (
+                        {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
                           <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
                         )}
                       </div>
@@ -2808,7 +2934,7 @@ alter table system_settings disable row level security;
                           <span className="text-[9px] font-mono text-[#1A1A1A]/50 uppercase leading-none">/ {currentMonthTargetCollection} 目标</span>
                       </div>
                       <div className="w-[40px] flex justify-end shrink-0">
-                        {(currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.roles.includes('组长'))) && (
+                        {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
                           <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
                         )}
                       </div>
@@ -2828,7 +2954,7 @@ alter table system_settings disable row level security;
                           <span className="text-[9px] font-mono text-[#1A1A1A]/50 uppercase leading-none">/ {targetLeadClients} 目标</span>
                       </div>
                       <div className="w-[40px] flex justify-end shrink-0">
-                        {(currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.roles.includes('组长'))) && (
+                        {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
                           <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
                         )}
                       </div>
@@ -2848,7 +2974,7 @@ alter table system_settings disable row level security;
                           <span className="text-[9px] font-mono text-[#1A1A1A]/50 uppercase leading-none">/ {targetActiveClients} 目标</span>
                       </div>
                       <div className="w-[40px] flex justify-end shrink-0">
-                        {(currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.roles.includes('组长'))) && (
+                        {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
                           <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
                         )}
                       </div>
@@ -2868,7 +2994,7 @@ alter table system_settings disable row level security;
                           <span className="text-[9px] font-mono text-[#1A1A1A]/50 uppercase leading-none">/ {targetLostClients} 上限</span>
                       </div>
                       <div className="w-[40px] flex justify-end shrink-0">
-                        {(currentUser.department === 'admin' || (currentUser.department === 'marketing' && currentUser.roles.includes('组长'))) && (
+                        {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
                           <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
                         )}
                       </div>
@@ -2885,12 +3011,12 @@ alter table system_settings disable row level security;
                     <span className="w-1.5 h-1.5 bg-[#1A1A1A] rounded-full"></span>
                     {selectedMonth} 上线产品数据看板
                   </h3>
-                  {(currentUser.department === 'admin' || (currentUser.department === 'rnd' && currentUser.roles.includes('组长'))) && (
+                  {(currentUser.department === 'rnd' && currentUser.roles.includes('组长')) && (
                     <button onClick={() => {
                       setEditingReleaseGoal(null);
                       setReleaseGoalForm({
                         title: '', targetMonth: selectedMonth, targetDate: '', status: 'planned', 
-                        groupId: currentUser.department === 'admin' ? (groups.filter(g => g.category === 'rnd').length > 0 ? groups.filter(g => g.category === 'rnd')[0].id : '') : currentUser.groupId
+                        groupId: currentUser.groupId
                       });
                       setIsReleaseGoalModalOpen(true);
                     }} className="text-[9px] uppercase tracking-widest border border-[#1A1A1A] px-2 py-1 hover:bg-[#1A1A1A] hover:text-white transition-colors cursor-pointer">
@@ -2916,12 +3042,12 @@ alter table system_settings disable row level security;
                     <div className="flex flex-wrap gap-x-4 gap-y-2">
                       {rndReleaseStats.groups.length > 0 ? rndReleaseStats.groups.map(g => (
                         <div key={g.id} className="flex items-center gap-2 text-xs">
-                          <span className="font-bold opacity-80">{g.name}:</span>
-                          <span className="font-mono">
-                            <span className="text-[#16a34a]">{g.released}</span>
-                            <span className="opacity-40">/</span>
-                            <span className="opacity-80">{g.target}</span>
-                          </span>
+                           <span className="font-bold opacity-80">{g.name}:</span>
+                           <span className="font-mono">
+                             <span className="text-[#16a34a]">{g.released}</span>
+                             <span className="opacity-40">/</span>
+                             <span className="opacity-80">{g.target}</span>
+                           </span>
                         </div>
                       )) : (
                         <span className="text-[9px] opacity-40 italic">暂无研发小组</span>
@@ -2931,10 +3057,10 @@ alter table system_settings disable row level security;
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  {releaseGoals.filter(g => g.targetMonth === selectedMonth && (currentUser.department === 'admin' || currentUser.groupId === g.groupId)).length > 0 ? (
-                    pruneDuplicates(releaseGoals.filter(g => g.targetMonth === selectedMonth && (currentUser.department === 'admin' || currentUser.groupId === g.groupId))).map(goal => {
+                  {releaseGoals.filter(g => g.targetMonth === selectedMonth && (isSystemAdmin || currentUser.groupId === g.groupId)).length > 0 ? (
+                    pruneDuplicates(releaseGoals.filter(g => g.targetMonth === selectedMonth && (isSystemAdmin || currentUser.groupId === g.groupId))).map(goal => {
                       const group = groups.find(g => g.id === goal.groupId);
-                      const canEdit = currentUser.department === 'admin' || (currentUser.groupId === goal.groupId && currentUser.roles.includes('组长'));
+                      const canEdit = currentUser.groupId === goal.groupId && currentUser.roles.includes('组长');
                       return (
                         <div key={goal.id} className="border border-[#1A1A1A]/10 p-3 hover:bg-[#1A1A1A]/5 transition-colors group relative cursor-pointer" onClick={() => {
                           if (!canEdit) return;
@@ -3143,10 +3269,10 @@ alter table system_settings disable row level security;
             ) : (
               <div className="space-y-8">
               {(currentView === 'dashboard' ? groups : groups.filter(g => g.category === currentView))
-                .filter(g => currentView === 'dashboard' || currentUser.department === 'admin' || currentUser.groupId === g.id)
+                .filter(g => currentView === 'dashboard' || isSystemAdmin || currentUser.groupId === g.id)
                 .map(group => {
                 const storageKey = `${group.id}_${currentView === 'dashboard' ? selectedQuarter : selectedMonth}`;
-                const canEditGoal = currentUser.department === 'admin' || (currentUser.roles.includes('组长') && currentUser.groupId === group.id);
+                const canEditGoal = currentUser.roles.includes('组长') && currentUser.groupId === group.id;
                 return (
                 <div key={group.id} className="space-y-3 relative group">
                   <div className="flex justify-between items-center">
@@ -3345,7 +3471,7 @@ alter table system_settings disable row level security;
                                 </span>
                               </div>
                               <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity self-end sm:self-auto flex-wrap justify-end items-center bg-white/50 backdrop-blur-sm sm:bg-transparent rounded-sm p-1 sm:p-0">
-                                {(currentUser.department === 'admin' || currentUser.id === req.submitterId) && (
+                                {(isSystemAdmin || currentUser.id === req.submitterId) && (
                                   <select 
                                     value={req.status}
                                     onClick={(e) => e.stopPropagation()}
@@ -3506,7 +3632,7 @@ alter table system_settings disable row level security;
           </div>
 
           {/* Monthly Comparison Analysis (Dashboard Exclusive) */}
-          {currentView === 'tracking' && (currentUser.roles.includes('项目经理') || currentUser.department === 'admin') && (
+          {currentView === 'tracking' && (currentUser.roles.includes('项目经理') || isSystemAdmin) && (
               <ProjectTrackingView 
                 trackings={projectTrackings}
                 onDelete={terminateTracking}
@@ -4056,15 +4182,17 @@ alter table system_settings disable row level security;
       {/* Mobile Bottom Navigation (Apple Style) */}
       <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white/70 backdrop-blur-2xl border-t border-black/5 z-40 pb-[env(safe-area-inset-bottom)] px-2 h-[calc(70px+env(safe-area-inset-bottom))] flex items-center justify-around shadow-[0_-10px_40px_rgba(0,0,0,0.04)] before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-white/40">
         
-        <button 
-          onClick={() => setCurrentView('dashboard')}
-          className={`flex flex-col items-center justify-center w-16 h-14 gap-1 rounded-xl transition-all pt-1 ${currentView === 'dashboard' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
-        >
-           <LayoutDashboard className={`w-5 h-5 transition-transform ${currentView === 'dashboard' ? 'scale-110' : ''}`} strokeWidth={currentView === 'dashboard' ? 2.5 : 2} />
-           <span className={`text-[9px] font-bold tracking-wider ${currentView === 'dashboard' ? 'opacity-100' : 'opacity-80'}`}>全局</span>
-        </button>
+        {currentUserPermissions.includes('VIEW_DASHBOARD') && (
+          <button 
+            onClick={() => setCurrentView('dashboard')}
+            className={`flex flex-col items-center justify-center w-16 h-14 gap-1 rounded-xl transition-all pt-1 ${currentView === 'dashboard' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
+          >
+             <LayoutDashboard className={`w-5 h-5 transition-transform ${currentView === 'dashboard' ? 'scale-110' : ''}`} strokeWidth={currentView === 'dashboard' ? 2.5 : 2} />
+             <span className={`text-[9px] font-bold tracking-wider ${currentView === 'dashboard' ? 'opacity-100' : 'opacity-80'}`}>全局</span>
+          </button>
+        )}
 
-        {(currentUser.roles.includes('项目经理') || currentUser.department === 'admin') && (
+        {currentUserPermissions.includes('VIEW_TRACKING') && (
           <button 
             onClick={() => setCurrentView('tracking')}
             className={`flex flex-col items-center justify-center w-16 h-14 gap-1 rounded-xl transition-all pt-1 ${currentView === 'tracking' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
@@ -4074,7 +4202,7 @@ alter table system_settings disable row level security;
           </button>
         )}
 
-        {(currentUser.department === 'admin' || currentUser.department === 'marketing') && (
+        {currentUserPermissions.includes('VIEW_MARKETING') && (
           <button 
             onClick={() => setCurrentView('marketing')}
             className={`flex flex-col items-center justify-center w-16 h-14 gap-1 rounded-xl transition-all pt-1 ${currentView === 'marketing' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
@@ -4084,7 +4212,7 @@ alter table system_settings disable row level security;
           </button>
         )}
 
-        {(currentUser.department === 'admin' || currentUser.department === 'rnd') && (
+        {currentUserPermissions.includes('VIEW_RND') && (
           <button 
             onClick={() => setCurrentView('rnd')}
             className={`flex flex-col items-center justify-center w-16 h-14 gap-1 rounded-xl transition-all pt-1 ${currentView === 'rnd' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
@@ -4094,13 +4222,15 @@ alter table system_settings disable row level security;
           </button>
         )}
 
-        <button 
-          onClick={() => setCurrentView('requirements')}
-          className={`flex flex-col items-center justify-center w-16 h-14 gap-1 rounded-xl transition-all pt-1 ${currentView === 'requirements' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
-        >
-           <ClipboardList className={`w-5 h-5 transition-transform ${currentView === 'requirements' ? 'scale-110' : ''}`} strokeWidth={currentView === 'requirements' ? 2.5 : 2} />
-           <span className={`text-[9px] font-bold tracking-wider ${currentView === 'requirements' ? 'opacity-100' : 'opacity-80'}`}>需求</span>
-        </button>
+        {currentUserPermissions.includes('VIEW_REQUIREMENTS') && (
+          <button 
+            onClick={() => setCurrentView('requirements')}
+            className={`flex flex-col items-center justify-center w-16 h-14 gap-1 rounded-xl transition-all pt-1 ${currentView === 'requirements' ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/40'}`}
+          >
+             <ClipboardList className={`w-5 h-5 transition-transform ${currentView === 'requirements' ? 'scale-110' : ''}`} strokeWidth={currentView === 'requirements' ? 2.5 : 2} />
+             <span className={`text-[9px] font-bold tracking-wider ${currentView === 'requirements' ? 'opacity-100' : 'opacity-80'}`}>需求</span>
+          </button>
+        )}
 
       </nav>
 
@@ -4124,10 +4254,10 @@ alter table system_settings disable row level security;
                   onChange={(e) => setReleaseGoalForm({...releaseGoalForm, groupId: e.target.value})} 
                   className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-1 text-sm font-mono pb-2"
                   required
-                  disabled={currentUser.department !== 'admin'}
+                  disabled={!isSystemAdmin}
                 >
                   <option value="" disabled>--请选择小组--</option>
-                  {(currentUser.department === 'admin' ? groups.filter(g => g.category === 'rnd') : groups.filter(g => g.id === currentUser.groupId)).map(g => (
+                  {(isSystemAdmin ? groups.filter(g => g.category === 'rnd') : groups.filter(g => g.id === currentUser.groupId)).map(g => (
                     <option key={g.id} value={g.id}>{g.name}</option>
                   ))}
                 </select>
@@ -5441,7 +5571,7 @@ alter table system_settings disable row level security;
             </div>
             
             <div className="px-8 py-5 border-t border-[#1A1A1A]/10 bg-gray-50 flex justify-end gap-3 sm:gap-4 shadow-[0_-4px_10px_rgba(0,0,0,0.02)] relative z-10">
-              {(currentUser?.department === 'admin' || currentUser?.id === selectedRequirement.submitterId) && (
+              {(isSystemAdmin || currentUser?.id === selectedRequirement.submitterId) && (
                 <button 
                   onClick={() => {
                     deleteRequirement(selectedRequirement.id);
@@ -5455,7 +5585,7 @@ alter table system_settings disable row level security;
                   删除
                 </button>
               )}
-              {( (currentUser?.department === 'admin' || currentUser?.id === selectedRequirement.submitterId) && (selectedRequirement.status === 'backlog' || selectedRequirement.status === 'reviewing') ) && (
+              {( (isSystemAdmin || currentUser?.id === selectedRequirement.submitterId) && (selectedRequirement.status === 'backlog' || selectedRequirement.status === 'reviewing') ) && (
                 <button 
                   onClick={() => {
                     setIsRequirementDetailModalOpen(false);
@@ -5731,6 +5861,8 @@ alter table system_settings disable row level security;
           setAuthorizedCompanies={setAuthorizedCompanies}
           syncError={syncError}
           setSyncError={setSyncError}
+          rolePermissions={rolePermissions}
+          setRolePermissions={setRolePermissions}
         />
       )}
 

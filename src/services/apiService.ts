@@ -1,6 +1,6 @@
 import { injectOrgId } from '../lib/orgService';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Plan, Task, Outcome, Project, Requirement, RequirementHistory, ReleaseGoal, ProjectTracking, FollowupRecord, Member, Group } from '../types';
+import { Plan, Task, Outcome, Project, Requirement, RequirementHistory, ReleaseGoal, ProjectTracking, FollowupRecord, Member, Group, RolePermission } from '../types';
 import { mockProjects, mockPlans, mockTasks, mockOutcomes, mockRequirements, mockMembers, mockGroups } from '../mockData';
 
 // Central Error Reporting Types
@@ -758,7 +758,12 @@ export const apiService = {
       }
 
       if (members.length > 0) {
-        const snaked = toSnakeCase(members);
+        // 过滤数据库中不存在的冗余字段（如 category），防止 Supabase Schema 列名不匹配报错
+        const sanitizedMembers = members.map(m => {
+          const { category, ...rest } = m as any;
+          return rest;
+        });
+        const snaked = toSnakeCase(sanitizedMembers);
         const injected = await injectOrgId(snaked, 'members');
         const { error } = await supabase.from('members').upsert(injected);
         if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭 members 表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
@@ -838,5 +843,71 @@ export const apiService = {
       const { error } = await supabase.from('system_settings').upsert(injected);
       if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): ' + error.message : error.message || JSON.stringify(error));
     }, '保存业务指标与系统设置');
+  },
+
+  getPermissions: async (): Promise<RolePermission[]> => {
+    return executeWithRetry(async () => {
+      if (apiService.isLocalMockActive()) {
+        try {
+          const res = await fetchSQLite('/api/permissions');
+          return toCamelCase(res);
+        } catch (sqliteErr) {
+          console.warn('[SQLite Fallback] 获取权限设置失败, 使用本地存储:', sqliteErr);
+          const stored = getLocalData<RolePermission[]>('role_permissions', []);
+          if (stored.length > 0) return stored;
+          return [
+            { roleName: '项目经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
+            { roleName: '部门经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
+            { roleName: '产品总监', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL'] },
+            { roleName: '市场总监', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL'] },
+            { roleName: '组长', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL', 'MANAGE_PLAN_TASK'] },
+            { roleName: '产品经理', permissions: ['VIEW_DASHBOARD', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT'] },
+            { roleName: '研发经理', permissions: ['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK'] },
+            { roleName: '测试经理', permissions: ['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK'] },
+            { roleName: '市场人员', permissions: ['VIEW_DASHBOARD', 'VIEW_MARKETING'] }
+          ];
+        }
+      }
+      ensureConfigured();
+      const { data, error } = await supabase.from('role_permissions').select('*');
+      if (error) {
+        try {
+          const res = await fetchSQLite('/api/permissions');
+          return toCamelCase(res);
+        } catch {
+          throw new Error('Supabase 权限加载失败且 SQLite 不可用: ' + error.message);
+        }
+      }
+      return data.map((d: any) => ({
+        roleName: d.role_name || d.roleName,
+        permissions: typeof d.permissions === 'string' ? JSON.parse(d.permissions) : d.permissions
+      }));
+    }, '获取角色权限配置');
+  },
+
+  savePermissions: async (permissions: RolePermission[]): Promise<void> => {
+    return executeWithRetry(async () => {
+      try {
+        await fetchSQLite('/api/permissions', {
+          method: 'POST',
+          body: JSON.stringify(permissions)
+        });
+      } catch (sqliteErr) {
+        console.warn('[SQLite Fallback] 保存权限配置到 SQLite 失败，仅存入 localStorage:', sqliteErr);
+      }
+      
+      setLocalData('role_permissions', permissions);
+
+      if (!apiService.isLocalMockActive()) {
+        ensureConfigured();
+        const snaked = permissions.map(p => ({
+          role_name: p.roleName,
+          permissions: JSON.stringify(p.permissions)
+        }));
+        const injected = await injectOrgId(snaked, 'role_permissions');
+        const { error } = await supabase.from('role_permissions').upsert(injected);
+        if (error) console.warn('Supabase 保存角色权限失败:', error.message);
+      }
+    }, '保存角色权限配置');
   }
 };
