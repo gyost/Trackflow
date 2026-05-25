@@ -729,9 +729,28 @@ export const apiService = {
             roles = m.roles.split(',').filter(Boolean);
           }
         }
+
+        let account = m.account;
+        let password = m.password;
+        const credsRole = roles.find(r => r.startsWith('__CREDS__:'));
+        if (credsRole) {
+          try {
+            const decoded = decodeURIComponent(atob(credsRole.substring(10)));
+            const packed = JSON.parse(decoded);
+            account = packed.account || account;
+            password = packed.password || password;
+          } catch (e) {
+            console.warn('Failed to decode credentials from roles', e);
+          }
+        }
+
+        const filteredRoles = roles.filter(r => !r.startsWith('__CREDS__:'));
+
         return {
           ...m,
-          roles
+          roles: filteredRoles,
+          account,
+          password
         };
       });
     }, '获取团队成员名册');
@@ -758,10 +777,22 @@ export const apiService = {
       }
 
       if (members.length > 0) {
-        // 过滤数据库中不存在的冗余字段（如 category），防止 Supabase Schema 列名不匹配报错
+        // 过滤数据库中不存在的冗余字段（如 category, account, password），防止 Supabase Schema 列名不匹配报错
         const sanitizedMembers = members.map(m => {
-          const { category, ...rest } = m as any;
-          return rest;
+          const { category, account, password, ...rest } = m as any;
+          const updatedRoles = [...(m.roles || [])];
+          if (m.account || m.password) {
+            try {
+              const b64 = btoa(encodeURIComponent(JSON.stringify({ account: m.account || '', password: m.password || '' })));
+              updatedRoles.push(`__CREDS__:${b64}`);
+            } catch (e) {
+              console.warn('Failed to encode credentials', e);
+            }
+          }
+          return {
+            ...rest,
+            roles: updatedRoles
+          };
         });
         const snaked = toSnakeCase(sanitizedMembers);
         const injected = await injectOrgId(snaked, 'members');
