@@ -96,6 +96,12 @@ const TaskProgressInput = React.memo(({ task, onUpdate, disabled = false }: { ta
       <span className="text-[10px] font-mono opacity-80">%</span>
     </div>
   );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.disabled === nextProps.disabled &&
+    prevProps.task.progress === nextProps.task.progress &&
+    prevProps.task.id === nextProps.task.id
+  );
 });
 
 interface TaskItemProps {
@@ -190,6 +196,26 @@ const TaskItemCard = React.memo(({
       </div>
     </div>
   );
+}, (prevProps, nextProps) => {
+  if (prevProps.assigneeId !== nextProps.assigneeId) return false;
+  if (prevProps.currentUser.id !== nextProps.currentUser.id) return false;
+  if (prevProps.setSelectedTask !== nextProps.setSelectedTask) return false;
+  if (prevProps.setIsTaskDetailModalOpen !== nextProps.setIsTaskDetailModalOpen) return false;
+  if (prevProps.setTasks !== nextProps.setTasks) return false;
+  
+  const tPrev = prevProps.task;
+  const tNext = nextProps.task;
+  return (
+    tPrev.id === tNext.id &&
+    tPrev.title === tNext.title &&
+    tPrev.progress === tNext.progress &&
+    tPrev.status === tNext.status &&
+    tPrev.projectName === tNext.projectName &&
+    tPrev.outcome === tNext.outcome &&
+    tPrev.startDate === tNext.startDate &&
+    tPrev.endDate === tNext.endDate &&
+    tPrev.plannedProgress === tNext.plannedProgress
+  );
 });
 TaskItemCard.displayName = 'TaskItemCard';
 
@@ -279,6 +305,36 @@ const MemberTaskCard = React.memo(({
       </div>
     </div>
   );
+}, (prevProps, nextProps) => {
+  if (prevProps.assigneeId !== nextProps.assigneeId) return false;
+  if (prevProps.department !== nextProps.department) return false;
+  if (prevProps.currentUser.id !== nextProps.currentUser.id) return false;
+  if (prevProps.openTaskModal !== nextProps.openTaskModal) return false;
+  if (prevProps.setSelectedTask !== nextProps.setSelectedTask) return false;
+  if (prevProps.setIsTaskDetailModalOpen !== nextProps.setIsTaskDetailModalOpen) return false;
+  if (prevProps.setTasks !== nextProps.setTasks) return false;
+  
+  if (prevProps.assignee?.id !== nextProps.assignee?.id) return false;
+  if (prevProps.assignee?.name !== nextProps.assignee?.name) return false;
+  if (prevProps.assignee?.avatar !== nextProps.assignee?.avatar) return false;
+  
+  const prevTasks = prevProps.memberTasks;
+  const nextTasks = nextProps.memberTasks;
+  if (prevTasks.length !== nextTasks.length) return false;
+  for (let i = 0; i < prevTasks.length; i++) {
+    const tPrev = prevTasks[i];
+    const tNext = nextTasks[i];
+    if (tPrev.id !== tNext.id) return false;
+    if (tPrev.progress !== tNext.progress) return false;
+    if (tPrev.status !== tNext.status) return false;
+    if (tPrev.title !== tNext.title) return false;
+    if (tPrev.outcome !== tNext.outcome) return false;
+    if (tPrev.endDate !== tNext.endDate) return false;
+    if (tPrev.startDate !== tNext.startDate) return false;
+    if (tPrev.projectName !== tNext.projectName) return false;
+    if (tPrev.plannedProgress !== tNext.plannedProgress) return false;
+  }
+  return true;
 });
 MemberTaskCard.displayName = 'MemberTaskCard';
 
@@ -1863,6 +1919,40 @@ export default function App() {
     setMembers(prev => prev.map(m => m.id === currentUser.id ? { ...m, account, password: pass } : m));
   };
 
+  const openTaskModal = React.useCallback((memberId: string, dept: 'marketing' | 'rnd') => {
+    setSelectedMemberId(memberId);
+    setSelectedDepartment(dept);
+    setTaskForms([{ id: generateId(), title: '', plannedProgress: '0', startDate: format(currentWeekDate, 'yyyy-MM-dd'), endDate: format(currentWeekDate, 'yyyy-MM-dd'), projectName: '', outcome: '' }]);
+    setIsTaskModalOpen(true);
+  }, [currentWeekDate]);
+
+  const openOutcomeModal = React.useCallback((memberId: string, dept: 'marketing' | 'rnd') => {
+    setSelectedMemberId(memberId);
+    setSelectedDepartment(dept);
+    setOutcomeForms([{ id: generateId(), title: '', description: '', date: format(currentWeekDate, 'yyyy-MM-dd') }]);
+    setIsOutcomeModalOpen(true);
+  }, [currentWeekDate]);
+
+  const marketingTasks = React.useMemo(() => {
+    return tasks.filter(t => {
+      const project = projects.find(p => p.id === t.projectId);
+      const assignee = members.find(m => m.id === t.assigneeId);
+      const isInWeek = t.endDate ? isSameWeek(parseISO(t.endDate), currentWeekDate, { weekStartsOn: 1 }) : false;
+      const category = project?.category || assignee?.department;
+      return category === 'marketing' && isInWeek;
+    });
+  }, [tasks, projects, members, currentWeekDate]);
+
+  const rndTasks = React.useMemo(() => {
+    return tasks.filter(t => {
+      const project = projects.find(p => p.id === t.projectId);
+      const assignee = members.find(m => m.id === t.assigneeId);
+      const isInWeek = t.endDate ? isSameWeek(parseISO(t.endDate), currentWeekDate, { weekStartsOn: 1 }) : false;
+      const category = project?.category || assignee?.department;
+      return category === 'rnd' && isInWeek;
+    });
+  }, [tasks, projects, members, currentWeekDate]);
+
   if (!currentUserLoaded) {
     return <div className="h-screen w-full bg-[#F7F6F2]"></div>;
   }
@@ -1995,19 +2085,7 @@ export default function App() {
     }
   };
 
-  const openTaskModal = (memberId: string, dept: 'marketing' | 'rnd') => {
-    setSelectedMemberId(memberId);
-    setSelectedDepartment(dept);
-    setTaskForms([{ id: generateId(), title: '', plannedProgress: '0', startDate: format(currentWeekDate, 'yyyy-MM-dd'), endDate: format(currentWeekDate, 'yyyy-MM-dd'), projectName: '', outcome: '' }]);
-    setIsTaskModalOpen(true);
-  };
 
-  const openOutcomeModal = (memberId: string, dept: 'marketing' | 'rnd') => {
-    setSelectedMemberId(memberId);
-    setSelectedDepartment(dept);
-    setOutcomeForms([{ id: generateId(), title: '', description: '', date: format(currentWeekDate, 'yyyy-MM-dd') }]);
-    setIsOutcomeModalOpen(true);
-  };
 
   const handleTaskSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2399,21 +2477,7 @@ export default function App() {
   const monthPlans = plans.filter(p => p.level === 'month' && projectIds.includes(p.projectId));
 
 
-  const marketingTasks = tasks.filter(t => {
-    const project = projects.find(p => p.id === t.projectId);
-    const assignee = members.find(m => m.id === t.assigneeId);
-    const isInWeek = isSameWeek(parseISO(t.endDate), currentWeekDate, { weekStartsOn: 1 });
-    const category = project?.category || assignee?.department;
-    return category === 'marketing' && isInWeek;
-  });
 
-  const rndTasks = tasks.filter(t => {
-    const project = projects.find(p => p.id === t.projectId);
-    const assignee = members.find(m => m.id === t.assigneeId);
-    const isInWeek = isSameWeek(parseISO(t.endDate), currentWeekDate, { weekStartsOn: 1 });
-    const category = project?.category || assignee?.department;
-    return category === 'rnd' && isInWeek;
-  });
 
   const totalProgress = filteredProjects.reduce((acc, curr) => acc + curr.progress, 0);
 
@@ -2608,206 +2672,6 @@ export default function App() {
     { name: '已验收交付', value: tasks.filter(t => t.status === 'completed').length },
   ];
   const PIE_COLORS = ['#d1d5db', '#3f3f46', '#22c55e'];
-
-  const renderTaskGroups = (tasks: Task[], department: 'marketing' | 'rnd') => {
-    // 1. Get all groups that belong to this department
-    const departmentGroups = groups.filter(g => g.category === department)
-      .filter(g => isSystemAdmin || g.id === currentUser.groupId);
-    
-    // 2. Find any tasks belonging to this department that have unassigned/unknown group
-    const taskGroupIds = new Set(tasks.map(t => {
-      const member = members.find(m => m.id === t.assigneeId);
-      return member?.groupId || 'unassigned';
-    }));
-
-    // Combine department groups and unassigned/unknown groups from tasks
-    let allGroupIds = Array.from(new Set([
-      ...departmentGroups.map(g => g.id),
-      ...Array.from(taskGroupIds).filter(id => id === 'unassigned' || !groups.find(g => g.id === id && g.category !== department))
-    ]));
-
-    if (!isSystemAdmin) {
-      allGroupIds = allGroupIds.filter(id => id === currentUser.groupId);
-    }
-
-    if (allGroupIds.length === 0) {
-      return <p className="text-sm opacity-50 italic">暂无进行中的任务或无权限查看</p>;
-    }
-    
-    const selectedGroupId = selectedTaskGroupIds[department] || allGroupIds[0];
-    const groupId = allGroupIds.includes(selectedGroupId) ? selectedGroupId : allGroupIds[0];
-    
-    const groupTasks = tasks.filter(t => {
-      const member = members.find(m => m.id === t.assigneeId);
-      return (member?.groupId || 'unassigned') === groupId;
-    });
-    
-    const groupMembersList = members.filter(m => (m.groupId || 'unassigned') === groupId && m.department === department);
-    const taskMembersIds = groupTasks.map(t => t.assigneeId);
-    let groupMembers = Array.from(new Set([...groupMembersList.map(m => m.id), ...taskMembersIds]));
-
-    const canViewAllInGroup = isSystemAdmin || (currentUser.roles.includes('组长') && currentUser.groupId === groupId);
-    if (!canViewAllInGroup) {
-      groupMembers = groupMembers.filter(id => id === currentUser.id);
-    }
-
-    return (
-      <div className="space-y-6">
-        <div className="border-b border-[#1A1A1A]/10 flex overflow-x-auto custom-scrollbar hide-scrollbar-on-mobile mb-6">
-          <div className="flex gap-6 min-w-max px-2">
-            {allGroupIds.map(id => {
-              const name = id === 'unassigned' ? '未分组' : (groups.find(g => g.id === id)?.name || '未知小组');
-              const isSelected = groupId === id;
-              return (
-                <button
-                  key={id}
-                  onClick={() => setSelectedTaskGroupIds(prev => ({ ...prev, [department]: id }))}
-                  className={`text-[12px] font-bold uppercase tracking-widest pb-3 px-1 transition-all border-b-2 whitespace-nowrap ${isSelected ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-[#1A1A1A]/40 hover:text-[#1A1A1A]/80'}`}
-                >
-                  {name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div key={groupId}>
-          {groupMembers.length === 0 ? (
-            <p className="text-sm opacity-50 italic px-2">该小组暂无进行中的任务</p>
-          ) : (
-            <div className="space-y-6">
-              {groupMembers.map(assigneeId => {
-                const assignee = members.find(m => m.id === assigneeId);
-                const memberTasks = groupTasks.filter(t => t.assigneeId === assigneeId)
-                  .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
-                const memberOutcomes = outcomes.filter(o => {
-                  if (o.submitterId !== assigneeId) return false;
-                  const project = projects.find(p => p.id === o.projectId);
-                  const submitter = members.find(m => m.id === o.submitterId);
-                  const category = project?.category || submitter?.department;
-                  return category === department;
-                });
-                const memberProgress = memberTasks.length > 0
-                  ? Math.round(memberTasks.reduce((acc, curr) => acc + curr.progress, 0) / memberTasks.length)
-                  : 0;
-
-                return (
-                  <div key={assigneeId} className="bg-[#EBE9E4]/30 border border-[#1A1A1A]/10 p-5 sm:p-6 transition-colors hover:bg-[#EBE9E4]/60">
-                    <div className="flex flex-col lg:flex-row gap-6">
-                      
-                      {/* Left Sidebar (Avatar, Name, Stats) */}
-                      <div className="flex flex-row lg:flex-col items-center lg:items-start gap-4 lg:w-48 shrink-0">
-                        <img src={assignee?.avatar} alt={assignee?.name} className="w-12 h-12 lg:w-16 lg:h-16 rounded-full border border-[#1A1A1A]/20 shrink-0 object-cover bg-white" />
-                        <div className="min-w-0">
-                          <p className="text-base lg:text-lg font-bold truncate">{assignee?.name}</p>
-                          <p className="text-[10px] opacity-60 uppercase tracking-widest truncate">{assignee?.roles?.join(', ')}</p>
-                        </div>
-                        <div className="flex lg:flex-col gap-5 lg:gap-6 ml-auto lg:ml-0 lg:mt-2 lg:w-full border-l lg:border-l-0 lg:border-t border-[#1A1A1A]/10 pl-5 lg:pl-0 lg:pt-5">
-                          <div className="flex flex-col items-center lg:items-start shrink-0">
-                            <span className="text-2xl lg:text-3xl font-serif italic leading-none">{memberTasks.length}</span>
-                            <p className="text-[9px] uppercase tracking-widest opacity-50 mt-1 whitespace-nowrap">行动项目</p>
-                          </div>
-                          <div className="flex flex-col items-center lg:items-start shrink-0">
-                            <span className="text-2xl lg:text-3xl font-serif italic leading-none">{memberTasks.filter(t => !!t.outcome).length}</span>
-                            <p className="text-[9px] uppercase tracking-widest opacity-50 mt-1 whitespace-nowrap">产出成果</p>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Right Content */}
-                      <div className="flex-1 min-w-0 lg:border-l border-[#1A1A1A]/10 lg:pl-6">
-                        <h5 className="text-[10px] uppercase tracking-widest font-bold opacity-60 mb-4 flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2">
-                          <span className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-[#1A1A1A]"></span> 任务与成果项 (Tasks & Outcomes)</span>
-                          {currentUser.id === assigneeId && (
-                            <button onClick={() => openTaskModal(assigneeId, department)} className="text-[9px] hover:text-[#1A1A1A] hover:font-bold opacity-70 hover:opacity-100 transition-colors border border-transparent hover:border-[#1A1A1A] px-1">+ 添加</button>
-                          )}
-                        </h5>
-                        <div className="space-y-4 lg:grid lg:grid-cols-1 xl:grid-cols-2 lg:space-y-0 lg:gap-6">
-                          {memberTasks.length === 0 ? (
-                              <p className="text-sm opacity-50 italic py-2 col-span-2">暂无进行中的任务</p>
-                            ) : (
-                              pruneDuplicates(memberTasks).map((task) => {
-                                return (
-                                <div key={task.id} className={`border-l-2 ${task.status === 'completed' || task.progress === 100 ? 'border-[#1A1A1A]/30 opacity-60 bg-[#1A1A1A]/5' : 'border-[#1A1A1A] bg-white/70'} p-3 hover:bg-[#1A1A1A]/10 transition-colors flex items-start gap-3`}>
-                                  <div className="pt-0.5">
-                                      <input 
-                                        type="checkbox" 
-                                        checked={task.status === 'completed' || task.progress === 100}
-                                        disabled={currentUser.id !== assigneeId}
-                                        onChange={(e) => {
-                                          if (currentUser.id !== assigneeId) return;
-                                          const checked = e.target.checked;
-                                          const updatedTask: Task = { 
-                                            ...task, 
-                                            progress: checked ? 100 : (task.progress === 100 ? 0 : task.progress),
-                                            status: (checked ? 'completed' : 'in_progress') as Status
-                                          };
-                                          if (checked && !task.actualEndDate) updatedTask.actualEndDate = new Date().toISOString().split('T')[0];
-                                          apiService.saveTask(updatedTask);
-                                          setTasks(prev => prev.map(t => t.id === task.id ? updatedTask : t));
-                                        }}
-                                        className="h-3.5 w-3.5 accent-[#1A1A1A] cursor-pointer disabled:cursor-not-allowed mt-1" 
-                                        title={task.status === 'completed' || task.progress === 100 ? "标记为未完成" : "标记为完成"}
-                                      />
-                                  </div>
-                                  <div 
-                                    className="flex-1 cursor-pointer"
-                                    onClick={() => { setSelectedTask(task); setIsTaskDetailModalOpen(true); }}
-                                  >
-                                    <div className="flex justify-between items-start gap-2 mb-2">
-                                      <p className={`text-sm font-bold leading-snug ${task.status === 'completed' || task.progress === 100 ? 'line-through' : ''}`}>
-                                        {task.title}
-                                        {task.projectName && <span className="ml-2 text-[10px] bg-[#1A1A1A]/10 px-1.5 py-0.5 text-[#1A1A1A]/80 border border-[#1A1A1A]/20 font-normal tracking-wide inline-block">{task.projectName}</span>}
-                                      </p>
-                                      
-                                      <TaskProgressInput 
-                                        task={task} 
-                                        disabled={currentUser.id !== assigneeId} 
-                                        onUpdate={(val) => {
-                                          const updatedTask: Task = {
-                                            ...task,
-                                            progress: val,
-                                            status: (val === 100 ? 'completed' : (val > 0 ? 'in_progress' : 'not_started')) as Status
-                                          };
-                                          if (val > 0 && !task.actualStartDate) updatedTask.actualStartDate = new Date().toISOString().split('T')[0];
-                                          if (val === 100 && !task.actualEndDate) updatedTask.actualEndDate = new Date().toISOString().split('T')[0];
-                                          apiService.saveTask(updatedTask);
-                                          setTasks(prev => prev.map(t => t.id === task.id ? updatedTask : t));
-                                        }} 
-                                      />
-                                    </div>
-                                    
-                                    {task.outcome && (
-                                      <div className="mt-2 mb-2 bg-[#1A1A1A]/5 p-2 border border-[#1A1A1A]/10">
-                                        <p className="text-[10px] font-bold opacity-60 uppercase mb-1">产出成果</p>
-                                        <div 
-                                          className="text-xs opacity-80 font-serif line-clamp-2 [&>p]:m-0"
-                                          dangerouslySetInnerHTML={{ __html: task.outcome }}
-                                        />
-                                      </div>
-                                    )}
-                                    
-                                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 opacity-50">
-                                      {task.startDate && <p className="text-[10px] uppercase tracking-wider">计划开始: {task.startDate}</p>}
-                                      <p className="text-[10px] uppercase tracking-wider">计划截止: {task.endDate}</p>
-                                      {(task.plannedProgress !== undefined && task.plannedProgress > 0) && <p className="text-[10px] uppercase tracking-wider">预计进度: {task.plannedProgress}%</p>}
-                                    </div>
-                                  </div>
-                                </div>
-                              )})
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
 
   // R&D Release Stats Calculation
   const rndVisibleGroupsList = groups.filter(g => g.category === 'rnd' && (isSystemAdmin || g.id === currentUser?.groupId));
