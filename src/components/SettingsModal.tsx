@@ -48,6 +48,7 @@ const PERMISSION_DEFINITIONS = [
   { key: 'MANAGE_PLAN_TASK', label: '编制规划任务', desc: '赋予在“全局/市场/研发”中对季度/月度计划做任务分解、指派及状态维护的权利', category: '业务操作' },
   { key: 'MANAGE_REQUIREMENT', label: '管理需求', desc: '赋予新建、流转状态、编辑或直接在系统物理删除原始需求的权利', category: '业务操作' },
   { key: 'REVIEW_DELIVERABLE', label: '审核成果产出', desc: '对小组提交的任务产出交付物(outcomes)执行审核通过、重做或驳回的审批权', category: '业务操作' },
+  { key: 'MANAGE_SYSTEM_SETTINGS', label: '系统设置管理', desc: '赋予进入系统设置、配置业务参数与公司白名单、管理小组与成员以及调整角色权限的最高编辑权利', category: '业务操作' },
 ];
 
 export default function SettingsModal({
@@ -86,6 +87,7 @@ export default function SettingsModal({
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editingMemberState, setEditingMemberState] = useState({ name: '', avatar: '', roles: [] as string[], category: 'marketing' as Category | 'admin', groupId: '' });
   const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
+  const [resettingMemberId, setResettingMemberId] = useState<string | null>(null);
 
   // 权限配置标签专属状态
   const [roleSearchQuery, setRoleSearchQuery] = useState('');
@@ -139,9 +141,7 @@ export default function SettingsModal({
   };
 
   const handleResetAccount = (memberId: string) => {
-    if (window.confirm('确定要重置该用户的账号密码吗？重置后该用户需重新设置账号密码，业务数据不受影响。')) {
-      setMembers(members.map(m => m.id === memberId ? { ...m, account: '', password: '' } : m));
-    }
+    setMembers(members.map(m => m.id === memberId ? { ...m, account: '', password: '' } : m));
   };
 
   const handleDeleteMember = (id: string) => {
@@ -597,6 +597,26 @@ alter table members disable row level security;`}
                               取消
                             </button>
                           </div>
+                        ) : resettingMemberId === member.id ? (
+                          <div className="flex items-center gap-2.5 shrink-0">
+                            <span className="text-[11px] text-amber-600 font-bold shrink-0 font-mono">确定要重置该账号和密码吗？</span>
+                            <button 
+                              id={`confirm-reset-btn-${member.id}`}
+                              onClick={() => {
+                                handleResetAccount(member.id);
+                                setResettingMemberId(null);
+                              }}
+                              className="bg-amber-600 text-white hover:bg-amber-700 text-[10px] font-bold py-1.5 px-3 rounded-lg border border-amber-600 select-none cursor-pointer tracking-wider h-[32px] flex items-center active:scale-95 transition-all font-mono animate-pulse"
+                            >
+                              确认重置
+                            </button>
+                            <button 
+                              onClick={() => setResettingMemberId(null)}
+                              className="bg-white hover:bg-zinc-100 border border-[#1A1A1A]/15 text-[#1A1A1A] text-[10px] font-bold py-1.5 px-3 rounded-lg select-none cursor-pointer h-[32px] flex items-center active:scale-95 transition-all font-mono"
+                            >
+                              取消
+                            </button>
+                          </div>
                         ) : (
                           <div className="flex gap-4 shrink-0 justify-end">
                             <button 
@@ -609,8 +629,9 @@ alter table members disable row level security;`}
                               修改
                             </button>
                             <button 
-                              onClick={() => handleResetAccount(member.id)}
-                              className="text-[#1A73E8] text-[10px] uppercase tracking-widest hover:underline whitespace-nowrap"
+                              id={`trigger-reset-btn-${member.id}`}
+                              onClick={() => setResettingMemberId(member.id)}
+                              className="text-[#1A73E8] text-[10px] uppercase tracking-widest hover:underline whitespace-nowrap cursor-pointer"
                               title="重置登录账号和密码"
                             >
                               重置账号
@@ -669,7 +690,7 @@ alter table members disable row level security;`}
                     onClick={() => {
                       if (window.confirm('确定要恢复系统出厂自带的角色权限配置吗？此操作会覆盖当前的所有修改。')) {
                         const defaults = [
-                          { roleName: '系统管理员', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
+                          { roleName: '系统管理员', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE', 'MANAGE_SYSTEM_SETTINGS'] },
                           { roleName: '项目经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
                           { roleName: '部门经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
                           { roleName: '产品总监', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL'] },

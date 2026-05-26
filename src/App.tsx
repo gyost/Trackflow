@@ -1224,7 +1224,7 @@ export default function App() {
     if (isSystemAdmin) {
       return [
         'VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS',
-        'EDIT_RELEASE_GOAL', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'REVIEW_DELIVERABLE'
+        'EDIT_RELEASE_GOAL', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'REVIEW_DELIVERABLE', 'MANAGE_SYSTEM_SETTINGS'
       ];
     }
     
@@ -1237,7 +1237,7 @@ export default function App() {
         rpObj.permissions.forEach(pKey => activePerms.add(pKey));
       } else {
         const defaultRoleDefaults: Record<string, string[]> = {
-          '系统管理员': ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'],
+          '系统管理员': ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE', 'MANAGE_SYSTEM_SETTINGS'],
           '项目经理': ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'],
           '部门经理': ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'],
           '产品总监': ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL'],
@@ -1699,7 +1699,7 @@ export default function App() {
           } else {
             console.log('No permissions rules found, uploading initial ones...');
             const defaults = [
-              { roleName: '系统管理员', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
+              { roleName: '系统管理员', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE', 'MANAGE_SYSTEM_SETTINGS'] },
               { roleName: '项目经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
               { roleName: '部门经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
               { roleName: '产品总监', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL'] },
@@ -1952,6 +1952,385 @@ export default function App() {
       return category === 'rnd' && isInWeek;
     });
   }, [tasks, projects, members, currentWeekDate]);
+
+  const getQuarterMonths = (quarter: string) => {
+    const [year, q] = quarter.split('-');
+    if (q === 'Q1') return [`${year}-01`, `${year}-02`, `${year}-03`];
+    if (q === 'Q2') return [`${year}-04`, `${year}-05`, `${year}-06`];
+    if (q === 'Q3') return [`${year}-07`, `${year}-08`, `${year}-09`];
+    return [`${year}-10`, `${year}-11`, `${year}-12`];
+  };
+
+  const activeMonthReqs = requirements.filter(r => {
+    if (r.deleted) return false;
+    
+    if (currentView !== 'requirements') {
+      return r.createdAt.startsWith(selectedMonth);
+    }
+    
+    if (reqTimeFrame === 'month') {
+        return r.createdAt.startsWith(selectedMonth);
+    } else if (reqTimeFrame === 'quarter') {
+        return getQuarterMonths(selectedQuarter).some(m => r.createdAt.startsWith(m));
+    } else {
+        return r.createdAt.startsWith(selectedYear);
+    }
+  });
+
+  const pieData = React.useMemo(() => {
+    const backlogReviewing = activeMonthReqs.filter(r => ['backlog', 'reviewing'].includes(r.status)).length;
+    const approvedPlanned = activeMonthReqs.filter(r => ['approved', 'planned'].includes(r.status)).length;
+    const completed = activeMonthReqs.filter(r => r.status === 'completed').length;
+    const rejected = activeMonthReqs.filter(r => r.status === 'rejected').length;
+
+    const data = [
+      { name: '储备评审', value: backlogReviewing, color: '#94a3b8' }, 
+      { name: '落实推进', value: approvedPlanned, color: '#f59e0b' },   
+      { name: '完成交付', value: completed, color: '#10b981' },       
+      { name: '驳回搁置', value: rejected, color: '#f43f5e' },        
+    ].filter(item => item.value > 0);
+
+    if (data.length === 0) {
+      return [{ name: '暂无数据', value: 1, color: '#e4e4e7' }];
+    }
+    return data;
+  }, [activeMonthReqs]);
+
+  if (dataError) {
+    const isRlsError = dataError.includes('RLS受阻') || dataError.includes('row-level security');
+    const isMissingColumn = dataError.includes('Could not find') || dataError.includes('schema cache') || dataError.includes('column') || dataError.includes('relation');
+    const columnNameMatch = dataError.match(/column ["']([^"']+)["']/i) || dataError.match(/column ([^ ]+)/i) || dataError.match(/'([^']+)' column/i);
+    const tableNameMatch = dataError.match(/relation ["']([^"']+)["']/i) || dataError.match(/of ["']([^"']+)["']/i) || dataError.match(/of '([^']+)'/i);
+    const colName = columnNameMatch ? columnNameMatch[1] : '缺失字段';
+    const tabName = tableNameMatch ? tableNameMatch[1] : '该表';
+    
+    return (
+       <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#FDFCFB] text-center">
+          <div className="w-12 h-12 rounded-full bg-red-100 text-red-500 flex items-center justify-center mb-4">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold mb-2">{isRlsError ? 'Supabase 权限限制 (RLS受阻)' : '数据加载失败'}</h2>
+          <p className="opacity-70 mb-4 max-w-lg text-left">{dataError}</p>
+          
+          {isMissingColumn && (
+             <div className="mt-4 mb-4 bg-gray-100 p-4 rounded-xl text-left max-w-2xl w-full text-[#1A1A1A]">
+                <p className="font-bold mb-2">💡 解决方案：请在您的 Supabase 项目中执行以下 SQL 语句，补充缺失的字段：</p>
+                <pre className="text-xs p-4 bg-black text-green-400 rounded overflow-x-auto whitespace-pre-wrap">
+                  {`alter table "${tabName}" add column if not exists "${colName}" jsonb;`}
+                </pre>
+                <details className="mt-4 cursor-pointer">
+                  <summary className="font-bold text-[#1A1A1A] underline">如果仍然报错，请点击此处复制完整数据库更新脚本（一键补齐所有缺失字段与设置表格）</summary>
+                  <pre className="mt-2 text-[10px] p-4 bg-black text-green-400 rounded overflow-x-auto whitespace-pre-wrap">
+                    {`
+-- 1. 创建核心基础设施与业务表格
+create table if not exists organizations (
+  id text primary key,
+  name text
+);
+
+create table if not exists groups (
+  id text primary key,
+  name text,
+  category text,
+  organization_id text
+);
+
+create table if not exists members (
+  id text primary key,
+  name text,
+  avatar text,
+  roles text,
+  department text,
+  group_id text,
+  account text,
+  password text,
+  organization_id text
+);
+
+create table if not exists system_settings (
+  id text primary key,
+  authorized_companies text,
+  annual_target_profit numeric,
+  guide_content text,
+  organization_id text
+);
+
+create table if not exists role_permissions (
+  role_name text primary key,
+  permissions text,
+  organization_id text
+);
+
+create table if not exists projects (
+  id text primary key,
+  title text not null,
+  description text,
+  category text,
+  manager_id text,
+  organization_id text
+);
+
+create table if not exists plans (
+  id text primary key,
+  project_id text,
+  title text not null,
+  level text,
+  parent_id text,
+  start_date text,
+  end_date text,
+  status text,
+  progress numeric,
+  metric jsonb,
+  organization_id text
+);
+
+create table if not exists tasks (
+  id text primary key,
+  project_id text,
+  plan_id text,
+  title text not null,
+  assignee_id text,
+  status text,
+  priority text,
+  progress numeric,
+  planned_progress numeric,
+  start_date text,
+  actual_start_date text,
+  actual_end_date text,
+  end_date text,
+  outcome text,
+  project_name text,
+  organization_id text
+);
+
+create table if not exists outcomes (
+  id text primary key,
+  project_id text,
+  title text not null,
+  description text,
+  submitter_id text,
+  date text,
+  status text,
+  file_url text,
+  organization_id text
+);
+
+create table if not exists release_goals (
+  id text primary key,
+  group_id text,
+  title text not null,
+  target_month text,
+  target_date text,
+  actual_version text,
+  actual_release_date text,
+  status text,
+  note text,
+  created_at text,
+  organization_id text
+);
+
+create table if not exists project_trackings (
+  id text primary key,
+  customer_name text not null,
+  status text,
+  product text,
+  city_manager text,
+  project_manager text,
+  expected_contract_amount numeric,
+  actual_contract_amount numeric,
+  contact_name text,
+  contact_phone text,
+  last_followup_date text,
+  followup_records jsonb,
+  organization_id text,
+  updated_at timestamp with time zone,
+  signed_date text,
+  followup_date text
+);
+
+create table if not exists requirements (
+  id text primary key,
+  project_id text,
+  title text not null,
+  description text,
+  priority text,
+  status text,
+  source text,
+  submitter_id text,
+  assignee_id text,
+  created_at text,
+  updated_at text,
+  serial_number text,
+  link_url text,
+  customer_name text,
+  internal_source_detail text,
+  deleted boolean default false,
+  deleted_at timestamp with time zone,
+  org_id text,
+  organization_id text
+);
+
+create table if not exists requirement_history (
+  id text primary key,
+  requirement_id text,
+  status text,
+  timestamp text,
+  note text,
+  org_id text,
+  organization_id text
+);
+
+-- 2. 字段兼容性自愈修复（针对已有旧表补全缺失列）
+alter table requirements add column if not exists serial_number text;
+alter table requirements add column if not exists project_id text;
+alter table requirements add column if not exists link_url text;
+alter table requirements add column if not exists customer_name text;
+alter table requirements add column if not exists internal_source_detail text;
+alter table requirements add column if not exists submitter_id text;
+alter table requirements add column if not exists assignee_id text;
+alter table requirements add column if not exists deleted boolean;
+alter table requirements add column if not exists deleted_at timestamp with time zone;
+alter table requirements add column if not exists org_id text;
+alter table requirements add column if not exists organization_id text;
+
+alter table tasks add column if not exists project_name text;
+alter table tasks add column if not exists plan_id text;
+alter table tasks add column if not exists title text;
+alter table tasks add column if not exists assignee_id text;
+alter table tasks add column if not exists status text;
+alter table tasks add column if not exists priority text;
+alter table tasks add column if not exists progress numeric;
+alter table tasks add column if not exists planned_progress numeric;
+alter table tasks add column if not exists start_date text;
+alter table tasks add column if not exists actual_start_date text;
+alter table tasks add column if not exists actual_end_date text;
+alter table tasks add column if not exists end_date text;
+alter table tasks add column if not exists outcome text;
+alter table tasks add column if not exists organization_id text;
+
+alter table plans add column if not exists metric jsonb;
+alter table plans add column if not exists organization_id text;
+
+alter table requirement_history add column if not exists requirement_id text;
+alter table requirement_history add column if not exists status text;
+alter table requirement_history add column if not exists timestamp text;
+alter table requirement_history add column if not exists note text;
+alter table requirement_history add column if not exists org_id text;
+alter table requirement_history add column if not exists organization_id text;
+
+alter table project_trackings add column if not exists followup_records jsonb;
+alter table project_trackings add column if not exists organization_id text;
+alter table project_trackings add column if not exists updated_at timestamp with time zone;
+alter table project_trackings add column if not exists signed_date text;
+alter table project_trackings add column if not exists followup_date text;
+alter table project_trackings add column if not exists last_followup_date text;
+alter table project_trackings add column if not exists expected_contract_amount numeric;
+alter table project_trackings add column if not exists actual_contract_amount numeric;
+alter table project_trackings add column if not exists contact_name text;
+alter table project_trackings add column if not exists contact_phone text;
+
+alter table release_goals add column if not exists actual_version text;
+alter table release_goals add column if not exists actual_release_date text;
+alter table release_goals add column if not exists note text;
+alter table release_goals add column if not exists organization_id text;
+
+alter table outcomes add column if not exists file_url text;
+alter table outcomes add column if not exists organization_id text;
+
+alter table organizations add column if not exists name text;
+alter table projects add column if not exists manager_id text;
+
+-- 3. 关闭行安全策略限制（RLS），授予读写权限一键自愈
+alter table organizations disable row level security;
+alter table groups disable row level security;
+alter table members disable row level security;
+alter table system_settings disable row level security;
+alter table role_permissions disable row level security;
+alter table projects disable row level security;
+alter table plans disable row level security;
+alter table tasks disable row level security;
+alter table outcomes disable row level security;
+alter table release_goals disable row level security;
+alter table project_trackings disable row level security;
+alter table requirements disable row level security;
+alter table requirement_history disable row level security;
+`}
+                </pre>
+                </details>
+                <p className="mt-3 text-sm text-gray-600">执行位置：进入 <a href="https://supabase.com/dashboard/project/_/sql/new" target="_blank" rel="noreferrer" className="underline hover:text-black font-semibold">Supabase Dashboard</a> -&gt; SQL Editor -&gt; New query -&gt; 粘贴代码并点击 <strong>RUN</strong>。</p>
+             </div>
+          )}
+
+          {isRlsError && (
+             <div className="mt-4 mb-8 bg-gray-100 p-4 rounded-xl text-left max-w-2xl w-full text-[#1A1A1A]">
+               <p className="font-bold mb-2">💡 解决方案：请在您的 Supabase 项目中执行以下 SQL 语句，关闭全表的安全策略限制：</p>
+               <pre className="text-xs p-4 bg-black text-green-400 rounded overflow-x-auto whitespace-pre-wrap">
+{`alter table organizations disable row level security;
+alter table projects disable row level security;
+alter table plans disable row level security;
+alter table tasks disable row level security;
+alter table outcomes disable row level security;
+alter table requirements disable row level security;
+alter table requirement_history disable row level security;
+alter table release_goals disable row level security;
+alter table project_trackings disable row level security;
+alter table groups disable row level security;
+alter table members disable row level security;
+alter table system_settings disable row level security;
+`}
+               </pre>
+               <p className="mt-3 text-sm text-gray-600">执行位置：进入 <a href="https://supabase.com/dashboard/project/_/sql/new" target="_blank" rel="noreferrer" className="underline hover:text-black font-semibold">Supabase Dashboard</a> -&gt; SQL Editor -&gt; New query -&gt; 粘贴上述代码并点击 <strong>RUN</strong>。</p>
+             </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-6">
+            <button 
+              onClick={() => window.location.reload()} 
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[#1A1A1A] text-sm font-semibold tracking-wide text-white shadow-md hover:bg-black transition-colors"
+            >
+              确认已执行并重试
+            </button>
+            <button 
+              onClick={switchToLocalMockMode} 
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-gray-800 transition-colors"
+            >
+              一键降级为本地 Mock 演示模式
+            </button>
+          </div>
+       </div>
+    );
+  }
+
+  if (isLoadingData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB] p-6 text-center animate-fade-in">
+        <div className="flex flex-col items-center gap-6 max-w-md w-full">
+          <div className="w-12 h-12 border-4 border-[#1A1A1A]/10 border-t-[#1A1A1A] rounded-full animate-spin"></div>
+          
+          <div className="space-y-2">
+            <h3 className="text-base font-semibold text-[#1A1A1A]">正在进入数字化管理系统...</h3>
+            <div className="text-xs text-black/50 font-mono bg-black/[0.03] py-2 px-3 rounded-md min-h-[40px] flex items-center justify-center">
+              {loadingStep}
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-black/5 w-full flex flex-col items-center gap-3">
+            <p className="text-xs text-black/40">
+              提示：若您的 Supabase 云数据库未配置，或免费宿主机休眠导致唤醒缓慢，您可以随时切换至本地演示模式。
+            </p>
+            <button 
+              onClick={switchToLocalMockMode}
+              className="px-4 py-2 text-xs font-semibold text-white bg-[#1A1A1A] hover:bg-black transition-colors rounded-lg shadow-sm"
+            >
+              一键降级为本地 Mock 模式
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!currentUserLoaded) {
     return <div className="h-screen w-full bg-[#F7F6F2]"></div>;
@@ -2493,30 +2872,6 @@ export default function App() {
   const CURRENT_MONTH = selectedMonth;
   const CURRENT_YEAR = selectedMonth.split('-')[0];
   
-  const getQuarterMonths = (quarter: string) => {
-    const [year, q] = quarter.split('-');
-    if (q === 'Q1') return [`${year}-01`, `${year}-02`, `${year}-03`];
-    if (q === 'Q2') return [`${year}-04`, `${year}-05`, `${year}-06`];
-    if (q === 'Q3') return [`${year}-07`, `${year}-08`, `${year}-09`];
-    return [`${year}-10`, `${year}-11`, `${year}-12`];
-  };
-
-  const activeMonthReqs = requirements.filter(r => {
-    if (r.deleted) return false;
-    
-    if (currentView !== 'requirements') {
-      return r.createdAt.startsWith(selectedMonth);
-    }
-    
-    if (reqTimeFrame === 'month') {
-        return r.createdAt.startsWith(selectedMonth);
-    } else if (reqTimeFrame === 'quarter') {
-        return getQuarterMonths(selectedQuarter).some(m => r.createdAt.startsWith(m));
-    } else {
-        return r.createdAt.startsWith(selectedYear);
-    }
-  });
-
   const today = new Date();
   const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
   const isEndOfMonth = today.getDate() >= lastDayOfMonth - 1;
@@ -2701,36 +3056,7 @@ export default function App() {
     return true;
   });
 
-  if (isLoadingData) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB] p-6 text-center animate-fade-in">
-        <div className="flex flex-col items-center gap-6 max-w-md w-full">
-          <div className="w-12 h-12 border-4 border-[#1A1A1A]/10 border-t-[#1A1A1A] rounded-full animate-spin"></div>
-          
-          <div className="space-y-2">
-            <h3 className="text-base font-semibold text-[#1A1A1A]">正在进入数字化管理系统...</h3>
-            <div className="text-xs text-black/50 font-mono bg-black/[0.03] py-2 px-3 rounded-md min-h-[40px] flex items-center justify-center">
-              {loadingStep}
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-black/5 w-full flex flex-col items-center gap-3">
-            <p className="text-xs text-black/40">
-              提示：若您的 Supabase 云数据库未配置，或免费宿主机休眠导致唤醒缓慢，您可以随时切换至本地演示模式。
-            </p>
-            <button 
-              onClick={switchToLocalMockMode}
-              className="px-4 py-2 text-xs font-semibold text-white bg-[#1A1A1A] hover:bg-black transition-colors rounded-lg shadow-sm"
-            >
-              一键降级为本地 Mock 模式
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (dataError) {
+  if (false) {
     const isRlsError = dataError.includes('RLS受阻') || dataError.includes('row-level security');
     const isMissingColumn = dataError.includes('Could not find') || dataError.includes('schema cache') || dataError.includes('column') || dataError.includes('relation');
     const columnNameMatch = dataError.match(/column ["']([^"']+)["']/i) || dataError.match(/column ([^ ]+)/i) || dataError.match(/'([^']+)' column/i);
@@ -3056,7 +3382,7 @@ alter table system_settings disable row level security;
             >
               <HelpCircle className="w-5 h-5" />
             </button>
-            {isSystemAdmin && (
+            {currentUserPermissions.includes('MANAGE_SYSTEM_SETTINGS') && (
               <button 
                 onClick={() => setIsSettingsModalOpen(true)}
                 className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center"
@@ -3117,7 +3443,7 @@ alter table system_settings disable row level security;
             <HelpCircle className="w-3.5 h-3.5" />
             <span>说明</span>
           </button>
-          {isSystemAdmin && (
+          {currentUserPermissions.includes('MANAGE_SYSTEM_SETTINGS') && (
             <button 
               onClick={() => setIsSettingsModalOpen(true)}
               className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center"
@@ -4116,7 +4442,7 @@ alter table system_settings disable row level security;
               />
           )}
           {currentView === 'dashboard' && (
-            <div className="flex-1 w-full space-y-8 animate-in fade-in duration-500">
+            <div className="flex-1 w-full max-w-[1280px] mx-auto space-y-8 animate-in fade-in duration-500">
               {/* Header section (Borderless, sleek, minimal) */}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-baseline mb-4 gap-2 sm:gap-0 pb-1 px-4 sm:px-0 mt-2 sm:mt-0">
                 <div className="flex flex-col gap-0.5">
@@ -4134,7 +4460,7 @@ alter table system_settings disable row level security;
               </div>
 
               {/* SECTION 1: 核心财务毛利分析 (Digital Metrics Board) */}
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 w-full max-w-[1280px] mx-auto">
                 <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 px-4 sm:px-0 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory scroll-smooth pb-2 -mx-4 sm:mx-0">
                   
                   {/* 1. Year to Date Profit */}
@@ -4538,28 +4864,29 @@ alter table system_settings disable row level security;
                   <div className="h-64 w-full flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-zinc-950/20" role="figure" aria-labelledby="chart-task-title" tabIndex={0}>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart role="img" aria-label="月度需求统计饼图">
+                        <text x="50%" y="45%" textAnchor="middle" dominantBaseline="middle" className="fill-zinc-900 font-serif italic text-3xl font-bold">
+                          {activeMonthReqs.length}
+                        </text>
+                        <text x="50%" y="54%" textAnchor="middle" dominantBaseline="middle" className="fill-zinc-400 font-bold uppercase tracking-widest text-[9px]">
+                          需求总计
+                        </text>
                         <Pie 
-                          data={[
-                            { name: '总需求数', value: activeMonthReqs.length },
-                            { name: '进行中', value: activeMonthReqs.filter(r => ['approved', 'planned'].includes(r.status)).length },
-                            { name: '已完成', value: activeMonthReqs.filter(r => r.status === 'completed').length },
-                          ]} 
+                          data={pieData} 
                           dataKey="value" 
                           nameKey="name" 
                           cx="50%" 
                           cy="48%" 
                           outerRadius={85} 
-                          innerRadius={55}
-                          fill="#1A1A1A" 
+                          innerRadius={58}
                           paddingAngle={3}
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          label={({ name, percent }) => percent > 0.05 ? `${name} ${(percent * 100).toFixed(0)}%` : ''}
                           labelLine={false}
                           stroke="#FFFFFF"
                           strokeWidth={2}
                         >
-                          <Cell fill="#94a3b8" />
-                          <Cell fill="#f59e0b" />
-                          <Cell fill="#10b981" />
+                          {pieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
                         </Pie>
                         <Tooltip 
                           contentStyle={{
