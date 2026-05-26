@@ -109,7 +109,8 @@ function migrate() {
       contactName TEXT,
       contactPhone TEXT,
       lastFollowupDate TEXT,
-      updatedAt TEXT
+      updatedAt TEXT,
+      createdAt TEXT
     );
 
     CREATE TABLE IF NOT EXISTS role_permissions (
@@ -170,6 +171,10 @@ function migrate() {
   const projectsTableInfo = db.prepare("PRAGMA table_info(projects)").all() as any[];
   const projectColumns = projectsTableInfo.map(c => c.name);
   if (!projectColumns.includes('category')) db.exec("ALTER TABLE projects ADD COLUMN category TEXT");
+
+  const trackingTableInfo = db.prepare("PRAGMA table_info(project_trackings)").all() as any[];
+  const trackingColumns = trackingTableInfo.map(c => c.name);
+  if (!trackingColumns.includes('createdAt')) db.exec("ALTER TABLE project_trackings ADD COLUMN createdAt TEXT");
 
   console.log("SQLite database initialized and synced.");
 }
@@ -443,8 +448,8 @@ app.post("/api/projectTrackings", (req, res) => {
   try {
     const track = req.body;
     db.prepare(`
-      INSERT INTO project_trackings (id, customerName, status, product, cityManager, projectManager, expectedContractAmount, actualContractAmount, contactName, contactPhone, lastFollowupDate, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO project_trackings (id, customerName, status, product, cityManager, projectManager, expectedContractAmount, actualContractAmount, contactName, contactPhone, lastFollowupDate, updatedAt, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         customerName = excluded.customerName,
         status = excluded.status,
@@ -456,9 +461,10 @@ app.post("/api/projectTrackings", (req, res) => {
         contactName = excluded.contactName,
         contactPhone = excluded.contactPhone,
         lastFollowupDate = excluded.lastFollowupDate,
-        updatedAt = excluded.updatedAt
+        updatedAt = excluded.updatedAt,
+        createdAt = excluded.createdAt
     `).run(
-      track.id, track.customerName, track.status, track.product, track.cityManager, track.projectManager, track.expectedContractAmount, track.actualContractAmount, track.contactName, track.contactPhone, track.lastFollowupDate, track.updatedAt
+      track.id, track.customerName, track.status, track.product, track.cityManager, track.projectManager, track.expectedContractAmount, track.actualContractAmount, track.contactName, track.contactPhone, track.lastFollowupDate, track.updatedAt, track.createdAt || null
     );
     res.json({ success: true });
   } catch (err: any) {

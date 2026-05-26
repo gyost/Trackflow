@@ -38,6 +38,7 @@ export interface ProjectTracking {
   contactName: string;
   contactPhone: string;
   updatedAt: string;
+  createdAt?: string;
   followupRecords?: FollowupRecord[];
 }
 

@@ -418,8 +418,65 @@ const TaskDepartmentGroups = React.memo(({
     if (!canViewAllInGroup) {
       ids = ids.filter(id => id === currentUser.id);
     }
+
+    // Sort: leader pinned to the top, other members sorted chronologically by submission time (earliest outcomes or tasks)
+    ids.sort((idA, idB) => {
+      const memberA = members.find(m => m.id === idA);
+      const memberB = members.find(m => m.id === idB);
+      
+      const isLeaderA = memberA?.roles?.includes('组长') ? 1 : 0;
+      const isLeaderB = memberB?.roles?.includes('组长') ? 1 : 0;
+
+      if (isLeaderA !== isLeaderB) {
+        return isLeaderB - isLeaderA; // 组长(1)排非组长(0)前面
+      }
+
+      // Helper to calculate earliest submission time (outcome.date or task.startDate or task.endDate)
+      const getEarliestSubmissionTime = (mId: string) => {
+        const mOutcomes = outcomes.filter(o => o.submitterId === mId);
+        const mTasks = groupTasks.filter(t => t.assigneeId === mId);
+        
+        let earliestTime = Infinity;
+
+        mOutcomes.forEach(o => {
+          if (o.date) {
+            const oTime = new Date(o.date).getTime();
+            if (!isNaN(oTime) && oTime < earliestTime) {
+              earliestTime = oTime;
+            }
+          }
+        });
+
+        mTasks.forEach(t => {
+          if (t.startDate) {
+            const tTime = new Date(t.startDate).getTime();
+            if (!isNaN(tTime) && tTime < earliestTime) {
+              earliestTime = tTime;
+            }
+          } else if (t.endDate) {
+            const tTime = new Date(t.endDate).getTime();
+            if (!isNaN(tTime) && tTime < earliestTime) {
+              earliestTime = tTime;
+            }
+          }
+        });
+
+        return earliestTime;
+      };
+
+      const timeA = getEarliestSubmissionTime(idA);
+      const timeB = getEarliestSubmissionTime(idB);
+
+      if (timeA !== timeB) {
+        return timeA - timeB; // ascending order
+      }
+
+      // Fallback to name alphabetical
+      return (memberA?.name || '').localeCompare(memberB?.name || '', 'zh');
+    });
+
     return ids;
-  }, [members, groupId, department, groupTasks, isSystemAdmin, currentUser.roles, currentUser.groupId, currentUser.id]);
+  }, [members, groupId, department, groupTasks, isSystemAdmin, currentUser.roles, currentUser.groupId, currentUser.id, outcomes]);
 
   if (allGroupIds.length === 0) {
     return <p className="text-sm opacity-50 italic px-2">暂无进行中的任务或无权限查看</p>;
@@ -455,7 +512,11 @@ const TaskDepartmentGroups = React.memo(({
               const assignee = members.find(m => m.id === assigneeId);
               // Filter assignee tasks precisely inside groupTasks
               const memberTasks = groupTasks.filter(t => t.assigneeId === assigneeId)
-                .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
+                .sort((a, b) => {
+                  const timeA = new Date(a.startDate || a.endDate).getTime();
+                  const timeB = new Date(b.startDate || b.endDate).getTime();
+                  return timeA - timeB;
+                });
 
               return (
                 <MemberTaskCard
@@ -499,17 +560,52 @@ const ProjectTrackingView = ({
   onImport?: (importedTrackings: Omit<ProjectTracking, 'id' | 'updatedAt'>[]) => void
 }) => {
   const monthTrackings = trackings.filter(t => {
-    const d = new Date(t.updatedAt);
-    return d.getFullYear() === year && (month === 0 || (d.getMonth() + 1) === month);
+    const cdt = t.createdAt || t.updatedAt;
+    if (!cdt) return false;
+    const cDate = new Date(cdt);
+    if (isNaN(cDate.getTime())) return false;
+    const cYear = cDate.getFullYear();
+    const cMonth = cDate.getMonth() + 1;
+    const cYM = cYear * 12 + cMonth;
+
+    const udt = t.updatedAt;
+    const uDate = udt ? new Date(udt) : cDate;
+    const uYear = isNaN(uDate.getTime()) ? cYear : uDate.getFullYear();
+    const uMonth = isNaN(uDate.getTime()) ? cMonth : uDate.getMonth() + 1;
+    const uYM = uYear * 12 + uMonth;
+
+    if (month === 0) {
+      const isSameOrBeforeYear = cYear <= year;
+      const isStillActive = t.status !== 'terminated' && t.status !== 'archived';
+      const isClosedInThisYear = (t.status === 'terminated' || t.status === 'archived') && uYear === year;
+      return isSameOrBeforeYear && (isStillActive || isClosedInThisYear);
+    } else {
+      const selectedYM = year * 12 + month;
+      if (cYM === selectedYM) {
+        return true;
+      }
+      if (cYM < selectedYM) {
+        const isStillActive = t.status !== 'terminated' && t.status !== 'archived';
+        const isClosedInThisMonth = (t.status === 'terminated' || t.status === 'archived') && uYM === selectedYM;
+        return isStillActive || isClosedInThisMonth;
+      }
+      return false;
+    }
   });
 
-  const filtered = pruneDuplicates(monthTrackings.filter(t => {
+  let filtered = pruneDuplicates(monthTrackings.filter(t => {
     return (filterStatus === 'all' || t.status === filterStatus) && 
            (t.customerName.includes(searchTerm) || 
             t.product.includes(searchTerm) || 
             (t.cityManager && t.cityManager.includes(searchTerm)) || 
             (t.projectManager && t.projectManager.includes(searchTerm)));
   }));
+
+  filtered = filtered.sort((a, b) => {
+    const da = a.createdAt || a.updatedAt || '';
+    const db = b.createdAt || b.updatedAt || '';
+    return db.localeCompare(da);
+  });
   
   const totalAmount = monthTrackings.reduce((acc, curr) => acc + curr.actualContractAmount, 0);
   const statusCounts = (Object.keys(statusLabels) as TrackingStatus[]).map(s => ({
@@ -762,7 +858,7 @@ const ProjectTrackingView = ({
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 p-4 sm:p-8 max-w-7xl mx-auto w-full flex flex-col min-h-0">
+      <div className="flex-1 p-4 sm:p-6 max-w-[1600px] mx-auto w-full flex flex-col min-h-0">
         {/* Tool Bar */}
         <div className="flex flex-col gap-5 mb-6 sm:mb-8 shrink-0 bg-white/40 p-4 sm:p-6 rounded-2xl border border-[#1A1A1A]/5 backdrop-blur-md">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -935,35 +1031,35 @@ const ProjectTrackingView = ({
           ) : (
             <div className="animate-in fade-in duration-500">
                               {/* Desktop Table */}
-               <div className="hidden md:block overflow-x-auto">
-                 <table className="w-full text-sm text-left whitespace-nowrap">
+               <div className="hidden md:block overflow-auto max-h-[calc(100vh-320px)] custom-scrollbar border border-[#1A1A1A]/10 rounded">
+                 <table className="w-full text-xs text-left whitespace-nowrap">
                    <thead className="sticky top-0 bg-[#F7F6F2] z-10">
                      <tr className="border-b-2 border-[#1A1A1A]/20 text-xs font-bold text-[#1A1A1A] h-12">
-                       <th className="px-4 font-bold">#</th>
-                       <th className="px-4 font-bold">客户名称</th>
-                       <th className="px-4 font-bold text-center">状态</th>
-                       <th className="px-4 font-bold">合作意向/产品</th>
-                       <th className="px-4 font-bold">市场负责人</th>
-                       <th className="px-4 font-bold">项目负责人</th>
-                       <th className="px-4 font-bold text-right">预期合同额</th>
-                       <th className="px-4 font-bold text-right">已达成（万）</th>
-                       <th className="px-4 font-bold">最近跟进</th>
-                       <th className="px-4 font-bold">客户联系人</th>
-                       <th className="px-4 font-bold text-center">操作</th>
+                       <th className="px-2 font-bold w-10">#</th>
+                       <th className="px-2.5 font-bold">客户名称</th>
+                       <th className="px-2.5 font-bold text-center">状态</th>
+                       <th className="px-2.5 font-bold">合作意向/产品</th>
+                       <th className="px-2.5 font-bold">市场负责人</th>
+                       <th className="px-2.5 font-bold">项目负责人</th>
+                       <th className="px-2.5 font-bold text-right font-mono">预期合同额(元)</th>
+                       <th className="px-2.5 font-bold text-right font-mono">已达成(万)</th>
+                       <th className="px-2.5 font-bold">最近跟进</th>
+                       <th className="px-2.5 font-bold">客户联系人</th>
+                       <th className="px-2.5 font-bold text-center">操作</th>
                      </tr>
                    </thead>
                    <tbody>
                      {filtered.map((t, i) => (
-                       <tr key={t.id} className="border-b border-[#1A1A1A]/5 hover:bg-[#F7F6F2] transition-colors group h-14">
-                         <td className="px-4 text-xs opacity-80">{i + 1}</td>
-                         <td className="px-4 font-medium">{t.customerName}</td>
-                         <td className="px-4 text-center">
+                       <tr key={t.id} onClick={() => handleAction(t.id, 'details', () => onViewDetails(t))} className="border-b border-[#1A1A1A]/5 hover:bg-[#F7F6F2]/80 transition-colors group h-14 cursor-pointer">
+                         <td className="px-2 text-xs opacity-80">{i + 1}</td>
+                         <td className="px-2.5 font-medium text-xs text-[#1A1A1A] max-w-[180px] truncate" title={t.customerName}>{t.customerName}</td>
+                         <td className="px-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                             <select 
                               value={t.status}
                               onClick={(e) => e.stopPropagation()}
                               onChange={(e) => onStatusChange(t.id, e.target.value as TrackingStatus)}
                               disabled={t.status === 'terminated' || t.status === 'archived'}
-                              className={`appearance-none bg-transparent outline-none cursor-pointer inline-flex items-center justify-center px-3 py-1 rounded-full border text-[11px] font-medium min-w-[80px] text-center
+                              className={`appearance-none bg-transparent outline-none cursor-pointer inline-flex items-center justify-center px-1.5 py-0.5 rounded-full border text-[10px] font-medium min-w-[70px] text-center
                                 ${t.status === 'followup' ? 'border-amber-400 text-amber-600' : 
                                   t.status === 'implementing' ? 'border-blue-400 text-blue-600' : 
                                   t.status === 'accepting' ? 'border-green-400 text-green-600' : 
@@ -978,18 +1074,18 @@ const ProjectTrackingView = ({
                               ))}
                             </select>
                          </td>
-                         <td className="px-4 text-sm opacity-90">{t.product}</td>
-                         <td className="px-4 text-sm opacity-90">{t.cityManager}</td>
-                         <td className="px-4 text-sm opacity-90">{t.projectManager}</td>
-                         <td className="px-4 text-sm font-mono opacity-80 text-right">
+                         <td className="px-2.5 text-xs opacity-90 max-w-[150px] truncate" title={t.product}>{t.product}</td>
+                         <td className="px-2.5 text-xs opacity-90">{t.cityManager}</td>
+                         <td className="px-2.5 text-xs opacity-90">{t.projectManager}</td>
+                         <td className="px-2.5 text-xs font-mono opacity-80 text-right">
                            {t.expectedContractAmount > 0 ? t.expectedContractAmount.toLocaleString() : '—'}
                          </td>
-                         <td className="px-4 text-sm font-mono text-emerald-600 text-right">
+                         <td className="px-2.5 text-xs font-mono text-emerald-600 text-right">
                            {t.actualContractAmount > 0 ? (t.actualContractAmount / 10000).toFixed(2) : '—'}
                          </td>
-                         <td className="px-4 text-sm font-mono opacity-80">{t.lastFollowupDate || '—'}</td>
-                         <td className="px-4 text-sm opacity-90">{t.contactName}</td>
-                         <td className="px-4 text-center opacity-0 group-hover:opacity-100 transition-opacity">
+                         <td className="px-2.5 text-xs font-mono opacity-80">{t.lastFollowupDate || '—'}</td>
+                         <td className="px-2.5 text-xs opacity-90">{t.contactName}</td>
+                         <td className="px-2.5 text-center opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); }}>
                            <button 
                              onClick={() => handleAction(t.id, 'followup', () => onAddFollowup(t))} 
                              disabled={loadingAction !== null || t.status === 'terminated' || t.status === 'archived'}
@@ -1308,7 +1404,8 @@ export default function App() {
   const [editingTrackingId, setEditingTrackingId] = useState<string | null>(null);
   const [trackingForm, setTrackingForm] = useState<Omit<ProjectTracking, 'id' | 'updatedAt'>>({
     customerName: '', status: 'followup', product: '', cityManager: '', projectManager: '',
-    expectedContractAmount: 0, actualContractAmount: 0, contactName: '', contactPhone: ''
+    expectedContractAmount: 0, actualContractAmount: 0, contactName: '', contactPhone: '',
+    createdAt: format(new Date(), 'yyyy-MM-dd')
   });
   const [trackingFilterStatus, setTrackingFilterStatus] = useState<TrackingStatus | 'all'>('all');
   const [trackingSearchTerm, setTrackingSearchTerm] = useState('');
@@ -1811,6 +1908,8 @@ export default function App() {
     leadClientsActual: '',
     activeClientsTarget: '',
     activeClientsActual: '',
+    signedClientsTarget: '',
+    signedClientsActual: '',
     lostClientsTarget: '',
     lostClientsActual: '',
     contractAmountTarget: '',
@@ -1842,6 +1941,8 @@ export default function App() {
       leadClientsActual: findActual('lead'),
       activeClientsTarget: findTarget('active'),
       activeClientsActual: findActual('active'),
+      signedClientsTarget: findTarget('signed'),
+      signedClientsActual: findActual('signed'),
       lostClientsTarget: findTarget('lost'),
       lostClientsActual: findActual('lost'),
       contractAmountTarget: findTarget('', '合同签署额'),
@@ -2386,6 +2487,7 @@ alter table system_settings disable row level security;
 
     upsertPlan('潜在客户挖掘', 'lead', goalForm.leadClientsTarget, goalForm.leadClientsActual, '家');
     upsertPlan('意向客户跟进', 'active', goalForm.activeClientsTarget, goalForm.activeClientsActual, '家');
+    upsertPlan('新增重点客户', 'signed', goalForm.signedClientsTarget, goalForm.signedClientsActual, '家');
     upsertPlan('客户流失', 'lost', goalForm.lostClientsTarget, goalForm.lostClientsActual, '家');
     upsertPlan('目标合同签署额', undefined, goalForm.contractAmountTarget, goalForm.contractAmountActual, '万', 'currency');
     upsertPlan('目标利润额', undefined, goalForm.profitAmountTarget, goalForm.profitAmountActual, '万', 'currency');
@@ -2887,12 +2989,8 @@ alter table system_settings disable row level security;
   const weekStart = startOfWeek(currentWeekDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentWeekDate, { weekStartsOn: 1 });
 
-  // Check if projectTrackings is actually empty or cleared or has no active/successful business data to handle zeroing out properly
-  const isMarketingCleared = !projectTrackings || 
-    projectTrackings.length === 0 || 
-    (projectTrackings.filter(t => t.status === 'followup').length === 0 && 
-     projectTrackings.filter(t => t.status === 'archived').length === 0 && 
-     projectTrackings.filter(t => ['implementing', 'accepting', 'quoted'].includes(t.status)).length === 0);
+  // Project tracking data is no longer linked to global dashboard metrics
+  const isMarketingCleared = false;
 
   const leadPlans = plans.filter(p => p.metric?.funnelStage === 'lead' && p.level === 'month' && p.startDate.startsWith(selectedMonth));
   const activePlans = plans.filter(p => p.metric?.funnelStage === 'active' && p.level === 'month' && p.startDate.startsWith(selectedMonth));
@@ -2900,77 +2998,48 @@ alter table system_settings disable row level security;
   const lostPlans = plans.filter(p => p.metric?.funnelStage === 'lost' && p.level === 'month' && p.startDate.startsWith(selectedMonth));
 
   const targetLeadClients = leadPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  const currentLeadClients = isMarketingCleared ? 0 : (leadPlans.reduce((acc, curr) => acc + (curr.metric?.current || 0), 0) || 0);
+  const currentLeadClients = leadPlans.reduce((acc, curr) => acc + (curr.metric?.current || 0), 0) || 0;
 
   const targetActiveClients = activePlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  const currentActiveClients = isMarketingCleared ? 0 : (activePlans.reduce((acc, curr) => acc + (curr.metric?.current || 0), 0) || 0);
+  const currentActiveClients = activePlans.reduce((acc, curr) => acc + (curr.metric?.current || 0), 0) || 0;
 
   const targetSignedClients = signedPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  const currentSignedClients = isMarketingCleared ? 0 : (signedPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0) || 0);
+  const currentSignedClients = signedPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0) || 0;
 
   const targetLostClients = lostPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  const currentLostClients = isMarketingCleared ? 0 : (lostPlans.reduce((acc, curr) => acc + (curr.metric?.current || 0), 0) || 0);
+  const currentLostClients = lostPlans.reduce((acc, curr) => acc + (curr.metric?.current || 0), 0) || 0;
   
   const currentMonthProfitPlans = plans.filter(p => p.metric?.unit === '万' && p.level === 'month' && p.startDate.startsWith(selectedMonth) && p.title.includes('利润'));
   const currentMonthTargetProfit = currentMonthProfitPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  const currentMonthActualProfit = isMarketingCleared ? 0 : currentMonthProfitPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
+  const currentMonthActualProfit = currentMonthProfitPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
 
   const currentMonthContractPlans = plans.filter(p => p.metric?.unit === '万' && p.level === 'month' && p.startDate.startsWith(selectedMonth) && p.title.includes('合同'));
   const currentMonthTargetContract = currentMonthContractPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  
-  // Calculate raw contract amount from tracked projects for current month
-  const mktMonthActualContractVal = projectTrackings
-    .filter(t => t.updatedAt && t.updatedAt.startsWith(selectedMonth))
-    .reduce((acc, curr) => acc + (curr.actualContractAmount || 0), 0) / 10000;
-
-  const currentMonthActualContract = isMarketingCleared ? 0 : mktMonthActualContractVal;
+  const currentMonthActualContract = currentMonthContractPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
 
   const currentMonthCollectionPlans = plans.filter(p => p.metric?.unit === '万' && p.level === 'month' && p.startDate.startsWith(selectedMonth) && p.title.includes('回款'));
   const currentMonthTargetCollection = currentMonthCollectionPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
-  const currentMonthActualCollection = isMarketingCleared ? 0 : currentMonthCollectionPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
+  const currentMonthActualCollection = currentMonthCollectionPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
 
   const currentYearProfitPlans = plans.filter(p => p.metric?.unit === '万' && p.level === 'month' && p.startDate.startsWith(CURRENT_YEAR) && p.title.includes('利润'));
-  const currentYearActualProfit = isMarketingCleared ? 0 : currentYearProfitPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
+  const currentYearActualProfit = currentYearProfitPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
 
   const yearLeadPlans = plans.filter(p => p.metric?.funnelStage === 'lead' && p.level === 'month' && p.startDate.startsWith(CURRENT_YEAR));
-  const yearTargetLeadClients = isMarketingCleared ? 0 : (yearLeadPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 50);
+  const yearTargetLeadClients = yearLeadPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
   
-  const getTrackingYear = (t: ProjectTracking) => {
-    if (t.updatedAt && typeof t.updatedAt === 'string') {
-      return t.updatedAt.split('-')[0];
-    }
-    return CURRENT_YEAR;
-  };
-
-  // Count pipeline clients from projectTrackings if available and not cleared, otherwise fallback
-  const trackedYearLeadClients = projectTrackings.filter(t => t.status === 'followup' && getTrackingYear(t) === CURRENT_YEAR).length;
-  const yearLeadClients = isMarketingCleared 
-    ? 0 
-    : trackedYearLeadClients;
+  const yearLeadClients = yearLeadPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
 
   const yearActivePlans = plans.filter(p => p.metric?.funnelStage === 'active' && p.level === 'month' && p.startDate.startsWith(CURRENT_YEAR));
-  const yearTargetActiveClients = isMarketingCleared ? 0 : (yearActivePlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 30);
-  
-  const trackedYearActiveClients = projectTrackings.filter(t => ['implementing', 'accepting', 'quoted'].includes(t.status) && getTrackingYear(t) === CURRENT_YEAR).length;
-  const yearActiveClients = isMarketingCleared
-    ? 0
-    : trackedYearActiveClients;
+  const yearTargetActiveClients = yearActivePlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
+  const yearActiveClients = yearActivePlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
 
   const yearSignedPlans = plans.filter(p => p.metric?.funnelStage === 'signed' && p.level === 'month' && p.startDate.startsWith(CURRENT_YEAR));
-  const yearTargetSignedClients = isMarketingCleared ? 0 : (yearSignedPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 10);
-  
-  const trackedYearSignedClients = projectTrackings.filter(t => t.status === 'archived' && getTrackingYear(t) === CURRENT_YEAR).length;
-  const yearSignedClients = isMarketingCleared
-    ? 0
-    : trackedYearSignedClients;
+  const yearTargetSignedClients = yearSignedPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
+  const yearSignedClients = yearSignedPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
 
   const yearLostPlans = plans.filter(p => p.metric?.funnelStage === 'lost' && p.level === 'month' && p.startDate.startsWith(CURRENT_YEAR));
-  const yearTargetLostClients = isMarketingCleared ? 0 : (yearLostPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 5);
-  
-  const trackedYearLostClients = projectTrackings.filter(t => t.status === 'terminated' && getTrackingYear(t) === CURRENT_YEAR).length;
-  const yearLostClients = isMarketingCleared
-    ? 0
-    : trackedYearLostClients;
+  const yearTargetLostClients = yearLostPlans.reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
+  const yearLostClients = yearLostPlans.reduce((acc, curr) => acc + (curr.metric?.actualCompleted !== undefined ? curr.metric.actualCompleted : curr.metric?.current || 0), 0);
 
   const funnelData = [
     { name: '潜在线索', value: yearLeadClients },
@@ -2985,20 +3054,20 @@ alter table system_settings disable row level security;
       (p.level === 'month' && quarterMonths.some(m => p.startDate.startsWith(m)))
   );
   
-  const quarterTargetProfit = globalQuarterPlans.filter(p => p.title.includes('利润')).reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 360;
+  const quarterTargetProfit = globalQuarterPlans.filter(p => p.title.includes('利润')).reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
   const quarterActualProfit = isMarketingCleared ? 0 : globalQuarterPlans.filter(p => p.title.includes('利润')).reduce((acc, curr) => acc + (curr.metric?.actualCompleted ?? curr.metric?.current ?? 0), 0);
   
-  const quarterTargetContract = globalQuarterPlans.filter(p => p.title.includes('合同')).reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 1500;
+  const quarterTargetContract = globalQuarterPlans.filter(p => p.title.includes('合同')).reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
   const quarterActualContract = isMarketingCleared ? 0 : globalQuarterPlans.filter(p => p.title.includes('合同')).reduce((acc, curr) => acc + (curr.metric?.actualCompleted ?? curr.metric?.current ?? 0), 0);
   
   // Marketing Monthly Calculations
   const marketingProjects = projects.filter(p => p.category === 'marketing');
   const mktProjectIds = marketingProjects.map(p => p.id);
   const marketingMonthPlans = plans.filter(p => p.level === 'month' && p.startDate.startsWith(selectedMonth) && mktProjectIds.includes(p.projectId));
-  const mktTargetProfit = marketingMonthPlans.filter(p => p.title.includes('利润')).reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 120;
+  const mktTargetProfit = marketingMonthPlans.filter(p => p.title.includes('利润')).reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
   const mktActualProfit = isMarketingCleared ? 0 : marketingMonthPlans.filter(p => p.title.includes('利润')).reduce((acc, curr) => acc + (curr.metric?.actualCompleted ?? curr.metric?.current ?? 0), 0);
-  const mktTargetContract = marketingMonthPlans.filter(p => p.title.includes('合同')).reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 500;
-  const mktActualContract = isMarketingCleared ? 0 : mktMonthActualContractVal;
+  const mktTargetContract = marketingMonthPlans.filter(p => p.title.includes('合同')).reduce((acc, curr) => acc + (curr.metric?.target || 0), 0) || 0;
+  const mktActualContract = marketingMonthPlans.filter(p => p.title.includes('合同')).reduce((acc, curr) => acc + (curr.metric?.actualCompleted ?? curr.metric?.current ?? 0), 0);
 
   // Generates 12 months of the currently selected year
   const currentYearMonths = Array.from({ length: 12 }).map((_, i) => `${CURRENT_YEAR}-${String(i + 1).padStart(2, '0')}`);
@@ -4398,7 +4467,7 @@ alter table system_settings disable row level security;
                 trackings={projectTrackings}
                 onDelete={terminateTracking}
                 onEdit={(t) => { setEditingTrackingId(t.id); setTrackingForm(t); setTrackingError(''); setIsTrackingModalOpen(true); }}
-                onAdd={() => { setEditingTrackingId(null); setTrackingForm({ customerName: '', status: 'followup', product: '', cityManager: '', projectManager: '', expectedContractAmount: 0, actualContractAmount: 0, contactName: '', contactPhone: '' }); setTrackingError(''); setIsTrackingModalOpen(true); }}
+                onAdd={() => { setEditingTrackingId(null); setTrackingForm({ customerName: '', status: 'followup', product: '', cityManager: '', projectManager: '', expectedContractAmount: 0, actualContractAmount: 0, contactName: '', contactPhone: '', createdAt: format(new Date(), 'yyyy-MM-dd') }); setTrackingError(''); setIsTrackingModalOpen(true); }}
                 onAddFollowup={(t) => {
                    setEditingTrackingId(t.id);
                    setFollowupForm({ date: format(new Date(), 'yyyy-MM-dd'), content: '' });
@@ -5165,6 +5234,21 @@ alter table system_settings disable row level security;
                 </div>
               </div>
 
+              {/* Signed Clients */}
+              <div>
+                <label className="block text-[11px] uppercase tracking-widest font-bold mb-2 pb-1 border-b border-[#1A1A1A]/10">已签约成交 (家)</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-[9px] opacity-60 mb-1 block">月初目标</span>
+                    <input type="number" min="0" value={goalForm.signedClientsTarget} onChange={(e) => setGoalForm({...goalForm, signedClientsTarget: e.target.value})} className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-1 text-sm font-mono" />
+                  </div>
+                  <div>
+                    <span className="text-[9px] opacity-60 mb-1 block">月底实际</span>
+                    <input type="number" min="0" value={goalForm.signedClientsActual} onChange={(e) => setGoalForm({...goalForm, signedClientsActual: e.target.value})} className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-1 text-sm font-mono" />
+                  </div>
+                </div>
+              </div>
+
               {/* Lost Clients */}
               <div>
                 <label className="block text-[11px] uppercase tracking-widest font-bold mb-2 pb-1 border-b border-[#1A1A1A]/10">客户流失 (家)</label>
@@ -5852,12 +5936,13 @@ alter table system_settings disable row level security;
                 { key: 'contactPhone', label: '联系电话', placeholder: '如：13812345678' },
                 { key: 'expectedContractAmount', label: '预期合同额(元)', placeholder: '请输入金额' },
                 { key: 'actualContractAmount', label: '已达成合同额(元)', placeholder: '请输入金额' },
+                { key: 'createdAt', label: '创建日期', placeholder: '请选择日期' },
                 { key: 'lastFollowupDate', label: '最近跟进日期', placeholder: '请选择日期' }
               ].map(field => (
-                <div key={field.key} className={field.key === 'lastFollowupDate' ? 'col-span-2' : 'col-span-1'}>
+                <div key={field.key} className="col-span-1">
                   <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">{field.label}</label>
                   <input 
-                    type={field.key.includes('Amount') ? 'number' : field.key === 'lastFollowupDate' ? 'date' : 'text'}
+                    type={field.key.includes('Amount') ? 'number' : ['lastFollowupDate', 'createdAt'].includes(field.key) ? 'date' : 'text'}
                     value={(trackingForm as any)[field.key] ?? ''} 
                     onChange={(e) => setTrackingForm({...trackingForm, [field.key]: field.key.includes('Amount') ? Number(e.target.value) : e.target.value})} 
                     className="w-full bg-transparent border-b border-[#1A1A1A]/30 outline-none py-2 text-sm"
@@ -6046,8 +6131,12 @@ alter table system_settings disable row level security;
                         <div className="text-sm font-mono">{selectedTrackingDetail.lastFollowupDate || '—'}</div>
                       </div>
                       <div>
+                        <div className="text-[11px] opacity-60 mb-1">创建时间</div>
+                        <div className="text-sm font-mono">{selectedTrackingDetail.createdAt || (selectedTrackingDetail.updatedAt ? selectedTrackingDetail.updatedAt.split('T')[0] : '—')}</div>
+                      </div>
+                      <div>
                         <div className="text-[11px] opacity-60 mb-1">最后更新于</div>
-                        <div className="text-sm font-mono">{new Date(selectedTrackingDetail.updatedAt).toLocaleString()}</div>
+                        <div className="text-sm font-mono">{selectedTrackingDetail.updatedAt ? new Date(selectedTrackingDetail.updatedAt).toLocaleString() : '—'}</div>
                       </div>
                    </div>
                 </div>
