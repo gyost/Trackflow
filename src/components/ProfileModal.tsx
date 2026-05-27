@@ -14,6 +14,7 @@ export default function ProfileModal({ onClose, currentUser, setCurrentUser }: P
 
   const handleSave = () => {
     setCurrentUser(prev => prev ? { ...prev, name, phone, avatar } : null);
+    window.showToast?.('个人资料修改已保存成功', 'success');
     onClose();
   };
 

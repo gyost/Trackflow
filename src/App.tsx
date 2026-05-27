@@ -17,7 +17,7 @@ import {
 } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { HelpCircle, LayoutDashboard, Target, TrendingUp, Code2, ClipboardList, User, Settings, LogOut, Search, Plus, Download, Upload, FileSpreadsheet, Filter, Coins, FileText, Wallet, Users, UserX } from 'lucide-react';
+import { HelpCircle, LayoutDashboard, Target, TrendingUp, Code2, ClipboardList, User, Settings, LogOut, Search, Plus, Download, Upload, FileSpreadsheet, Filter, Coins, FileText, Wallet, Users, UserX, CheckCircle2, AlertTriangle, X, Info, XCircle } from 'lucide-react';
 import { mockProjects, mockPlans as initialPlans, mockTasks as initialTasks, mockOutcomes as initialOutcomes, mockMembers, mockGroups, mockRequirements as initialRequirements } from './mockData';
 import { Plan, Task, Outcome, Group, Member, Project, Status, Priority, Requirement, RequirementStatus, RequirementHistory, ReleaseGoal, ProjectTracking, TrackingStatus, FollowupRecord, RolePermission } from './types';
 import { generateId } from './lib/utils';
@@ -1270,7 +1270,35 @@ const ProjectTrackingView = ({
   );
 };
 
+declare global {
+  interface Window {
+    showToast?: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
+  }
+}
+
+interface ToastItem {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+}
+
 export default function App() {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const showToast = React.useCallback((message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3500);
+  }, []);
+
+  useEffect(() => {
+    window.showToast = showToast;
+    return () => {
+      delete window.showToast;
+    };
+  }, [showToast]);
+
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
   const isSystemAdmin = React.useMemo(() => {
     if (!currentUser) return false;
@@ -1281,6 +1309,28 @@ export default function App() {
   }, [currentUser]);
   const [currentUserLoaded, setCurrentUserLoaded] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [cuteStepIndex, setCuteStepIndex] = useState(0);
+  const [showSlowLoadingOption, setShowSlowLoadingOption] = useState(false);
+
+  useEffect(() => {
+    if (!isLoadingData) return;
+    const interval = setInterval(() => {
+      setCuteStepIndex(prev => (prev + 1) % 6);
+    }, 2400);
+    return () => clearInterval(interval);
+  }, [isLoadingData]);
+
+  useEffect(() => {
+    if (!isLoadingData) {
+      setShowSlowLoadingOption(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setShowSlowLoadingOption(true);
+    }, 5500);
+    return () => clearTimeout(timer);
+  }, [isLoadingData]);
+
   const [dataError, setDataError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<string>('dashboard');
@@ -1998,6 +2048,7 @@ export default function App() {
   const handleLogin = (user: Member) => {
     setCurrentUser(user);
     localStorage.setItem('currentUser', JSON.stringify(user));
+    window.showToast?.(`登录成功，欢迎回来，${user.name}！`, 'success');
   };
 
   const handleLogout = () => {
@@ -2008,6 +2059,7 @@ export default function App() {
     setCurrentUser(null);
     localStorage.removeItem('currentUser');
     setIsLogoutModalOpen(false);
+    window.showToast?.('您已安全退出系统', 'info');
   };
 
   const handleAccountSetupComplete = (account: string, pass: string) => {
@@ -2018,6 +2070,7 @@ export default function App() {
     localStorage.setItem('has_setup_account', 'true');
     
     setMembers(prev => prev.map(m => m.id === currentUser.id ? { ...m, account, password: pass } : m));
+    window.showToast?.('系统登录账户和密码已保存成功', 'success');
   };
 
   const openTaskModal = React.useCallback((memberId: string, dept: 'marketing' | 'rnd') => {
@@ -2405,29 +2458,147 @@ alter table system_settings disable row level security;
   }
 
   if (isLoadingData) {
+    const cuteSteps = [
+      "🛸 正在启动智慧看板的数据飞船...",
+      "✨ 正在打扫任务看板，擦亮每个闪耀成果...",
+      "🎨 正在调制今日看板的马卡龙色系...",
+      "📊 正在把复杂的项目进度折叠成快乐的小星星...",
+      "💼 正在用魔法棒精细校准本月度的经营指标...",
+      "🧁 正在为您准备热咖啡，即将进入数字化管理大厅..."
+    ];
+
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB] p-6 text-center animate-fade-in">
-        <div className="flex flex-col items-center gap-6 max-w-md w-full">
-          <div className="w-12 h-12 border-4 border-[#1A1A1A]/10 border-t-[#1A1A1A] rounded-full animate-spin"></div>
-          
-          <div className="space-y-2">
-            <h3 className="text-base font-semibold text-[#1A1A1A]">正在进入数字化管理系统...</h3>
-            <div className="text-xs text-black/50 font-mono bg-black/[0.03] py-2 px-3 rounded-md min-h-[40px] flex items-center justify-center">
-              {loadingStep}
+      <div className="min-h-screen flex items-center justify-center bg-[#FAF9F5] p-6 text-center animate-fade-in">
+        <div className="flex flex-col items-center gap-6 max-w-sm w-full">
+          {/* Animated Cute Robot SVG */}
+          <div className="relative w-[140px] h-[140px] flex items-center justify-center">
+            <svg width="140" height="140" viewBox="0 0 140 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* Keyframe Inline Styles */}
+              <style>{`
+                @keyframes float {
+                  0%, 100% { transform: translateY(0px); }
+                  50% { transform: translateY(-12px); }
+                }
+                @keyframes shadow {
+                  0%, 100% { transform: scale(1); opacity: 0.15; }
+                  50% { transform: scale(0.8); opacity: 0.08; }
+                }
+                @keyframes blink {
+                  0%, 90%, 100% { transform: scaleY(1); }
+                  55% { transform: scaleY(0.1); }
+                }
+                @keyframes pulseGlow {
+                  0%, 100% { opacity: 0.4; filter: drop-shadow(0 0 2px #EAB308); }
+                  50% { opacity: 1; filter: drop-shadow(0 0 8px #EAB308); }
+                }
+                @keyframes spinSlow {
+                  from { transform: rotate(0deg); }
+                  to { transform: rotate(360deg); }
+                }
+                .float-robot {
+                  animation: float 2.5s ease-in-out infinite;
+                }
+                .shadow-robot {
+                  animation: shadow 2.5s ease-in-out infinite;
+                  transform-origin: 70px 125px;
+                }
+                .eye-blink {
+                  animation: blink 4s ease-in-out infinite;
+                }
+                .antenna-glow {
+                  animation: pulseGlow 1.8s ease-in-out infinite;
+                }
+                .spin-star {
+                  animation: spinSlow 8s linear infinite;
+                  transform-origin: 105px 35px;
+                }
+                .cute-sparkle {
+                  animation: float 3s ease-in-out infinite reverse;
+                }
+              `}</style>
+
+              {/* Ground Shadow */}
+              <ellipse className="shadow-robot" cx="70" cy="125" rx="32" ry="7" fill="#EADCC9" />
+
+              {/* The Cute Floating Robot Body and Parts */}
+              <g className="float-robot">
+                {/* Tiny antenna line */}
+                <path d="M70 42V30" stroke="#78716C" strokeWidth="4" strokeLinecap="round"/>
+                {/* Antenna bulb (glowing yellow) */}
+                <circle className="antenna-glow" cx="70" cy="24" r="7" fill="#EAB308" />
+                
+                {/* Left Ear / Speaker */}
+                <rect x="25" y="60" width="8" height="16" rx="4" fill="#A8A29E" />
+                {/* Right Ear / Speaker */}
+                <rect x="107" y="60" width="8" height="16" rx="4" fill="#A8A29E" />
+
+                {/* Main Robot Head/Body */}
+                <rect x="30" y="42" width="80" height="66" rx="28" fill="#F5F5F4" stroke="#78716C" strokeWidth="4" />
+                
+                {/* Face Screen */}
+                <rect x="40" y="52" width="60" height="34" rx="14" fill="#292524" />
+                
+                {/* Left Eye */}
+                <circle cx="56" cy="68" r="5" fill="#2DD4BF" className="eye-blink" style={{ transformOrigin: "56px 68px" }} />
+                {/* Right Eye */}
+                <circle cx="84" cy="68" r="5" fill="#2DD4BF" className="eye-blink" style={{ transformOrigin: "84px 68px" }} />
+                
+                {/* Blush */}
+                <circle cx="48" cy="78" r="3" fill="#FB7185" opacity="0.6" />
+                <circle cx="92" cy="78" r="3" fill="#FB7185" opacity="0.6" />
+
+                {/* Cute Smiling Mouth */}
+                <path d="M66 76C66 78 68 79 70 79C72 79 74 78 74 76" stroke="#2DD4BF" strokeWidth="2" strokeLinecap="round" />
+
+                {/* Hands (small cute nubs) */}
+                <circle cx="21" cy="78" r="5" fill="#E7E5E4" stroke="#78716C" strokeWidth="3" />
+                <circle cx="119" cy="78" r="5" fill="#E7E5E4" stroke="#78716C" strokeWidth="3" />
+                
+                {/* Heart on body */}
+                <path d="M70 98L67 95C64 92 64 89.5 66.5 87C68 85.5 69.5 86 70 86.5C70.5 86 72 85.5 73.5 87C76 89.5 76 92 73 95L70 98Z" fill="#F43F5E" />
+              </g>
+
+              {/* Playful Decorative Sparkles */}
+              <g className="spin-star">
+                <path d="M105 27L106.5 31.5L111 33L106.5 34.5L105 39L103.5 34.5L99 33L103.5 31.5L105 27Z" fill="#FBBF24" />
+              </g>
+              <g className="cute-sparkle" style={{ animationDelay: "-1s" }}>
+                <path d="M32 20L33 23L36 24L33 25L32 28L31 25L28 24L31 23L32 20Z" fill="#38BDF8" opacity="0.8" />
+              </g>
+            </svg>
+          </div>
+
+          <div className="space-y-4 w-full">
+            <div className="flex items-center justify-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+            </div>
+            
+            <div className="space-y-1.5">
+              <h3 className="text-sm font-bold text-[#1A1A1A] tracking-wide">
+                主理人，正在为您加载数字化看板...
+              </h3>
+              <div className="text-[11px] leading-relaxed text-zinc-500/90 font-medium px-4 min-h-[32px] flex items-center justify-center transition-all duration-300">
+                {cuteSteps[cuteStepIndex]}
+              </div>
             </div>
           </div>
 
-          <div className="pt-4 border-t border-black/5 w-full flex flex-col items-center gap-3">
-            <p className="text-xs text-black/40">
-              提示：若您的 Supabase 云数据库未配置，或免费宿主机休眠导致唤醒缓慢，您可以随时切换至本地演示模式。
-            </p>
-            <button 
-              onClick={switchToLocalMockMode}
-              className="px-4 py-2 text-xs font-semibold text-white bg-[#1A1A1A] hover:bg-black transition-colors rounded-lg shadow-sm"
-            >
-              一键降级为本地 Mock 模式
-            </button>
-          </div>
+          {/* Fallback Options - Only reveals after delay if loading is abnormally slow */}
+          {showSlowLoadingOption && (
+            <div className="pt-4 border-t border-[#1A1A1A]/5 w-full flex flex-col items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <p className="text-[10px] text-zinc-400">
+                如果长时间未响应，您可以快速降级运行
+              </p>
+              <button 
+                onClick={switchToLocalMockMode}
+                className="px-3.5 py-1.5 text-[10px] font-semibold text-zinc-600 hover:text-zinc-800 bg-zinc-100 hover:bg-zinc-200 active:scale-95 transition-all rounded-lg"
+              >
+                💾 降级至本地 Mock 演示模式
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -2506,6 +2677,7 @@ alter table system_settings disable row level security;
     }
 
     setIsGoalModalOpen(false);
+    window.showToast?.('本月度经营指标与管理目标设定成功！', 'success');
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
@@ -2533,6 +2705,7 @@ alter table system_settings disable row level security;
       setIsEditModalOpen(false);
       setEditingPlan(null);
       setEditForm({ targetValue: '' });
+      window.showToast?.('目标指标数值已修改成功', 'success');
     }
   };
 
@@ -2563,6 +2736,7 @@ alter table system_settings disable row level security;
       setIsActualModalOpen(false);
       setEditingPlan(null);
       setActualForm({ actualValue: '' });
+      window.showToast?.('实际完成度与达成数值已更新！', 'success');
     }
   };
 
@@ -2595,6 +2769,7 @@ alter table system_settings disable row level security;
       }
       setIsTaskModalOpen(false);
       setTaskForms([{ id: generateId(), title: '', plannedProgress: '0', startDate: format(new Date(), 'yyyy-MM-dd'), endDate: format(currentWeekDate, 'yyyy-MM-dd'), projectName: '', outcome: '' }]);
+      window.showToast?.('新增周计划任务成功！', 'success');
     }
   };
 
@@ -2619,6 +2794,7 @@ alter table system_settings disable row level security;
       }
       setIsOutcomeModalOpen(false);
       setOutcomeForms([{ id: generateId(), title: '', description: '', date: format(new Date(), 'yyyy-MM-dd') }]);
+      window.showToast?.('产出成果提交成功，已呈报待审核', 'success');
     }
   };
 
@@ -2655,8 +2831,10 @@ alter table system_settings disable row level security;
       setReleaseGoalForm({ title: '', targetMonth: selectedMonth, targetDate: '', status: 'planned' });
       setEditingReleaseGoal(null);
       setIsReleaseGoalModalOpen(false);
+      window.showToast?.(`发布目标${isNew ? '创建' : '更新'}成功！`, 'success');
     } catch (err) {
       console.warn('Failed to save release goal', err);
+      window.showToast?.('保存发布目标异常，请稍后重试', 'error');
     }
   };
 
@@ -2669,8 +2847,10 @@ alter table system_settings disable row level security;
     try {
       await apiService.deleteReleaseGoal(id);
       setReleaseGoals(releaseGoals.filter(g => g.id !== id));
+      window.showToast?.('发布目标已成功删除', 'info');
     } catch (err) {
       console.warn('Failed to delete release goal', err);
+      window.showToast?.('删除发布目标失败', 'error');
     }
   };
 
@@ -2687,8 +2867,10 @@ alter table system_settings disable row level security;
         try {
           await apiService.saveProjectTracking(updated);
           setProjectTrackings(prev => prev.map(t => t.id === trackingToTerminate ? updated : t));
+          window.showToast?.('项目已终止跟进', 'info');
         } catch (err) {
           console.warn('Failed to terminate tracking', err);
+          window.showToast?.('终止项目跟进操作失败', 'error');
         }
       }
       setIsTerminateTrackingModalOpen(false);
@@ -2703,8 +2885,10 @@ alter table system_settings disable row level security;
       try {
         await apiService.saveProjectTracking(updated);
         setProjectTrackings(prev => prev.map(t => t.id === id ? updated : t));
+        window.showToast?.('项目跟进状态更新成功', 'success');
       } catch (err) {
         console.warn('Failed to update tracking status', err);
+        window.showToast?.('更新状态出错', 'error');
       }
     }
   };
@@ -2712,13 +2896,15 @@ alter table system_settings disable row level security;
   const saveTracking = async (tracking: ProjectTracking) => {
     try {
       await apiService.saveProjectTracking(tracking);
-      if (editingTrackingId) {
+      const isEdit = !!editingTrackingId;
+      if (isEdit) {
         setProjectTrackings(prev => prev.map(t => t.id === editingTrackingId ? tracking : t));
       } else {
         setProjectTrackings(prev => [tracking, ...prev]);
       }
       setIsTrackingModalOpen(false);
       setEditingTrackingId(null);
+      window.showToast?.(`跟进档案${isEdit ? '修改' : '登记'}成功！`, 'success');
     } catch (err) {
       console.warn('Failed to save tracking', err);
       const eObj = err as any;
@@ -2727,6 +2913,7 @@ alter table system_settings disable row level security;
       } else {
         setTrackingError('Failed to save tracking record: ' + (eObj.message || ''));
       }
+      window.showToast?.('保存跟进失败，请检查登录或权限', 'error');
     }
   };
 
@@ -2750,8 +2937,10 @@ alter table system_settings disable row level security;
             await apiService.saveProjectTracking(updated);
             setProjectTrackings(prev => prev.map(t => t.id === editingTrackingId ? updated : t));
             setIsFollowupModalOpen(false);
+            window.showToast?.('关联商机跟进备注追加成功！', 'success');
         } catch(err) {
             console.warn('Failed to add followup', err);
+            window.showToast?.('新增跟进记录保存失败', 'error');
         }
       }
     }
@@ -2836,10 +3025,11 @@ alter table system_settings disable row level security;
       setIsRequirementModalOpen(false);
       setEditingRequirementId(null);
       setRequirementForm({ title: '', description: '', linkUrl: '', priority: 'medium', source: 'customer', customerName: '', internalSourceDetail: '', assigneeId: '' });
+      window.showToast?.(`需求研发专项档案已${editingRequirementId ? '修改' : '创建'}成功！`, 'success');
     } catch (err) {
       console.warn('Failed to submit requirement:', err);
       const errMsg = err && typeof err === 'object' && 'message' in err ? err.message : String(err);
-      alert('提交需求失败: ' + errMsg);
+      window.showToast?.('提交需求失败: ' + errMsg, 'error');
       if (errMsg.includes('RLS受阻') || errMsg.includes('Could not find') || errMsg.includes('schema cache')) {
         setDataError(errMsg);
       }
@@ -2880,8 +3070,10 @@ alter table system_settings disable row level security;
         
         await apiService.saveRequirement({ ...updatedReq, newHistoryEntry });
         setRequirements(prev => prev.map(r => r.id === id ? updatedReq : r));
+        window.showToast?.('需求跟进状态已更新成功！', 'success');
       } catch (err) {
         console.warn('Failed to update status:', err);
+        window.showToast?.('变更需求状态失败，请联系管理员', 'error');
       }
     }
   };
@@ -2908,8 +3100,10 @@ alter table system_settings disable row level security;
       setIsRejectRequirementModalOpen(false);
       setReqToReject(null);
       setRejectReason('');
+      window.showToast?.('已成功驳回该核心需求申报', 'warning');
     } catch (err) {
       console.warn('Failed to reject requirement:', err);
+      window.showToast?.('驳回需求异常', 'error');
     }
   };
 
@@ -2926,8 +3120,10 @@ alter table system_settings disable row level security;
         };
         await apiService.saveRequirement(updatedReq);
         setRequirements(prev => prev.map(r => r.id === id ? updatedReq : r));
+        window.showToast?.('已将该需求移入需求回收站', 'info');
       } catch (err) {
         console.warn('Failed to delete requirement:', err);
+        window.showToast?.('删除需求操作失败', 'error');
       }
     }
   };
@@ -2945,8 +3141,10 @@ alter table system_settings disable row level security;
         };
         await apiService.saveRequirement(updatedReq);
         setRequirements(prev => prev.map(r => r.id === id ? updatedReq : r));
+        window.showToast?.('需求档案已成功恢复！', 'success');
       } catch (err) {
         console.warn('Failed to restore requirement:', err);
+        window.showToast?.('还原需求异常', 'error');
       }
     }
   };
@@ -5930,7 +6128,7 @@ alter table system_settings disable row level security;
               {[
                 { key: 'customerName', label: '客户名称', placeholder: '请输入客户名称' },
                 { key: 'product', label: '产品名称', placeholder: '请输入产品名称' },
-                { key: 'cityManager', label: '市负责人', placeholder: '请输入市负责人' },
+                { key: 'cityManager', label: '市场负责人', placeholder: '请输入市场负责人' },
                 { key: 'projectManager', label: '项目负责人', placeholder: '请输入项目负责人' },
                 { key: 'contactName', label: '联系人', placeholder: '请输入联系人' },
                 { key: 'contactPhone', label: '联系电话', placeholder: '如：13812345678' },
@@ -6790,6 +6988,42 @@ alter table system_settings disable row level security;
           </div>
         </div>
       )}
+
+      {/* 极简精致的智能全局 Toast 系统 */}
+      <div id="global-toast-container" className="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] w-[calc(100vw-32px)] max-w-[360px] flex flex-col gap-2.5 pointer-events-none">
+        {toasts.map((toast) => {
+          let icon = <CheckCircle2 className="w-4 h-4 text-emerald-600" />;
+          let bgClass = "bg-white/95 border-emerald-500/10 text-zinc-800 shadow-[0_12px_32px_rgba(16,185,129,0.08)]";
+          
+          if (toast.type === 'error') {
+            icon = <XCircle className="w-4 h-4 text-rose-600" />;
+            bgClass = "bg-white/95 border-rose-500/10 text-zinc-800 shadow-[0_12px_32px_rgba(244,63,94,0.08)]";
+          } else if (toast.type === 'warning') {
+            icon = <AlertTriangle className="w-4 h-4 text-amber-600" />;
+            bgClass = "bg-white/95 border-amber-500/10 text-zinc-800 shadow-[0_12px_32px_rgba(245,158,11,0.08)]";
+          } else if (toast.type === 'info') {
+            icon = <Info className="w-4 h-4 text-indigo-600" />;
+            bgClass = "bg-white/95 border-indigo-500/10 text-zinc-800 shadow-[0_12px_32px_rgba(99,102,241,0.08)]";
+          }
+
+          return (
+            <div
+              key={toast.id}
+              className={`pointer-events-auto flex items-center gap-3 px-4 py-3 border rounded-2xl backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${bgClass}`}
+            >
+              <div className="shrink-0">{icon}</div>
+              <div className="flex-1 text-xs font-semibold text-zinc-800 break-words leading-snug">{toast.message}</div>
+              <button
+                onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+                className="shrink-0 p-1 rounded-lg hover:bg-[#1A1A1A]/5 text-zinc-400 hover:text-zinc-600 transition-colors cursor-pointer"
+                id={`toast-close-${toast.id}`}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -18,27 +18,37 @@ export default function AccountSetupModal({ currentUser, onComplete, members }: 
     // Validate account (letters and numbers combination, at least 8 chars)
     const isAccountValid = /^[A-Za-z0-9]{8,}$/.test(account) && /[A-Za-z]/.test(account) && /[0-9]/.test(account);
     if (!isAccountValid) {
-      setError('账号必须是字母与数字组合，且至少 8 个字符');
+      const err = '账号必须是字母与数字组合，且至少 8 个字符';
+      setError(err);
+      window.showToast?.(err, 'warning');
       return;
     }
 
     // Validate password
     if (password.length < 8) {
-      setError('密码至少需要 8 个字符');
+      const err = '密码至少需要 8 个字符';
+      setError(err);
+      window.showToast?.(err, 'warning');
       return;
     }
     if (!password.includes('@')) {
-      setError('密码必须包含 @ 特殊字符');
+      const err = '密码必须包含 @ 特殊字符';
+      setError(err);
+      window.showToast?.(err, 'warning');
       return;
     }
     if (password === account) {
-      setError('密码不能与账号重复');
+      const err = '密码不能与账号重复';
+      setError(err);
+      window.showToast?.(err, 'warning');
       return;
     }
 
     // Check if account already exists
     if (members.some(m => m.account === account && m.id !== currentUser.id)) {
-      setError('该账号已被使用，请更换一个');
+      const err = '该账号已被使用，请更换一个';
+      setError(err);
+      window.showToast?.(err, 'warning');
       return;
     }
 
