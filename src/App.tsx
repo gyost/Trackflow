@@ -1022,16 +1022,16 @@ const ProjectTrackingView = ({
         )}
 
         {/* Data List Wrapper (scrollable) */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto md:overflow-hidden md:flex md:flex-col md:min-h-0">
           {filtered.length === 0 ? (
             <div className="py-20 text-center flex flex-col items-center">
                <div className="w-12 h-12 border border-[#1A1A1A]/10 rounded-full flex items-center justify-center text-2xl font-serif italic opacity-20 mb-4">0</div>
                <div className="text-xs uppercase tracking-widest opacity-40">暂无符合条件的项目记录</div>
             </div>
           ) : (
-            <div className="animate-in fade-in duration-500">
+            <div className="animate-in fade-in duration-500 md:flex-1 md:flex md:flex-col md:min-h-0">
                               {/* Desktop Table */}
-               <div className="hidden md:block overflow-auto max-h-[calc(100vh-320px)] custom-scrollbar border border-[#1A1A1A]/10 rounded">
+               <div className="hidden md:block md:flex-1 overflow-auto custom-scrollbar border border-[#1A1A1A]/10 rounded shadow-sm bg-white">
                  <table className="w-full text-xs text-left whitespace-nowrap">
                    <thead className="sticky top-0 bg-[#F7F6F2] z-10">
                      <tr className="border-b-2 border-[#1A1A1A]/20 text-xs font-bold text-[#1A1A1A] h-12">
@@ -1041,7 +1041,7 @@ const ProjectTrackingView = ({
                        <th className="px-2.5 font-bold">合作意向/产品</th>
                        <th className="px-2.5 font-bold">市场负责人</th>
                        <th className="px-2.5 font-bold">项目负责人</th>
-                       <th className="px-2.5 font-bold text-right font-mono">预期合同额(元)</th>
+                       <th className="px-2.5 font-bold text-right font-mono">预期合同额(万)</th>
                        <th className="px-2.5 font-bold text-right font-mono">已达成(万)</th>
                        <th className="px-2.5 font-bold">最近跟进</th>
                        <th className="px-2.5 font-bold">客户联系人</th>
@@ -1078,7 +1078,7 @@ const ProjectTrackingView = ({
                          <td className="px-2.5 text-xs opacity-90">{t.cityManager}</td>
                          <td className="px-2.5 text-xs opacity-90">{t.projectManager}</td>
                          <td className="px-2.5 text-xs font-mono opacity-80 text-right">
-                           {t.expectedContractAmount > 0 ? t.expectedContractAmount.toLocaleString() : '—'}
+                           {t.expectedContractAmount > 0 ? (t.expectedContractAmount / 10000).toFixed(2) : '—'}
                          </td>
                          <td className="px-2.5 text-xs font-mono text-emerald-600 text-right">
                            {t.actualContractAmount > 0 ? (t.actualContractAmount / 10000).toFixed(2) : '—'}
@@ -1463,6 +1463,13 @@ export default function App() {
   const [trackingMonth, setTrackingMonth] = useState(new Date().getMonth() + 1);
   const [isFollowupModalOpen, setIsFollowupModalOpen] = useState(false);
   const [followupForm, setFollowupForm] = useState({ date: '', content: '' });
+  const [editingFollowupId, setEditingFollowupId] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'delete_followup' | 'update_followup';
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
   const [isTrackingDetailModalOpen, setIsTrackingDetailModalOpen] = useState(false);
   const [isTerminateTrackingModalOpen, setIsTerminateTrackingModalOpen] = useState(false);
   const [trackingToTerminate, setTrackingToTerminate] = useState<string | null>(null);
@@ -2917,32 +2924,112 @@ alter table system_settings disable row level security;
     }
   };
 
+  const closeFollowupModal = () => {
+    setIsFollowupModalOpen(false);
+    setEditingFollowupId(null);
+    if (selectedTrackingDetail) {
+      setIsTrackingDetailModalOpen(true);
+    }
+  };
+
   const saveFollowup = async () => {
     if (editingTrackingId && followupForm.content) {
       const tracking = projectTrackings.find(t => t.id === editingTrackingId);
       if (tracking) {
-        const newRecord: FollowupRecord = {
-          id: generateId(),
-          date: followupForm.date || format(new Date(), 'yyyy-MM-dd'),
-          content: followupForm.content
-        };
-        const updated = {
-            ...tracking,
-            lastFollowupDate: newRecord.date,
-            updatedAt: new Date().toISOString(),
-            followupRecords: [newRecord, ...(tracking.followupRecords || [])]
-        };
-        
-        try {
-            await apiService.saveProjectTracking(updated);
-            setProjectTrackings(prev => prev.map(t => t.id === editingTrackingId ? updated : t));
-            setIsFollowupModalOpen(false);
-            window.showToast?.('关联商机跟进备注追加成功！', 'success');
-        } catch(err) {
-            console.warn('Failed to add followup', err);
-            window.showToast?.('新增跟进记录保存失败', 'error');
+        if (editingFollowupId) {
+          // 修改需要二次确认
+          setConfirmAction({
+            type: 'update_followup',
+            title: '确认修改跟进记录',
+            message: '确定要保存对此跟进记录的修改吗？',
+            onConfirm: async () => {
+              const updatedRecords = (tracking.followupRecords || []).map(r => 
+                r.id === editingFollowupId 
+                  ? { ...r, date: followupForm.date || format(new Date(), 'yyyy-MM-dd'), content: followupForm.content } 
+                  : r
+              );
+              const latestDate = updatedRecords.length > 0 ? updatedRecords[0].date : undefined;
+              const updated = {
+                  ...tracking,
+                  lastFollowupDate: latestDate,
+                  updatedAt: new Date().toISOString(),
+                  followupRecords: updatedRecords
+              };
+              try {
+                  await apiService.saveProjectTracking(updated);
+                  setProjectTrackings(prev => prev.map(t => t.id === editingTrackingId ? updated : t));
+                  setSelectedTrackingDetail(updated);
+                  setIsFollowupModalOpen(false);
+                  setEditingFollowupId(null);
+                  setConfirmAction(null);
+                  setIsTrackingDetailModalOpen(true);
+                  window.showToast?.('跟进备注修改成功！', 'success');
+              } catch(err) {
+                  console.warn('Failed to update followup', err);
+                  window.showToast?.('修改跟进记录保存失败', 'error');
+              }
+            }
+          });
+        } else {
+          // 新增直接保存
+          const newRecord: FollowupRecord = {
+            id: generateId(),
+            date: followupForm.date || format(new Date(), 'yyyy-MM-dd'),
+            content: followupForm.content
+          };
+          const updated = {
+              ...tracking,
+              lastFollowupDate: newRecord.date,
+              updatedAt: new Date().toISOString(),
+              followupRecords: [newRecord, ...(tracking.followupRecords || [])]
+          };
+          
+          try {
+              await apiService.saveProjectTracking(updated);
+              setProjectTrackings(prev => prev.map(t => t.id === editingTrackingId ? updated : t));
+              setSelectedTrackingDetail(updated);
+              setIsFollowupModalOpen(false);
+              setIsTrackingDetailModalOpen(true);
+              window.showToast?.('关联商机跟进备注追加成功！', 'success');
+          } catch(err) {
+              console.warn('Failed to add followup', err);
+              window.showToast?.('新增跟进记录保存失败', 'error');
+          }
         }
       }
+    }
+  };
+
+  const deleteFollowup = (followupId: string) => {
+    if (editingTrackingId) {
+      setConfirmAction({
+        type: 'delete_followup',
+        title: '确认删除跟进记录',
+        message: '确定要删除此条跟进记录吗？此操作不可撤销。',
+        onConfirm: async () => {
+          const tracking = projectTrackings.find(t => t.id === editingTrackingId);
+          if (tracking) {
+            const updatedRecords = (tracking.followupRecords || []).filter(r => r.id !== followupId);
+            const latestDate = updatedRecords.length > 0 ? updatedRecords[0].date : undefined;
+            const updated = {
+                ...tracking,
+                lastFollowupDate: latestDate,
+                updatedAt: new Date().toISOString(),
+                followupRecords: updatedRecords
+            };
+            try {
+                await apiService.saveProjectTracking(updated);
+                setProjectTrackings(prev => prev.map(t => t.id === editingTrackingId ? updated : t));
+                setSelectedTrackingDetail(updated);
+                setConfirmAction(null);
+                window.showToast?.('跟进记录删除成功', 'info');
+            } catch(err) {
+                console.warn('Failed to delete followup', err);
+                window.showToast?.('删除跟进记录失败', 'error');
+            }
+          }
+        }
+      });
     }
   };
 
@@ -4316,8 +4403,8 @@ alter table system_settings disable row level security;
         </section>
 
         {/* Main Schedule / Weekly Breakdown */}
-        <section className={`${currentView === 'tracking' ? 'lg:col-span-12 p-0' : 'lg:col-span-9 p-4 sm:p-6 lg:p-8'} flex flex-col border-b border-[#1A1A1A] lg:border-b-0 h-auto lg:h-full lg:overflow-y-auto bg-[#F7F6F2] ${currentView === 'dashboard' ? 'order-1 lg:order-2' : ''}`}>
-          <div className="flex-1 flex flex-col">
+        <section className={`${currentView === 'tracking' ? 'lg:col-span-12 p-0 lg:overflow-hidden' : 'lg:col-span-9 p-4 sm:p-6 lg:p-8 lg:overflow-y-auto'} flex flex-col border-b border-[#1A1A1A] lg:border-b-0 h-auto lg:h-full bg-[#F7F6F2] ${currentView === 'dashboard' ? 'order-1 lg:order-2' : ''}`}>
+          <div className="flex-1 flex flex-col min-h-0">
             {/* Requirements View */}
             {currentView === 'requirements' && (
               <div className="space-y-8 animate-in fade-in duration-500 pb-20">
@@ -6132,23 +6219,37 @@ alter table system_settings disable row level security;
                 { key: 'projectManager', label: '项目负责人', placeholder: '请输入项目负责人' },
                 { key: 'contactName', label: '联系人', placeholder: '请输入联系人' },
                 { key: 'contactPhone', label: '联系电话', placeholder: '如：13812345678' },
-                { key: 'expectedContractAmount', label: '预期合同额(元)', placeholder: '请输入金额' },
-                { key: 'actualContractAmount', label: '已达成合同额(元)', placeholder: '请输入金额' },
+                { key: 'expectedContractAmount', label: '预期合同额(万)', placeholder: '请输入万元金额' },
+                { key: 'actualContractAmount', label: '已达成合同额(万)', placeholder: '请输入万元金额' },
                 { key: 'createdAt', label: '创建日期', placeholder: '请选择日期' },
                 { key: 'lastFollowupDate', label: '最近跟进日期', placeholder: '请选择日期' }
-              ].map(field => (
-                <div key={field.key} className="col-span-1">
-                  <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">{field.label}</label>
-                  <input 
-                    type={field.key.includes('Amount') ? 'number' : ['lastFollowupDate', 'createdAt'].includes(field.key) ? 'date' : 'text'}
-                    value={(trackingForm as any)[field.key] ?? ''} 
-                    onChange={(e) => setTrackingForm({...trackingForm, [field.key]: field.key.includes('Amount') ? Number(e.target.value) : e.target.value})} 
-                    className="w-full bg-transparent border-b border-[#1A1A1A]/30 outline-none py-2 text-sm"
-                    placeholder={field.placeholder}
-                    required
-                  />
-                </div>
-              ))}
+              ].map(field => {
+                let displayValue = (trackingForm as any)[field.key] ?? '';
+                if (field.key.includes('Amount') && displayValue !== '') {
+                  displayValue = Number((Number(displayValue) / 10000).toFixed(6).replace(/\.?0+$/, ''));
+                }
+                return (
+                  <div key={field.key} className="col-span-1">
+                    <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">{field.label}</label>
+                    <input 
+                      type={field.key.includes('Amount') ? 'number' : ['lastFollowupDate', 'createdAt'].includes(field.key) ? 'date' : 'text'}
+                      value={displayValue} 
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        if (field.key.includes('Amount')) {
+                          const numericVal = val === '' ? 0 : Number(val) * 10000;
+                          setTrackingForm({...trackingForm, [field.key]: numericVal});
+                        } else {
+                          setTrackingForm({...trackingForm, [field.key]: e.target.value});
+                        }
+                      }} 
+                      className="w-full bg-transparent border-b border-[#1A1A1A]/30 outline-none py-2 text-sm"
+                      placeholder={field.placeholder}
+                      required
+                    />
+                  </div>
+                );
+              })}
               <div className="col-span-2">
                   <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">状态</label>
                   <select value={trackingForm.status} onChange={(e) => setTrackingForm({...trackingForm, status: e.target.value as any})} className="w-full bg-transparent border-b border-[#1A1A1A]/30 outline-none py-2 text-sm">
@@ -6195,11 +6296,11 @@ alter table system_settings disable row level security;
       {/* Followup Modal */}
       {isFollowupModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
-          <div className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm" onClick={() => setIsFollowupModalOpen(false)} />
+          <div className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm" onClick={closeFollowupModal} />
           <div className="relative bg-white pt-8 sm:pt-6 sm:border border-[#1A1A1A]/10 w-full sm:max-w-2xl p-4 sm:p-8 shadow-2xl flex flex-col h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:rounded-sm mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
-            <h3 className="text-2xl font-serif italic mb-6 shrink-0">添加跟进记录</h3>
+            <h3 className="text-2xl font-serif italic mb-6 shrink-0">{editingFollowupId ? '编辑跟进记录' : '添加跟进记录'}</h3>
             <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
               <div>
                 <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">跟进日期</label>
@@ -6223,7 +6324,7 @@ alter table system_settings disable row level security;
             </div>
             <div className="flex justify-end gap-3.5 mt-8 shrink-0 pt-5 border-t border-[#1A1A1A]/10">
               <button 
-                onClick={() => setIsFollowupModalOpen(false)} 
+                onClick={closeFollowupModal} 
                 className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200"
               >
                 取消
@@ -6312,11 +6413,11 @@ alter table system_settings disable row level security;
                    <div className="space-y-4">
                       <div>
                         <div className="text-[11px] opacity-60 mb-1">预期合同额</div>
-                        <div className="text-lg font-mono">¥{selectedTrackingDetail.expectedContractAmount.toLocaleString()}</div>
+                        <div className="text-lg font-mono">¥{(selectedTrackingDetail.expectedContractAmount / 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 万</div>
                       </div>
                       <div>
                         <div className="text-[11px] text-emerald-600/80 font-bold mb-1">已达成金额</div>
-                        <div className="text-2xl font-mono text-emerald-600 font-bold">¥{selectedTrackingDetail.actualContractAmount.toLocaleString()}</div>
+                        <div className="text-2xl font-mono text-emerald-600 font-bold">¥{(selectedTrackingDetail.actualContractAmount / 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 万</div>
                       </div>
                    </div>
                 </div>
@@ -6391,6 +6492,28 @@ alter table system_settings disable row level security;
                                  </div>
                                  {index === 0 && <span className="text-[9px] uppercase font-bold tracking-widest text-blue-500">最新</span>}
                                </div>
+                               <div className="flex items-center gap-2">
+                                 <button
+                                   onClick={() => {
+                                      setEditingTrackingId(selectedTrackingDetail.id);
+                                      setEditingFollowupId(record.id);
+                                      setFollowupForm({ date: record.date, content: record.content });
+                                      setIsTrackingDetailModalOpen(false);
+                                      setIsFollowupModalOpen(true);
+                                   }}
+                                   className="text-gray-400 hover:text-[#1A1A1A] transition-colors p-1 cursor-pointer"
+                                   title="修改跟进记录"
+                                 >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                                 </button>
+                                 <button
+                                   onClick={() => deleteFollowup(record.id)}
+                                   className="text-gray-400 hover:text-red-600 transition-colors p-1 cursor-pointer"
+                                   title="删除跟进记录"
+                                 >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                                 </button>
+                               </div>
                             </div>
                             <div className="prose prose-sm prose-black max-w-none opacity-80 leading-relaxed text-[13px]" dangerouslySetInnerHTML={{ __html: record.content }} />
                           </div>
@@ -6399,6 +6522,43 @@ alter table system_settings disable row level security;
                    </div>
                  )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 二次确认 Modal */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
+          <div 
+            className="absolute inset-0 bg-[#1A1A1A]/40 backdrop-blur-xs"
+            onClick={() => setConfirmAction(null)}
+          />
+          <div className="relative bg-white pt-8 sm:pt-6 p-8 max-w-sm w-full border border-[#1A1A1A]/10 shadow-2xl animate-in zoom-in-95 duration-200 sm:rounded-sm">
+            <h3 className="text-xl font-bold mb-4 text-[#1A1A1A] flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              {confirmAction.title}
+            </h3>
+            <p className="text-sm opacity-80 mb-6 leading-relaxed">
+              {confirmAction.message}
+            </p>
+            <div className="flex justify-end gap-3 mt-4">
+              <button 
+                onClick={() => setConfirmAction(null)}
+                className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-[#1A1A1A]/20 hover:bg-gray-50 transition-colors"
+              >
+                取消
+              </button>
+              <button 
+                onClick={() => {
+                  confirmAction.onConfirm();
+                }}
+                className={`px-4 py-2 text-xs font-bold uppercase tracking-widest text-white transition-colors ${
+                  confirmAction.type === 'delete_followup' ? 'bg-red-600 hover:bg-red-700' : 'bg-[#1A1A1A] hover:bg-black'
+                }`}
+              >
+                确认
+              </button>
             </div>
           </div>
         </div>
