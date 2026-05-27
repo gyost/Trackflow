@@ -547,7 +547,7 @@ const ProjectTrackingView = ({
   statusColors, statusLabels,
   year, month, setYear, setMonth,
   onAddFollowup, onViewDetails, onStatusChange, annualTargetProfit,
-  onImport
+  onImport, onRestore, onDeletePermanently
 }: { 
   trackings: ProjectTracking[], onDelete: (id: string) => void, onEdit: (t: ProjectTracking) => void, onAdd: () => void,
   filterStatus: 'all' | TrackingStatus, setFilterStatus: (s: 'all' | TrackingStatus) => void,
@@ -557,7 +557,9 @@ const ProjectTrackingView = ({
   onAddFollowup: (t: ProjectTracking) => void, onViewDetails: (t: ProjectTracking) => void,
   onStatusChange: (id: string, status: TrackingStatus) => void,
   annualTargetProfit: number,
-  onImport?: (importedTrackings: Omit<ProjectTracking, 'id' | 'updatedAt'>[]) => void
+  onImport?: (importedTrackings: Omit<ProjectTracking, 'id' | 'updatedAt'>[]) => void,
+  onRestore?: (id: string) => void,
+  onDeletePermanently?: (id: string) => void
 }) => {
   const monthTrackings = trackings.filter(t => {
     const cdt = t.createdAt || t.updatedAt;
@@ -616,6 +618,44 @@ const ProjectTrackingView = ({
   const [loadingAction, setLoadingAction] = React.useState<{id: string, type: string} | null>(null);
   const [importStatus, setImportStatus] = React.useState<{type: 'success' | 'error', message: string} | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const [localConfirm, setLocalConfirm] = React.useState<{
+    title: string;
+    message: string;
+    type: 'restore' | 'delete_permanently';
+    id: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const handleRestoreClick = (t: ProjectTracking) => {
+    setLocalConfirm({
+      title: '确认恢复项目',
+      message: `确定要将已作废项目【${t.customerName}】重新恢复至跟进中状态吗？`,
+      type: 'restore',
+      id: t.id,
+      onConfirm: () => {
+        if (onRestore) {
+          onRestore(t.id);
+        }
+        setLocalConfirm(null);
+      }
+    });
+  };
+
+  const handleDeletePermanentlyClick = (t: ProjectTracking) => {
+    setLocalConfirm({
+      title: '确认永久删除项目',
+      message: `确定要永久删除已作废项目【${t.customerName}】吗？删除后该项目所有的档案和历史跟进动态将被物理删除，操作不可撤销，请谨慎操作！`,
+      type: 'delete_permanently',
+      id: t.id,
+      onConfirm: () => {
+        if (onDeletePermanently) {
+          onDeletePermanently(t.id);
+        }
+        setLocalConfirm(null);
+      }
+    });
+  };
 
   const handleAction = async (id: string, type: string, actionFn: () => void) => {
     setLoadingAction({ id, type });
@@ -1086,46 +1126,74 @@ const ProjectTrackingView = ({
                          <td className="px-2.5 text-xs font-mono opacity-80">{t.lastFollowupDate || '—'}</td>
                          <td className="px-2.5 text-xs opacity-90">{t.contactName}</td>
                          <td className="px-2.5 text-center opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); }}>
-                           <button 
-                             onClick={() => handleAction(t.id, 'followup', () => onAddFollowup(t))} 
-                             disabled={loadingAction !== null || t.status === 'terminated' || t.status === 'archived'}
-                             className={`inline-flex items-center justify-center ${t.status === 'terminated' || t.status === 'archived' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 active:scale-95'} px-2.5 py-1.5 rounded text-[11px] font-medium mr-2 transition-all disabled:opacity-50 min-w-[56px]`}
-                           >
-                             {loadingAction?.id === t.id && loadingAction?.type === 'followup' ? (
-                               <span className="w-3 h-3 border-[1.5px] border-blue-600 border-t-transparent rounded-full animate-spin mr-1"></span>
-                             ) : null}
-                             跟进
-                           </button>
-                           <button 
-                             onClick={() => handleAction(t.id, 'details', () => onViewDetails(t))} 
-                             disabled={loadingAction !== null}
-                             className={`inline-flex items-center justify-center bg-gray-50 text-[#1A1A1A] hover:bg-gray-200 active:scale-95 px-2.5 py-1.5 rounded text-[11px] font-medium mr-2 transition-all disabled:opacity-50 min-w-[56px]`}
-                           >
-                             {loadingAction?.id === t.id && loadingAction?.type === 'details' ? (
-                               <span className="w-3 h-3 border-[1.5px] border-[#1A1A1A] border-t-transparent rounded-full animate-spin mr-1"></span>
-                             ) : null}
-                             详情
-                           </button>
-                           <button 
-                             onClick={() => handleAction(t.id, 'edit', () => onEdit(t))} 
-                             disabled={loadingAction !== null || t.status === 'terminated' || t.status === 'archived'}
-                             className={`inline-flex items-center justify-center ${t.status === 'terminated' || t.status === 'archived' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-50 text-[#1A1A1A] hover:bg-gray-200 active:scale-95'} px-2.5 py-1.5 rounded text-[11px] font-medium mr-2 transition-all disabled:opacity-50 min-w-[56px]`}
-                           >
-                             {loadingAction?.id === t.id && loadingAction?.type === 'edit' ? (
-                               <span className="w-3 h-3 border-[1.5px] border-[#1A1A1A] border-t-transparent rounded-full animate-spin mr-1"></span>
-                             ) : null}
-                             修改
-                           </button>
-                           <button 
-                             onClick={() => handleAction(t.id, 'delete', () => onDelete(t.id))} 
-                             disabled={loadingAction !== null || t.status === 'terminated' || t.status === 'archived'}
-                             className={`inline-flex items-center justify-center ${t.status === 'terminated' || t.status === 'archived' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-50 text-red-600 hover:bg-red-100 active:scale-95'} px-2.5 py-1.5 rounded text-[11px] font-medium transition-all disabled:opacity-50 min-w-[56px]`}
-                           >
-                             {loadingAction?.id === t.id && loadingAction?.type === 'delete' ? (
-                               <span className="w-3 h-3 border-[1.5px] border-red-600 border-t-transparent rounded-full animate-spin mr-1"></span>
-                             ) : null}
-                             作废
-                           </button>
+                           {t.status === 'terminated' ? (
+                             <>
+                               <button 
+                                 onClick={() => handleRestoreClick(t)} 
+                                 disabled={loadingAction !== null}
+                                 className="inline-flex items-center justify-center bg-emerald-50 text-emerald-700 hover:bg-emerald-100 active:scale-95 px-2.5 py-1.5 rounded text-[11px] font-semibold mr-2 transition-all disabled:opacity-50 min-w-[56px] cursor-pointer"
+                               >
+                                 恢复
+                               </button>
+                               <button 
+                                 onClick={() => handleAction(t.id, 'details', () => onViewDetails(t))} 
+                                 disabled={loadingAction !== null}
+                                 className="inline-flex items-center justify-center bg-gray-50 text-[#1A1A1A] hover:bg-gray-200 active:scale-95 px-2.5 py-1.5 rounded text-[11px] font-semibold mr-2 transition-all disabled:opacity-50 min-w-[56px] cursor-pointer"
+                               >
+                                 详情
+                               </button>
+                               <button 
+                                 onClick={() => handleDeletePermanentlyClick(t)} 
+                                 disabled={loadingAction !== null}
+                                 className="inline-flex items-center justify-center bg-red-50 text-red-600 hover:bg-red-100 active:scale-95 px-2.5 py-1.5 rounded text-[11px] font-semibold transition-all disabled:opacity-50 min-w-[56px] cursor-pointer"
+                               >
+                                 删除
+                               </button>
+                             </>
+                           ) : (
+                             <>
+                               <button 
+                                 onClick={() => handleAction(t.id, 'followup', () => onAddFollowup(t))} 
+                                 disabled={loadingAction !== null || t.status === 'archived'}
+                                 className={`inline-flex items-center justify-center ${t.status === 'archived' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 active:scale-95'} px-2.5 py-1.5 rounded text-[11px] font-medium mr-2 transition-all disabled:opacity-50 min-w-[56px]`}
+                               >
+                                 {loadingAction?.id === t.id && loadingAction?.type === 'followup' ? (
+                                   <span className="w-3 h-3 border-[1.5px] border-blue-600 border-t-transparent rounded-full animate-spin mr-1"></span>
+                                 ) : null}
+                                 跟进
+                               </button>
+                               <button 
+                                 onClick={() => handleAction(t.id, 'details', () => onViewDetails(t))} 
+                                 disabled={loadingAction !== null}
+                                 className={`inline-flex items-center justify-center bg-gray-50 text-[#1A1A1A] hover:bg-gray-200 active:scale-95 px-2.5 py-1.5 rounded text-[11px] font-medium mr-2 transition-all disabled:opacity-50 min-w-[56px]`}
+                               >
+                                 {loadingAction?.id === t.id && loadingAction?.type === 'details' ? (
+                                   <span className="w-3 h-3 border-[1.5px] border-[#1A1A1A] border-t-transparent rounded-full animate-spin mr-1"></span>
+                                 ) : null}
+                                 详情
+                               </button>
+                               <button 
+                                 onClick={() => handleAction(t.id, 'edit', () => onEdit(t))} 
+                                 disabled={loadingAction !== null || t.status === 'archived'}
+                                 className={`inline-flex items-center justify-center ${t.status === 'archived' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-50 text-[#1A1A1A] hover:bg-gray-200 active:scale-95'} px-2.5 py-1.5 rounded text-[11px] font-medium mr-2 transition-all disabled:opacity-50 min-w-[56px]`}
+                               >
+                                 {loadingAction?.id === t.id && loadingAction?.type === 'edit' ? (
+                                   <span className="w-3 h-3 border-[1.5px] border-[#1A1A1A] border-t-transparent rounded-full animate-spin mr-1"></span>
+                                 ) : null}
+                                 修改
+                               </button>
+                               <button 
+                                 onClick={() => handleAction(t.id, 'delete', () => onDelete(t.id))} 
+                                 disabled={loadingAction !== null || t.status === 'archived'}
+                                 className={`inline-flex items-center justify-center ${t.status === 'archived' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-50 text-red-600 hover:bg-red-100 active:scale-95'} px-2.5 py-1.5 rounded text-[11px] font-medium transition-all disabled:opacity-50 min-w-[56px]`}
+                               >
+                                 {loadingAction?.id === t.id && loadingAction?.type === 'delete' ? (
+                                   <span className="w-3 h-3 border-[1.5px] border-red-600 border-t-transparent rounded-full animate-spin mr-1"></span>
+                                 ) : null}
+                                 作废
+                               </button>
+                             </>
+                           )}
                          </td>
                        </tr>
                      ))}
@@ -1207,58 +1275,91 @@ const ProjectTrackingView = ({
                      </div>
 
                      {/* Mobile Card Action Drawer / Slider Buttons with at least 44px height hit targets */}
-                     <div className="flex items-center gap-2 mt-2 pt-3.5 border-t border-black/[0.04]" onClick={e => e.stopPropagation()}>
-                       <button 
-                         onClick={() => handleAction(t.id, 'followup', () => onAddFollowup(t))} 
-                         disabled={loadingAction !== null || t.status === 'terminated' || t.status === 'archived'}
-                         className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer select-none active:scale-95 ${
-                           t.status === 'terminated' || t.status === 'archived'
-                             ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
-                             : 'bg-emerald-50 text-emerald-800 border border-emerald-200/55 hover:bg-emerald-100/30'
-                         }`}
-                       >
-                         {loadingAction?.id === t.id && loadingAction?.type === 'followup' ? (
-                           <span className="w-3.5 h-3.5 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin"></span>
-                         ) : (
-                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                         )}
-                         <span>新跟进</span>
-                       </button>
+                      <div className="flex items-center gap-2 mt-2 pt-3.5 border-t border-black/[0.04]" onClick={e => e.stopPropagation()}>
+                        {t.status === 'terminated' ? (
+                          <>
+                            <button 
+                              onClick={() => handleRestoreClick(t)} 
+                              disabled={loadingAction !== null}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 transition-all cursor-pointer select-none active:scale-95 min-h-[44px]"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H17" /></svg>
+                              <span>恢复</span>
+                            </button>
 
-                       <button 
-                         onClick={() => handleAction(t.id, 'edit', () => onEdit(t))} 
-                         disabled={loadingAction !== null || t.status === 'terminated' || t.status === 'archived'}
-                         className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer select-none active:scale-95 ${
-                           t.status === 'terminated' || t.status === 'archived'
-                             ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
-                             : 'bg-white hover:bg-zinc-100 border border-black/10 text-zinc-800'
-                         }`}
-                       >
-                         {loadingAction?.id === t.id && loadingAction?.type === 'edit' ? (
-                           <span className="w-3.5 h-3.5 border-2 border-zinc-800 border-t-transparent rounded-full animate-spin"></span>
-                         ) : (
-                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                         )}
-                         <span>修改</span>
-                       </button>
+                            <button 
+                              onClick={() => handleAction(t.id, 'details', () => onViewDetails(t))} 
+                              disabled={loadingAction !== null}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl bg-white hover:bg-zinc-100 border border-black/10 text-zinc-800 transition-all cursor-pointer select-none active:scale-95 min-h-[44px]"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                              <span>详情</span>
+                            </button>
 
-                       <button 
-                         onClick={() => handleAction(t.id, 'delete', () => onDelete(t.id))} 
-                         disabled={loadingAction !== null || t.status === 'terminated' || t.status === 'archived'}
-                         className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer select-none active:scale-95 ${
-                           t.status === 'terminated' || t.status === 'archived'
-                             ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
-                             : 'bg-rose-50 hover:bg-rose-100/50 border border-rose-200/50 text-rose-700'
-                         }`}
-                       >
-                         {loadingAction?.id === t.id && loadingAction?.type === 'delete' ? (
-                           <span className="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></span>
-                         ) : (
-                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                         )}
-                         <span>作废</span>
-                       </button>
-                     </div>
+                            <button 
+                              onClick={() => handleDeletePermanentlyClick(t)} 
+                              disabled={loadingAction !== null}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl bg-rose-50 hover:bg-rose-100/50 border border-rose-200/50 text-rose-700 transition-all cursor-pointer select-none active:scale-95 min-h-[44px]"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                              <span>删除</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={() => handleAction(t.id, 'followup', () => onAddFollowup(t))} 
+                              disabled={loadingAction !== null || t.status === 'archived'}
+                              className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer select-none active:scale-95 min-h-[44px] ${
+                                t.status === 'archived'
+                                  ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
+                                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200/55 hover:bg-emerald-100/30'
+                              }`}
+                            >
+                              {loadingAction?.id === t.id && loadingAction?.type === 'followup' ? (
+                                <span className="w-3.5 h-3.5 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin"></span>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                              )}
+                              <span>新跟进</span>
+                            </button>
+
+                            <button 
+                              onClick={() => handleAction(t.id, 'edit', () => onEdit(t))} 
+                              disabled={loadingAction !== null || t.status === 'archived'}
+                              className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer select-none active:scale-95 min-h-[44px] ${
+                                t.status === 'archived'
+                                  ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
+                                  : 'bg-white hover:bg-zinc-100 border border-black/10 text-zinc-800'
+                              }`}
+                            >
+                              {loadingAction?.id === t.id && loadingAction?.type === 'edit' ? (
+                                <span className="w-3.5 h-3.5 border-2 border-zinc-800 border-t-transparent rounded-full animate-spin"></span>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                              )}
+                              <span>修改</span>
+                            </button>
+
+                            <button 
+                              onClick={() => handleAction(t.id, 'delete', () => onDelete(t.id))} 
+                              disabled={loadingAction !== null || t.status === 'archived'}
+                              className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer select-none active:scale-95 min-h-[44px] ${
+                                t.status === 'archived'
+                                  ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
+                                  : 'bg-rose-50 hover:bg-rose-100/50 border border-rose-200/50 text-rose-700'
+                              }`}
+                            >
+                              {loadingAction?.id === t.id && loadingAction?.type === 'delete' ? (
+                                <span className="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></span>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                              )}
+                              <span>作废</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
                    </div>
                  ))}
                </div>
@@ -1471,6 +1572,7 @@ export default function App() {
     onConfirm: () => void;
   } | null>(null);
   const [isTrackingDetailModalOpen, setIsTrackingDetailModalOpen] = useState(false);
+  const [mobileDetailTab, setMobileDetailTab] = useState<'timeline' | 'info'>('timeline');
   const [isTerminateTrackingModalOpen, setIsTerminateTrackingModalOpen] = useState(false);
   const [trackingToTerminate, setTrackingToTerminate] = useState<string | null>(null);
   const [selectedTrackingDetail, setSelectedTrackingDetail] = useState<ProjectTracking | null>(null);
@@ -6345,97 +6447,149 @@ alter table system_settings disable row level security;
       {isTrackingDetailModalOpen && selectedTrackingDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center sm:p-6 lg:p-8">
           <div className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm" onClick={() => setIsTrackingDetailModalOpen(false)} />
-          <div className="relative bg-white pt-8 sm:pt-6 sm:border border-[#1A1A1A]/10 w-full sm:max-w-5xl h-[100dvh] sm:h-full max-h-[100dvh] sm:max-h-[90vh] shadow-xl sm:shadow-2xl flex flex-col animate-in zoom-in-95 sm:zoom-in-100 duration-300 sm:rounded-sm overflow-hidden">
-            <div className="px-6 md:px-8 py-6 pt-4 sm:pt-6 border-b border-[#1A1A1A]/10 shrink-0 flex justify-between items-start bg-[#F7F6F2] relative">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h3 className="text-3xl font-serif italic">{selectedTrackingDetail.customerName}</h3>
-                  <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full border text-[11px] font-medium bg-white shadow-sm
-                       ${selectedTrackingDetail.status === 'followup' ? 'border-amber-400 text-amber-600' : 
-                       selectedTrackingDetail.status === 'implementing' ? 'border-blue-400 text-blue-600' : 
-                       selectedTrackingDetail.status === 'accepting' ? 'border-green-400 text-green-600' : 
-                       selectedTrackingDetail.status === 'quoted' ? 'border-purple-400 text-purple-600' : 
-                       selectedTrackingDetail.status === 'archived' ? 'border-stone-400 text-stone-600' : 
-                       'border-gray-300 text-gray-500'}`}
-                  >
-                    {statusLabels[selectedTrackingDetail.status]}
-                  </span>
+          <div className="relative bg-white sm:border border-[#1A1A1A]/10 w-full sm:max-w-5xl h-[100dvh] sm:h-full max-h-[100dvh] sm:max-h-[90vh] shadow-xl sm:shadow-2xl flex flex-col animate-in zoom-in-95 sm:zoom-in-100 duration-300 sm:rounded-sm overflow-hidden">
+            
+            {/* Header Area */}
+            <div className="px-6 md:px-8 py-5 border-b border-[#1A1A1A]/10 bg-white flex flex-col shrink-0 relative">
+              <div className="flex justify-between items-start gap-4">
+                <div className="min-w-0 pr-8">
+                  <div className="flex items-center gap-3 mb-1.5 flex-wrap">
+                    <h3 className="text-xl sm:text-2xl md:text-3xl font-serif italic font-medium truncate max-w-[240px] sm:max-w-md">{selectedTrackingDetail.customerName}</h3>
+                    <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full border text-[10px] font-semibold bg-white shadow-xs
+                         ${selectedTrackingDetail.status === 'followup' ? 'border-amber-400 text-amber-600' : 
+                         selectedTrackingDetail.status === 'implementing' ? 'border-blue-400 text-blue-600' : 
+                         selectedTrackingDetail.status === 'accepting' ? 'border-green-400 text-green-600' : 
+                         selectedTrackingDetail.status === 'quoted' ? 'border-purple-400 text-purple-600' : 
+                         selectedTrackingDetail.status === 'archived' ? 'border-stone-400 text-stone-600' : 
+                         'border-gray-300 text-gray-500'}`}
+                    >
+                      {statusLabels[selectedTrackingDetail.status]}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-mono opacity-50">
+                     <span>ID: {selectedTrackingDetail.id}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 text-sm font-mono opacity-60">
-                   <span>标识ID: {selectedTrackingDetail.id}</span>
-                </div>
+                
+                {/* Close Button - Beautified */}
+                <button 
+                  onClick={() => setIsTrackingDetailModalOpen(false)} 
+                  className="absolute right-4 top-4 sm:right-6 sm:top-5 p-2 rounded-full border border-[#1A1A1A]/10 bg-[#F7F6F2] hover:bg-white text-[#1A1A1A]/60 hover:text-[#1A1A1A] hover:border-[#1A1A1A] hover:rotate-90 active:scale-95 transition-all duration-300 cursor-pointer shadow-xs z-10 flex items-center justify-center"
+                  title="关闭窗口"
+                >
+                  <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
-              <button onClick={() => setIsTrackingDetailModalOpen(false)} className="opacity-50 hover:opacity-100 p-2 transition-opacity">
-                 ✕ 关 闭
-              </button>
+
+              {/* Mobile Only: Tab bar for main & secondary info prioritization */}
+              <div className="flex md:hidden mt-4 border-b border-gray-100 -mx-6 px-6">
+                <button
+                  onClick={() => setMobileDetailTab('timeline')}
+                  className={`flex-1 text-center py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all duration-200 ${mobileDetailTab === 'timeline' ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-[#1A1A1A]/40'}`}
+                >
+                  跟进动态 ({selectedTrackingDetail.followupRecords?.length || 0})
+                </button>
+                <button
+                  onClick={() => setMobileDetailTab('info')}
+                  className={`flex-1 text-center py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all duration-200 ${mobileDetailTab === 'info' ? 'border-[#1A1A1A] text-[#1A1A1A]' : 'border-transparent text-[#1A1A1A]/40'}`}
+                >
+                  基本档案
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto overflow-x-hidden md:overflow-hidden flex flex-col md:flex-row">
-              {/* Left Sidebar: Detailed Info */}
-              <div className="w-full md:w-[35%] lg:w-[30%] border-b md:border-b-0 md:border-r border-[#1A1A1A]/10 p-6 md:p-8 bg-white space-y-8 shrink-0 md:h-full md:overflow-y-auto custom-scrollbar">
+            {/* Content Area */}
+            <div className="flex-1 overflow-hidden flex flex-col md:flex-row min-h-0 bg-[#F7F6F2]">
+              
+              {/* Left Column: Detailed Info */}
+              <div className={`w-full md:w-[35%] lg:w-[30%] border-b md:border-b-0 md:border-r border-[#1A1A1A]/10 p-5 md:p-8 bg-white space-y-6 md:space-y-8 shrink-0 md:h-full overflow-y-auto custom-scrollbar ${mobileDetailTab === 'info' ? 'block' : 'hidden md:block'}`}>
                 
-                <div>
-                   <h4 className="text-[10px] uppercase tracking-widest font-bold opacity-40 mb-3 border-b border-[#1A1A1A]/10 pb-2">客户联系信息</h4>
+                {/* 金额核算 */}
+                <div className="p-4 sm:p-5 bg-stone-50 border border-[#1A1A1A]/5 rounded shadow-xs relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl -mr-6 -mt-6"></div>
+                   <h4 className="text-[10px] uppercase tracking-widest font-extrabold text-stone-700/80 mb-3.5 border-b border-[#1A1A1A]/10 pb-1.5">金额看板</h4>
                    <div className="space-y-4">
                       <div>
-                        <div className="text-[11px] opacity-60 mb-1">联系人</div>
-                        <div className="text-sm font-medium">{selectedTrackingDetail.contactName || '—'}</div>
+                        <div className="text-[10px] uppercase tracking-wider text-stone-500 mb-0.5">预期合同额</div>
+                        <div className="text-base font-mono font-semibold text-stone-800">¥{(selectedTrackingDetail.expectedContractAmount / 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 万</div>
                       </div>
-                      <div>
-                        <div className="text-[11px] opacity-60 mb-1">联系电话</div>
-                        <div className="text-sm font-mono">{selectedTrackingDetail.contactPhone || '—'}</div>
+                      <div className="pt-2 border-t border-stone-200/50">
+                        <div className="text-[10px] uppercase tracking-wider text-emerald-600/90 font-bold mb-1">已达成签约额</div>
+                        <div className="text-xl sm:text-2xl font-mono text-emerald-600 font-extrabold flex items-baseline gap-1">
+                          <span className="text-sm font-sans font-medium">¥</span>
+                          {(selectedTrackingDetail.actualContractAmount / 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <span className="text-xs font-sans font-medium ml-1">万</span>
+                        </div>
                       </div>
                    </div>
                 </div>
 
+                {/* 客户联系信息 */}
+                <div>
+                   <h4 className="text-[10px] uppercase tracking-widest font-bold opacity-40 mb-3 border-b border-[#1A1A1A]/10 pb-2">客户联系信息</h4>
+                   <div className="space-y-3.5">
+                      <div>
+                        <div className="text-[11px] opacity-50 mb-0.5">联系人员</div>
+                        <div className="text-sm font-medium text-[#1A1A1A]">{selectedTrackingDetail.contactName || '—'}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] opacity-50 mb-0.5">联系电话</div>
+                        {selectedTrackingDetail.contactPhone ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-sm font-mono font-medium text-[#1A1A1A]">{selectedTrackingDetail.contactPhone}</span>
+                            <a 
+                              href={`tel:${selectedTrackingDetail.contactPhone}`}
+                              className="inline-flex items-center justify-center p-1.5 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 active:scale-95 transition-all"
+                              title="拨打电话"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                            </a>
+                          </div>
+                        ) : (
+                          <div className="text-sm font-mono opacity-40">—</div>
+                        )}
+                      </div>
+                   </div>
+                </div>
+
+                {/* 项目及团队 */}
                 <div>
                    <h4 className="text-[10px] uppercase tracking-widest font-bold opacity-40 mb-3 border-b border-[#1A1A1A]/10 pb-2">项目及团队</h4>
                    <div className="space-y-4">
                       <div>
-                        <div className="text-[11px] opacity-60 mb-1">合作意向 / 产品</div>
-                        <div className="text-sm font-medium">{selectedTrackingDetail.product || '—'}</div>
+                        <div className="text-[11px] opacity-50 mb-0.5">合作意向 / 产品</div>
+                        <div className="text-sm font-medium leading-relaxed">{selectedTrackingDetail.product || '—'}</div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <div className="text-[11px] opacity-60 mb-1">市场负责人</div>
-                          <div className="text-sm">{selectedTrackingDetail.cityManager || '—'}</div>
+                          <div className="text-[11px] opacity-50 mb-0.5">市场负责人</div>
+                          <div className="text-sm font-medium text-stone-800">{selectedTrackingDetail.cityManager || '—'}</div>
                         </div>
                         <div>
-                          <div className="text-[11px] opacity-60 mb-1">项目负责人</div>
-                          <div className="text-sm">{selectedTrackingDetail.projectManager || '—'}</div>
+                          <div className="text-[11px] opacity-50 mb-0.5">项目负责人</div>
+                          <div className="text-sm font-medium text-stone-800">{selectedTrackingDetail.projectManager || '—'}</div>
                         </div>
-                      </div>
-                   </div>
-                </div>
-
-                <div>
-                   <h4 className="text-[10px] uppercase tracking-widest font-bold opacity-40 mb-3 border-b border-[#1A1A1A]/10 pb-2">金额核算</h4>
-                   <div className="space-y-4">
-                      <div>
-                        <div className="text-[11px] opacity-60 mb-1">预期合同额</div>
-                        <div className="text-lg font-mono">¥{(selectedTrackingDetail.expectedContractAmount / 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 万</div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-emerald-600/80 font-bold mb-1">已达成金额</div>
-                        <div className="text-2xl font-mono text-emerald-600 font-bold">¥{(selectedTrackingDetail.actualContractAmount / 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 万</div>
                       </div>
                    </div>
                 </div>
                 
+                {/* 时间线 */}
                 <div>
                    <h4 className="text-[10px] uppercase tracking-widest font-bold opacity-40 mb-3 border-b border-[#1A1A1A]/10 pb-2">时间线</h4>
-                   <div className="space-y-4">
-                      <div>
-                        <div className="text-[11px] opacity-60 mb-1">最近跟进</div>
-                        <div className="text-sm font-mono">{selectedTrackingDetail.lastFollowupDate || '—'}</div>
+                   <div className="space-y-3 font-mono text-xs opacity-80">
+                      <div className="flex justify-between py-1 border-b border-dashed border-gray-100">
+                        <span className="opacity-60">最近跟进</span>
+                        <span className="font-semibold text-stone-800">{selectedTrackingDetail.lastFollowupDate || '—'}</span>
                       </div>
-                      <div>
-                        <div className="text-[11px] opacity-60 mb-1">创建时间</div>
-                        <div className="text-sm font-mono">{selectedTrackingDetail.createdAt || (selectedTrackingDetail.updatedAt ? selectedTrackingDetail.updatedAt.split('T')[0] : '—')}</div>
+                      <div className="flex justify-between py-1 border-b border-dashed border-gray-100">
+                        <span className="opacity-60">创建时间</span>
+                        <span className="font-semibold text-stone-800">{selectedTrackingDetail.createdAt || (selectedTrackingDetail.updatedAt ? selectedTrackingDetail.updatedAt.split('T')[0] : '—')}</span>
                       </div>
-                      <div>
-                        <div className="text-[11px] opacity-60 mb-1">最后更新于</div>
-                        <div className="text-sm font-mono">{selectedTrackingDetail.updatedAt ? new Date(selectedTrackingDetail.updatedAt).toLocaleString() : '—'}</div>
+                      <div className="flex justify-between py-1">
+                        <span className="opacity-60">最后更新于</span>
+                        <span className="font-semibold text-stone-800 text-[11px]">{selectedTrackingDetail.updatedAt ? new Date(selectedTrackingDetail.updatedAt).toLocaleString() : '—'}</span>
                       </div>
                    </div>
                 </div>
@@ -6443,11 +6597,11 @@ alter table system_settings disable row level security;
               </div>
 
               {/* Right Area: Followup Timeline */}
-              <div className="w-full md:w-[65%] lg:w-[70%] p-6 md:p-8 lg:p-10 bg-[#F7F6F2] md:h-full md:overflow-y-auto custom-scrollbar">
-                 <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#1A1A1A]/10 border-dashed">
+              <div className={`w-full md:w-[65%] lg:w-[70%] p-5 md:p-8 lg:p-10 bg-[#F7F6F2] md:h-full overflow-y-auto custom-scrollbar flex flex-col min-h-0 ${mobileDetailTab === 'timeline' ? 'block' : 'hidden md:block'}`}>
+                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-8 pb-4 border-b border-[#1A1A1A]/10 border-dashed shrink-0">
                    <div>
-                     <h4 className="text-lg font-serif italic">跟进记录明细</h4>
-                     <p className="text-[10px] uppercase tracking-widest opacity-50 mt-1">Timeline & Updates</p>
+                     <h4 className="text-lg font-serif italic font-semibold text-[#1A1A1A]">动态跟踪明细</h4>
+                     <p className="text-[10px] uppercase tracking-widest opacity-50 mt-0.5">Timeline & Work Updates</p>
                    </div>
                    <button 
                      onClick={() => {
@@ -6457,42 +6611,43 @@ alter table system_settings disable row level security;
                         setIsFollowupModalOpen(true);
                      }}
                      disabled={selectedTrackingDetail.status === 'terminated' || selectedTrackingDetail.status === 'archived'}
-                     className={`px-5 py-2.5 text-[11px] font-bold uppercase tracking-widest transition-colors flex items-center gap-2 ${selectedTrackingDetail.status === 'terminated' || selectedTrackingDetail.status === 'archived' ? 'bg-[#1A1A1A]/10 text-gray-400 cursor-not-allowed' : 'bg-[#1A1A1A] text-white hover:bg-black'}`}
+                     className={`w-full sm:w-auto px-5 py-2.5 text-xs font-bold uppercase tracking-widest transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${selectedTrackingDetail.status === 'terminated' || selectedTrackingDetail.status === 'archived' ? 'bg-[#1A1A1A]/10 text-gray-400 cursor-not-allowed' : 'bg-[#1A1A1A] text-white hover:bg-black shadow-xs active:translate-y-px'}`}
                    >
-                     <span>+</span> 补充最新跟进
+                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                     补充跟进备注
                    </button>
                  </div>
 
                  {(!selectedTrackingDetail.followupRecords || selectedTrackingDetail.followupRecords.length === 0) ? (
-                   <div className="py-20 flex flex-col items-center justify-center border border-[#1A1A1A]/10 border-dashed bg-white/50 rounded-sm">
+                   <div className="py-16 md:py-24 flex flex-col items-center justify-center border border-[#1A1A1A]/10 border-dashed bg-white/50 rounded-sm">
                       <div className="w-12 h-12 rounded-full bg-[#1A1A1A]/5 flex items-center justify-center mb-4">
-                        <svg className="w-6 h-6 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-6 h-6 opacity-30 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
-                      <p className="text-xs font-bold uppercase tracking-widest opacity-40">暂无任何跟进记录</p>
-                      <p className="text-[10px] opacity-30 mt-2">点击右侧上方按钮添加第一条记录</p>
+                      <p className="text-xs font-bold uppercase tracking-widest opacity-40">暂无任何进展记录</p>
+                      <p className="text-[10px] opacity-30 mt-2">点击上方按钮补充第一条工作汇报</p>
                    </div>
                  ) : (
-                   <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-px before:bg-[#1A1A1A]/10">
+                   <div className="space-y-6 relative flex-1 min-h-0 pb-10 before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-px before:bg-[#1A1A1A]/10">
                      {selectedTrackingDetail.followupRecords.map((record, index) => (
                        <div key={record.id} className="relative flex items-start group">
-                          <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-[#F7F6F2] bg-white shadow-sm shrink-0 z-10">
+                          <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-[#F7F6F2] bg-white shadow-xs shrink-0 z-10">
                             {index === 0 ? (
                                <span className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse"></span>
                             ) : (
                                <span className="w-2 h-2 bg-[#1A1A1A]/30 rounded-full"></span>
                             )}
                           </div>
-                          <div className="ml-6 w-full bg-white p-6 rounded-sm shadow-sm border border-[#1A1A1A]/5 hover:shadow-md transition-shadow">
-                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#1A1A1A]/5">
-                               <div className="flex items-center gap-3">
-                                 <div className="font-mono text-xs font-semibold px-2 py-1 bg-[#F7F6F2] rounded text-[#1A1A1A]/70 border border-[#1A1A1A]/5">
+                          <div className="ml-4 sm:ml-6 w-full bg-white p-4 sm:p-6 rounded border border-[#1A1A1A]/5 hover:shadow-md transition-shadow">
+                            <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-[#1A1A1A]/5">
+                               <div className="flex items-center gap-2.5">
+                                 <div className="font-mono text-xs font-semibold px-2 py-0.5 bg-[#F7F6F2] rounded text-[#1A1A1A]/70 border border-[#1A1A1A]/5">
                                    {record.date}
                                  </div>
-                                 {index === 0 && <span className="text-[9px] uppercase font-bold tracking-widest text-blue-500">最新</span>}
+                                 {index === 0 && <span className="text-[9px] uppercase font-extrabold tracking-widest px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100">最新</span>}
                                </div>
-                               <div className="flex items-center gap-2">
+                               <div className="flex items-center gap-1.5 shrink-0">
                                  <button
                                    onClick={() => {
                                       setEditingTrackingId(selectedTrackingDetail.id);
@@ -6501,21 +6656,21 @@ alter table system_settings disable row level security;
                                       setIsTrackingDetailModalOpen(false);
                                       setIsFollowupModalOpen(true);
                                    }}
-                                   className="text-gray-400 hover:text-[#1A1A1A] transition-colors p-1 cursor-pointer"
+                                   className="text-gray-400 hover:text-stone-800 transition-colors p-1.5 hover:bg-stone-50 rounded cursor-pointer"
                                    title="修改跟进记录"
                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                                  </button>
                                  <button
                                    onClick={() => deleteFollowup(record.id)}
-                                   className="text-gray-400 hover:text-red-600 transition-colors p-1 cursor-pointer"
+                                   className="text-gray-400 hover:text-red-600 transition-colors p-1.5 hover:bg-red-50 rounded cursor-pointer"
                                    title="删除跟进记录"
                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
                                  </button>
                                </div>
                             </div>
-                            <div className="prose prose-sm prose-black max-w-none opacity-80 leading-relaxed text-[13px]" dangerouslySetInnerHTML={{ __html: record.content }} />
+                            <div className="prose prose-sm prose-black max-w-none opacity-95 leading-relaxed text-[12.5px] sm:text-[13px]" dangerouslySetInnerHTML={{ __html: record.content }} />
                           </div>
                        </div>
                      ))}
