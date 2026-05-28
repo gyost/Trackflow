@@ -617,6 +617,7 @@ const ProjectTrackingView = ({
 
   const [loadingAction, setLoadingAction] = React.useState<{id: string, type: string} | null>(null);
   const [importStatus, setImportStatus] = React.useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [isConfirmLoading, setIsConfirmLoading] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [localConfirm, setLocalConfirm] = React.useState<{
@@ -624,7 +625,7 @@ const ProjectTrackingView = ({
     message: string;
     type: 'restore' | 'delete_permanently';
     id: string;
-    onConfirm: () => void;
+    onConfirm: () => Promise<void>;
   } | null>(null);
 
   const handleRestoreClick = (t: ProjectTracking) => {
@@ -633,10 +634,21 @@ const ProjectTrackingView = ({
       message: `确定要将已作废项目【${t.customerName}】重新恢复至跟进中状态吗？`,
       type: 'restore',
       id: t.id,
-      onConfirm: () => {
+      onConfirm: async () => {
+        setLoadingAction({ id: t.id, type: 'restore' });
+        // Simulate minor visual buffer for smooth transitional response
+        await new Promise(resolve => setTimeout(resolve, 400));
         if (onRestore) {
-          onRestore(t.id);
+          try {
+            await onRestore(t.id);
+            if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+              window.navigator.vibrate(15);
+            }
+          } catch (e) {
+            console.error(e);
+          }
         }
+        setLoadingAction(null);
         setLocalConfirm(null);
       }
     });
@@ -648,10 +660,20 @@ const ProjectTrackingView = ({
       message: `确定要永久删除已作废项目【${t.customerName}】吗？删除后该项目所有的档案和历史跟进动态将被物理删除，操作不可撤销，请谨慎操作！`,
       type: 'delete_permanently',
       id: t.id,
-      onConfirm: () => {
+      onConfirm: async () => {
+        setLoadingAction({ id: t.id, type: 'delete_permanently' });
+        await new Promise(resolve => setTimeout(resolve, 400));
         if (onDeletePermanently) {
-          onDeletePermanently(t.id);
+          try {
+            await onDeletePermanently(t.id);
+            if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+              window.navigator.vibrate([20, 40, 20]);
+            }
+          } catch (e) {
+            console.error(e);
+          }
         }
+        setLoadingAction(null);
         setLocalConfirm(null);
       }
     });
@@ -826,7 +848,7 @@ const ProjectTrackingView = ({
           <div>
             <div className="flex items-center gap-2.5">
               <span className="w-2.5 h-2.5 bg-gradient-to-tr from-[#1A1A1A] to-[#404040] rounded-full shadow-[0_0_8px_rgba(0,0,0,0.25)]"></span>
-              <h2 className="text-xl sm:text-2xl font-serif italic font-bold tracking-tight text-[#1A1A1A]">项目销售跟踪</h2>
+              <h2 className="text-xl sm:text-2xl font-serif italic font-bold tracking-tight text-[#1A1A1A]">项目跟踪</h2>
             </div>
             <p className="text-[9px] opacity-40 uppercase tracking-widest font-mono mt-0.5">Pipeline sales & conversion tracker</p>
           </div>
@@ -1367,6 +1389,56 @@ const ProjectTrackingView = ({
           )}
         </div>
       </div>
+
+      {localConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => !isConfirmLoading && setLocalConfirm(null)}>
+          <div className="bg-white rounded-xl border border-black/10 shadow-2xl p-6 w-full max-w-md transform transition-all" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-[#1A1A1A] border-b border-zinc-100 pb-3 flex items-center gap-2">
+              {localConfirm.type === 'restore' ? (
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              ) : (
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+              )}
+              {localConfirm.title}
+            </h3>
+            <p className="text-xs text-zinc-600 mt-4 leading-relaxed whitespace-pre-wrap">
+              {localConfirm.message}
+            </p>
+            <div className="flex items-center justify-end gap-2.5 mt-6 pt-3 border-t border-zinc-100">
+              <button
+                onClick={() => setLocalConfirm(null)}
+                disabled={isConfirmLoading}
+                className="px-4 py-2 text-xs font-semibold text-zinc-500 bg-zinc-50 hover:bg-zinc-100 rounded-lg border border-zinc-200 transition-colors cursor-pointer select-none disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                取消
+              </button>
+              <button
+                onClick={async () => {
+                  setIsConfirmLoading(true);
+                  try {
+                    await localConfirm.onConfirm();
+                  } catch (e) {
+                    console.error(e);
+                  } finally {
+                    setIsConfirmLoading(false);
+                  }
+                }}
+                disabled={isConfirmLoading}
+                className={`px-4 py-2 text-xs font-semibold text-white rounded-lg transition-all active:scale-95 cursor-pointer select-none shadow-sm flex items-center justify-center gap-1.5 ${
+                  localConfirm.type === 'restore'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100/50'
+                    : 'bg-rose-600 hover:bg-rose-700 shadow-rose-100/50'
+                } disabled:opacity-80 disabled:cursor-not-allowed`}
+              >
+                {isConfirmLoading && (
+                  <span className="w-3 h-3 border-[1.5px] border-white border-t-transparent rounded-full animate-spin"></span>
+                )}
+                <span>确定</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -2999,6 +3071,32 @@ alter table system_settings disable row level security;
         console.warn('Failed to update tracking status', err);
         window.showToast?.('更新状态出错', 'error');
       }
+    }
+  };
+
+  const restoreTracking = async (id: string) => {
+    const tracking = projectTrackings.find(t => t.id === id);
+    if (tracking) {
+      const updated = { ...tracking, status: 'followup' as TrackingStatus, updatedAt: new Date().toISOString() };
+      try {
+        await apiService.saveProjectTracking(updated);
+        setProjectTrackings(prev => prev.map(t => t.id === id ? updated : t));
+        window.showToast?.('项目已恢复至跟进中状态', 'success');
+      } catch (err) {
+        console.warn('Failed to restore tracking', err);
+        window.showToast?.('恢复项目失败', 'error');
+      }
+    }
+  };
+
+  const deleteTrackingPermanently = async (id: string) => {
+    try {
+      await apiService.deleteProjectTracking(id);
+      setProjectTrackings(prev => prev.filter(t => t.id !== id));
+      window.showToast?.('项目已被物理永久删除', 'success');
+    } catch (err) {
+      console.warn('Failed to delete tracking permanently', err);
+      window.showToast?.('永久删除项目失败', 'error');
     }
   };
 
@@ -4853,6 +4951,8 @@ alter table system_settings disable row level security;
               <ProjectTrackingView 
                 trackings={projectTrackings}
                 onDelete={terminateTracking}
+                onRestore={restoreTracking}
+                onDeletePermanently={deleteTrackingPermanently}
                 onEdit={(t) => { setEditingTrackingId(t.id); setTrackingForm(t); setTrackingError(''); setIsTrackingModalOpen(true); }}
                 onAdd={() => { setEditingTrackingId(null); setTrackingForm({ customerName: '', status: 'followup', product: '', cityManager: '', projectManager: '', expectedContractAmount: 0, actualContractAmount: 0, contactName: '', contactPhone: '', createdAt: format(new Date(), 'yyyy-MM-dd') }); setTrackingError(''); setIsTrackingModalOpen(true); }}
                 onAddFollowup={(t) => {
