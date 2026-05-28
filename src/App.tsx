@@ -5670,7 +5670,7 @@ alter table system_settings disable row level security;
                   <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">客群转化动态与漏斗 (年度累计)</span>
                 </div>
                 
-                <div className="flex sm:grid sm:grid-cols-2 md:grid-cols-4 gap-4 px-4 sm:px-0 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory scroll-smooth pb-2 -mx-4 sm:mx-0">
+                <div className="flex sm:grid sm:grid-cols-2 md:grid-cols-3 gap-4 px-4 sm:px-0 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory scroll-smooth pb-2 -mx-4 sm:mx-0">
                   
                   {/* Lead Clients */}
                   <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[104px] relative overflow-hidden group shadow-[0_4px_16px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.04)] transition-all duration-300 w-full min-w-[245px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
@@ -5708,26 +5708,6 @@ alter table system_settings disable row level security;
                       <span className="text-[9px] font-mono text-zinc-400">活跃推进效率</span>
                       <span className="text-[9px] font-mono font-bold text-amber-600">
                         {yearTargetActiveClients > 0 ? Math.round((yearActiveClients / yearTargetActiveClients) * 100) : 0}%
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Signed Clients */}
-                  <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[104px] relative overflow-hidden group shadow-[0_4px_16px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.04)] transition-all duration-300 w-full min-w-[245px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
-                    <div className="flex justify-between items-start w-full">
-                      <span className="text-[11px] font-medium text-zinc-400">已签约成交</span>
-                      <span className="w-6 h-6 rounded-lg bg-emerald-50/55 border border-emerald-100/30 flex items-center justify-center text-emerald-600">
-                        <FileText className="w-3.5 h-3.5" />
-                      </span>
-                    </div>
-                    <div className="flex items-baseline gap-1.5 mt-1">
-                      <span className="text-2.5xl font-serif italic text-emerald-600 tracking-tight">{yearSignedClients}</span>
-                      <span className="text-[9px] font-mono text-zinc-400 font-bold">/ {yearTargetSignedClients} 目标</span>
-                    </div>
-                    <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
-                      <span className="text-[9px] font-mono text-zinc-400">合作达成度</span>
-                      <span className="text-[9px] font-mono font-bold text-emerald-600">
-                        {yearTargetSignedClients > 0 ? Math.round((yearSignedClients / yearTargetSignedClients) * 100) : 0}%
                       </span>
                     </div>
                   </div>
@@ -6112,21 +6092,6 @@ alter table system_settings disable row level security;
                   <div>
                     <span className="text-[9px] opacity-60 mb-1 block">月底实际</span>
                     <input type="number" min="0" value={goalForm.activeClientsActual} onChange={(e) => setGoalForm({...goalForm, activeClientsActual: e.target.value})} className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-1 text-sm font-mono" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Signed Clients */}
-              <div>
-                <label className="block text-[11px] uppercase tracking-widest font-bold mb-2 pb-1 border-b border-[#1A1A1A]/10">已签约成交 (家)</label>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="text-[9px] opacity-60 mb-1 block">月初目标</span>
-                    <input type="number" min="0" value={goalForm.signedClientsTarget} onChange={(e) => setGoalForm({...goalForm, signedClientsTarget: e.target.value})} className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-1 text-sm font-mono" />
-                  </div>
-                  <div>
-                    <span className="text-[9px] opacity-60 mb-1 block">月底实际</span>
-                    <input type="number" min="0" value={goalForm.signedClientsActual} onChange={(e) => setGoalForm({...goalForm, signedClientsActual: e.target.value})} className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-1 text-sm font-mono" />
                   </div>
                 </div>
               </div>
