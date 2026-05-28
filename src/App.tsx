@@ -17,7 +17,7 @@ import {
 } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { HelpCircle, LayoutDashboard, Target, TrendingUp, Code2, ClipboardList, User, Settings, LogOut, Search, Plus, Download, Upload, FileSpreadsheet, Filter, Coins, FileText, Wallet, Users, UserX, CheckCircle2, AlertTriangle, X, Info, XCircle } from 'lucide-react';
+import { HelpCircle, LayoutDashboard, Target, TrendingUp, Code2, ClipboardList, User, Settings, LogOut, Search, Plus, Download, Upload, FileSpreadsheet, Filter, Coins, FileText, Wallet, Users, UserX, CheckCircle2, AlertTriangle, X, Info, XCircle, Trello, Activity, RotateCcw } from 'lucide-react';
 import { mockProjects, mockPlans as initialPlans, mockTasks as initialTasks, mockOutcomes as initialOutcomes, mockMembers, mockGroups, mockRequirements as initialRequirements } from './mockData';
 import { Plan, Task, Outcome, Group, Member, Project, Status, Priority, Requirement, RequirementStatus, RequirementHistory, ReleaseGoal, ProjectTracking, TrackingStatus, FollowupRecord, RolePermission } from './types';
 import { generateId } from './lib/utils';
@@ -31,6 +31,8 @@ import { seedSupabase, forceSeedTable } from './services/seedService';
 import GuideModal from './components/GuideModal';
 import ProfileModal from './components/ProfileModal';
 import Logo from './components/Logo';
+import TrackFlowIntro from './components/TrackFlowIntro';
+import { Compass } from 'lucide-react';
 
 function pruneDuplicates<T extends { id: any }>(arr: T[]): T[] {
   if (!Array.isArray(arr)) return [];
@@ -568,30 +570,45 @@ const ProjectTrackingView = ({
     if (isNaN(cDate.getTime())) return false;
     const cYear = cDate.getFullYear();
     const cMonth = cDate.getMonth() + 1;
-    const cYM = cYear * 12 + cMonth;
 
-    const udt = t.updatedAt;
-    const uDate = udt ? new Date(udt) : cDate;
-    const uYear = isNaN(uDate.getTime()) ? cYear : uDate.getFullYear();
-    const uMonth = isNaN(uDate.getTime()) ? cMonth : uDate.getMonth() + 1;
-    const uYM = uYear * 12 + uMonth;
+    // 检查签约日期是否在选定月份/年份中
+    let isSignedInSelectedMonth = false;
+    if (t.signedDate) {
+      const sDate = new Date(t.signedDate);
+      if (!isNaN(sDate.getTime())) {
+        const sYear = sDate.getFullYear();
+        const sMonth = sDate.getMonth() + 1;
+        if (month === 0) {
+          isSignedInSelectedMonth = sYear === year;
+        } else {
+          isSignedInSelectedMonth = sYear === year && sMonth === month;
+        }
+      }
+    }
+
+    // 检查是否有选定月份/年份中的跟进记录
+    let hasFollowupInSelectedMonth = false;
+    if (t.followupRecords && Array.isArray(t.followupRecords)) {
+      hasFollowupInSelectedMonth = t.followupRecords.some(fr => {
+        if (!fr.date) return false;
+        const frDate = new Date(fr.date);
+        if (isNaN(frDate.getTime())) return false;
+        const frYear = frDate.getFullYear();
+        const frMonth = frDate.getMonth() + 1;
+        if (month === 0) {
+          return frYear === year;
+        } else {
+          return frYear === year && frMonth === month;
+        }
+      });
+    }
 
     if (month === 0) {
-      const isSameOrBeforeYear = cYear <= year;
-      const isStillActive = t.status !== 'terminated' && t.status !== 'archived';
-      const isClosedInThisYear = (t.status === 'terminated' || t.status === 'archived') && uYear === year;
-      return isSameOrBeforeYear && (isStillActive || isClosedInThisYear);
+      // 全年筛选：创建时间、签约时间或跟进时间在该年份之内的项目
+      return cYear === year || isSignedInSelectedMonth || hasFollowupInSelectedMonth;
     } else {
-      const selectedYM = year * 12 + month;
-      if (cYM === selectedYM) {
-        return true;
-      }
-      if (cYM < selectedYM) {
-        const isStillActive = t.status !== 'terminated' && t.status !== 'archived';
-        const isClosedInThisMonth = (t.status === 'terminated' || t.status === 'archived') && uYM === selectedYM;
-        return isStillActive || isClosedInThisMonth;
-      }
-      return false;
+      // 按月筛选：创建时间、签约时间或跟进时间在该月份之内的项目
+      return (cYear === year && cMonth === month) || isSignedInSelectedMonth || hasFollowupInSelectedMonth;
     }
   });
 
@@ -610,6 +627,8 @@ const ProjectTrackingView = ({
   });
   
   const totalAmount = monthTrackings.reduce((acc, curr) => acc + curr.actualContractAmount, 0);
+  const totalExpectedAmount = monthTrackings.reduce((acc, curr) => acc + curr.expectedContractAmount, 0);
+  const conversionRate = totalExpectedAmount > 0 ? (totalAmount / totalExpectedAmount) * 100 : 0;
   const statusCounts = (Object.keys(statusLabels) as TrackingStatus[]).map(s => ({
       status: s,
       count: monthTrackings.filter(t => t.status === s).length
@@ -619,6 +638,35 @@ const ProjectTrackingView = ({
   const [importStatus, setImportStatus] = React.useState<{type: 'success' | 'error', message: string} | null>(null);
   const [isConfirmLoading, setIsConfirmLoading] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const yearsList = React.useMemo(() => Array.from({ length: 17 }, (_, i) => 2020 + i), []); // 2020 to 2036
+  const yearScrollRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (yearScrollRef.current) {
+        const activeIndex = yearsList.indexOf(year);
+        if (activeIndex !== -1) {
+          const targetScrollTop = activeIndex * 32;
+          if (Math.abs(yearScrollRef.current.scrollTop - targetScrollTop) > 2) {
+            yearScrollRef.current.scrollTop = targetScrollTop;
+          }
+        }
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [year, yearsList]);
+
+  const handleYearScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+    const index = Math.round(container.scrollTop / 32);
+    if (index >= 0 && index < yearsList.length) {
+      const selectedYearVal = yearsList[index];
+      if (selectedYearVal !== year) {
+        setYear(selectedYearVal);
+      }
+    }
+  };
 
   const [localConfirm, setLocalConfirm] = React.useState<{
     title: string;
@@ -853,68 +901,124 @@ const ProjectTrackingView = ({
             <p className="text-[9px] opacity-40 uppercase tracking-widest font-mono mt-0.5">Pipeline sales & conversion tracker</p>
           </div>
           
-          <div className="flex gap-2 text-xs font-mono uppercase tracking-widest">
-            <div className="flex items-center gap-1.5 bg-white/60 hover:bg-white/90 transition-colors px-2.5 py-1 rounded-lg border border-[#1A1A1A]/5 shadow-sm">
-              <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="bg-transparent font-bold outline-none cursor-pointer appearance-none text-[#1A1A1A] text-[11px] pr-1">
-                 {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y} 年</option>)}
-              </select>
-              <span className="opacity-30 text-[10px]">▼</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 年份选择 (Sleek Vertical Scroll Snap Picker) */}
+            <div className="relative flex items-center bg-white border border-black/[0.06] rounded-xl shadow-sm h-9 px-1 shrink-0 select-none hover:border-black/[0.12] transition-colors">
+              <button
+                onClick={() => {
+                  const prevYear = Math.max(2020, year - 1);
+                  setYear(prevYear);
+                }}
+                className="w-5 h-8 flex items-center justify-center text-[#1A1A1A]/35 hover:text-[#1A1A1A]/90 transition-colors focus:outline-none cursor-pointer active:scale-90"
+                title="上一年"
+              >
+                <span className="text-[9px] font-bold">▲</span>
+              </button>
+              
+              <div 
+                ref={yearScrollRef}
+                onScroll={handleYearScroll}
+                className="h-8 w-[48px] overflow-y-auto snap-y snap-mandatory hide-scrollbar flex flex-col scroll-smooth relative"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              >
+                {yearsList.map(y => {
+                  const isSelected = year === y;
+                  return (
+                    <div
+                      key={y}
+                      onClick={() => setYear(y)}
+                      className={`h-8 flex items-center justify-center snap-center shrink-0 text-[10.5px] font-bold tracking-tight cursor-pointer transition-all duration-150 ${
+                        isSelected 
+                          ? 'text-[#1A1A1A] font-extrabold bg-[#1A1A1A]/8 rounded-lg px-1.5' 
+                          : 'text-[#1A1A1A]/35 hover:text-[#1A1A1A]/60'
+                      }`}
+                    >
+                      {y}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => {
+                  const nextYear = Math.min(2036, year + 1);
+                  setYear(nextYear);
+                }}
+                className="w-5 h-8 flex items-center justify-center text-[#1A1A1A]/35 hover:text-[#1A1A1A]/90 transition-colors focus:outline-none cursor-pointer active:scale-90"
+                title="下一年"
+              >
+                <span className="text-[9px] font-bold">▼</span>
+              </button>
             </div>
             
-            <div className="flex items-center gap-1.5 bg-white/60 hover:bg-white/90 transition-colors px-2.5 py-1 rounded-lg border border-[#1A1A1A]/5 shadow-sm">
-              <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="bg-transparent font-bold outline-none cursor-pointer appearance-none text-[#1A1A1A] text-[11px] pr-1">
-                 <option value={0}>全年</option>
-                 {Array.from({length: 12}, (_, i) => i + 1).map(m => <option key={m} value={m}>{m.toString().padStart(2, '0')}月</option>)}
-              </select>
-              <span className="opacity-30 text-[10px]">▼</span>
+            {/* 月份选择 (Elegant Flat Scroll List with Smooth Interaction) */}
+            <div className="flex items-center bg-white border border-black/[0.06] rounded-xl p-0.5 shadow-sm overflow-x-auto custom-scrollbar hide-scrollbar-on-mobile max-w-full sm:max-w-[420px]">
+              <button
+                onClick={() => setMonth(0)}
+                className={`px-3 py-1.5 rounded-lg text-[10.5px] font-bold transition-all duration-150 select-none cursor-pointer text-nowrap shrink-0 ${
+                  month === 0 
+                    ? 'bg-[#1A1A1A] text-white shadow-sm' 
+                    : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
+                }`}
+              >
+                全年
+              </button>
+              {Array.from({length: 12}, (_, i) => i + 1).map(m => {
+                const isSelected = month === m;
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setMonth(m)}
+                    className={`px-2.5 py-1.5 rounded-lg text-[10.5px] font-bold transition-all duration-150 select-none cursor-pointer text-nowrap shrink-0 ${
+                      isSelected 
+                        ? 'bg-[#1A1A1A] text-white shadow-sm' 
+                        : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
+                    }`}
+                  >
+                    {m.toString().padStart(2, '0')}月
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
 
         {/* Global Metrics & Status Filter Tags integrated in line */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 sm:gap-6 w-full md:w-auto">
-          {/* Main Counters Row */}
-          <div className="flex items-center gap-6 sm:gap-8 bg-white/40 p-2 px-4 rounded-xl border border-[#1A1A1A]/5 shadow-sm backdrop-blur-sm self-start sm:self-auto">
-            <div>
-              <div className="text-[8px] uppercase font-bold tracking-widest opacity-40 mb-0.5 font-mono">客户总数</div>
-              <div className="text-xl font-serif italic text-[#1A1A1A] font-bold flex items-baseline gap-0.5">
-                {filtered.length} 
-                <span className="text-[10px] font-sans not-italic font-normal opacity-40">户</span>
-              </div>
-            </div>
-            <div className="w-[1px] h-6 bg-[#1A1A1A]/10"></div>
-            <div>
-              <div className="text-[8px] uppercase font-bold tracking-widest opacity-40 mb-0.5 font-mono">已达成转化</div>
-              <div className="text-xl font-serif italic text-emerald-800 font-bold flex items-baseline gap-0.5">
-                ¥{(totalAmount / 10000).toLocaleString()}
-                <span className="text-[10px] font-sans not-italic font-normal opacity-50 ml-0.5">万</span>
-              </div>
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {/* Card 1: 客户总数 */}
+          <div className="flex-1 sm:flex-none min-w-[100px] bg-white border border-black/[0.06] rounded-xl px-4 py-2.5 shadow-sm">
+            <div className="text-[9px] uppercase font-bold tracking-wider text-[#1A1A1A]/40 mb-1 font-mono">客户总数</div>
+            <div className="text-xl font-extrabold text-[#1A1A1A] flex items-baseline gap-0.5 font-sans">
+              {filtered.length} 
+              <span className="text-[10px] font-medium text-[#1A1A1A]/40 ml-0.5">户</span>
             </div>
           </div>
 
-          {/* Inline Compact Status Indicator Scroll Row */}
-          <div className="flex overflow-x-auto hide-scrollbar-on-mobile snap-x gap-1.5 p-1 bg-white/50 border border-[#1A1A1A]/5 rounded-xl w-full sm:w-auto max-w-full">
-            {statusCounts.map(item => {
-              const isSelected = filterStatus === item.status;
-              const hasActiveFilters = filterStatus !== 'all';
-              return (
-                <button 
-                  key={item.status} 
-                  onClick={() => setFilterStatus(isSelected ? 'all' : item.status)} 
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all duration-200 shrink-0 snap-start flex items-center gap-1.5 cursor-pointer select-none active:scale-95 ${
-                    isSelected 
-                      ? 'bg-[#1A1A1A] text-white shadow-md scale-102 font-medium' 
-                      : hasActiveFilters 
-                        ? 'opacity-35 hover:opacity-85 hover:bg-white bg-transparent text-[#1A1A1A]' 
-                        : 'bg-white/40 text-[#1A1A1A]/80 hover:bg-white hover:text-[#1A1A1A]'
-                  }`}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${statusColors[item.status]} shrink-0 shadow-[0_0_3px_rgba(0,0,0,0.1)]`}></span>
-                  <span className="font-semibold">{statusLabels[item.status]}</span>
-                  <span className={`font-mono text-[9px] ${isSelected ? 'opacity-90 bg-white/15 px-1 py-0.2 rounded-sm' : 'opacity-40'}`}>{item.count}</span>
-                </button>
-              );
-            })}
+          {/* Card 2: 预期合同总额 */}
+          <div className="flex-1 sm:flex-none min-w-[130px] bg-white border border-black/[0.06] rounded-xl px-4 py-2.5 shadow-sm">
+            <div className="text-[9px] uppercase font-bold tracking-wider text-[#1A1A1A]/40 mb-1 font-mono">预期合同总额</div>
+            <div className="text-xl font-extrabold text-zinc-700 flex items-baseline gap-0.5 font-sans">
+              ¥{(totalExpectedAmount / 10000).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+              <span className="text-[10px] font-medium text-zinc-700/50 ml-0.5">万</span>
+            </div>
+          </div>
+
+          {/* Card 3: 已达成转化 */}
+          <div className="flex-1 sm:flex-none min-w-[130px] bg-emerald-500/[0.03] border border-emerald-500/15 rounded-xl px-4 py-2.5 shadow-sm">
+            <div className="text-[9px] uppercase font-bold tracking-wider text-emerald-800/50 mb-1 font-mono">已达成转化</div>
+            <div className="text-xl font-extrabold text-emerald-700 flex items-baseline gap-0.5 font-sans">
+              ¥{(totalAmount / 10000).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+              <span className="text-[10px] font-bold text-emerald-700/60 ml-0.5">万</span>
+            </div>
+          </div>
+
+          {/* Card 4: 业绩转化率 */}
+          <div className="flex-1 sm:flex-none min-w-[115px] bg-purple-500/[0.03] border border-purple-500/15 rounded-xl px-4 py-2.5 shadow-sm">
+            <div className="text-[9px] uppercase font-bold tracking-wider text-purple-800/50 mb-1 font-mono">业绩转化率</div>
+            <div className="text-xl font-extrabold text-purple-700 flex items-baseline gap-0.5 font-sans">
+              {conversionRate.toFixed(1)}
+              <span className="text-[10px] font-bold text-purple-700/60 ml-0.5">%</span>
+            </div>
           </div>
         </div>
       </div>
@@ -939,14 +1043,14 @@ const ProjectTrackingView = ({
             </div>
 
             {/* Right: Modern Actions Suite (Visible on both desktop & mobile) */}
-            <div className="flex flex-wrap items-center gap-2.5 mt-1 md:mt-0">
+            <div className="flex flex-wrap items-center gap-2 mt-1 md:mt-0">
               
               {/* Action: Add Project - Primary Black styled with Icon */}
               <button 
                 onClick={onAdd} 
-                className="flex-1 sm:flex-none justify-center bg-[#1A1A1A] text-white px-5 py-2.5 text-xs font-bold rounded-xl hover:bg-black transition-all flex items-center gap-2 active:scale-95 shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 cursor-pointer"
+                className="flex-1 sm:flex-none justify-center bg-[#1A1A1A] text-white px-4 h-9 text-[11px] font-bold rounded-lg hover:bg-black transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
               >
-                <Plus className="w-4 h-4" strokeWidth={3} />
+                <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
                 <span>新增项目</span>
               </button>
 
@@ -982,10 +1086,10 @@ const ProjectTrackingView = ({
                    document.body.removeChild(link);
                    URL.revokeObjectURL(url);
                 }} 
-                className="flex-1 sm:flex-none justify-center bg-white border border-[#1A1A1A]/15 text-[#1A1A1A] px-4 py-2.5 text-xs font-bold rounded-xl hover:bg-[#1A1A1A]/5 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
+                className="flex-1 sm:flex-none justify-center bg-white border border-black/[0.08] hover:border-black/[0.15] text-[#1A1A1A]/85 px-3.5 h-9 text-[11px] font-semibold rounded-lg hover:bg-zinc-50 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
                 title="导出下方筛选的数据为 CSV"
               >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <FileSpreadsheet className="w-3.5 h-3.5 text-zinc-500" strokeWidth={2} />
                 <span>导出数据</span>
               </button>
               
@@ -1008,19 +1112,19 @@ const ProjectTrackingView = ({
                   document.body.removeChild(link);
                   URL.revokeObjectURL(url);
                 }} 
-                className="flex-1 sm:flex-none justify-center bg-white border border-[#1A1A1A]/15 text-[#1A1A1A] px-4 py-2.5 text-xs font-bold rounded-xl hover:bg-[#1A1A1A]/5 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
+                className="flex-1 sm:flex-none justify-center bg-white border border-black/[0.08] hover:border-black/[0.15] text-[#1A1A1A]/85 px-3.5 h-9 text-[11px] font-semibold rounded-lg hover:bg-zinc-50 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
                 title="下载标准导入 CSV 格式模板"
               >
-                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <Download className="w-3.5 h-3.5 text-zinc-500" strokeWidth={2} />
                 <span>下载模板</span>
               </button>
 
-              {/* Action: Import Data - Highlighted Blue */}
+              {/* Action: Import Data - Minimal Outlined to match rest */}
               <button 
                 onClick={() => fileInputRef.current?.click()} 
-                className="flex-1 sm:flex-none justify-center bg-[#1A73E8] text-white px-4 py-2.5 text-xs font-bold rounded-xl hover:bg-[#1557B0] transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
+                className="flex-1 sm:flex-none justify-center bg-white border border-black/[0.08] hover:border-black/[0.15] text-[#1A1A1A]/85 px-3.5 h-9 text-[11px] font-semibold rounded-lg hover:bg-zinc-50 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
               >
-                <Upload className="w-4 h-4" />
+                <Upload className="w-3.5 h-3.5 text-zinc-500" strokeWidth={2} />
                 <span>导入数据</span>
               </button>
 
@@ -1045,11 +1149,10 @@ const ProjectTrackingView = ({
                     : 'bg-[#1A1A1A]/5 text-[#1A1A1A]/60 hover:bg-[#1A1A1A]/10'
                 }`}
               >
-                全部阶段 ({monthTrackings.length})
+                全部阶段
               </button>
               {Object.keys(statusLabels).map(s => {
                 const st = s as TrackingStatus;
-                const count = monthTrackings.filter(t => t.status === st).length;
                 return (
                   <button 
                     key={st}
@@ -1061,7 +1164,6 @@ const ProjectTrackingView = ({
                     }`}
                   >
                     <span>{statusLabels[st]}</span>
-                    <span className="opacity-50 text-[9px] font-mono">({count})</span>
                   </button>
                 );
               })}
@@ -1228,25 +1330,25 @@ const ProjectTrackingView = ({
                  {filtered.map((t, i) => (
                    <div 
                      key={t.id} 
-                     className="bg-white border border-black/[0.06] rounded-[24px] p-5.5 flex flex-col gap-4.5 shadow-[0_4px_24px_rgba(0,0,0,0.02)] active:scale-[0.985] transition-all relative overflow-hidden" 
+                     className="bg-white border border-black/[0.04] rounded-2xl p-5 flex flex-col gap-4 shadow-[0_4px_18px_rgba(0,0,0,0.015)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.03)] active:scale-[0.985] transition-all relative overflow-hidden" 
                      onClick={() => handleAction(t.id, 'details', () => onViewDetails(t))}
                    >
                      {/* Header */}
-                     <div className="flex flex-col gap-2 pr-14">
+                     <div className="flex flex-col gap-2 pr-12">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border
-                             ${t.status === 'followup' ? 'bg-amber-50 border-amber-200 text-amber-700' : 
-                               t.status === 'implementing' ? 'bg-blue-50 border-blue-200 text-blue-700' : 
-                               t.status === 'accepting' ? 'bg-green-50 border-green-200 text-green-700' : 
-                               t.status === 'quoted' ? 'bg-purple-50 border-purple-200 text-purple-700' : 
-                               t.status === 'archived' ? 'bg-stone-50 border-stone-200 text-stone-700' :
-                               'bg-gray-50 border-gray-200 text-gray-700'}`}
+                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider
+                             ${t.status === 'followup' ? 'bg-amber-500/10 text-amber-700' : 
+                               t.status === 'implementing' ? 'bg-blue-500/10 text-blue-700' : 
+                               t.status === 'accepting' ? 'bg-emerald-500/10 text-emerald-700' : 
+                               t.status === 'quoted' ? 'bg-purple-500/10 text-purple-700' : 
+                               t.status === 'archived' ? 'bg-zinc-500/10 text-zinc-700' :
+                               'bg-zinc-500/10 text-zinc-700'}`}
                            >
                              <span className={`w-1 h-1 rounded-full ${statusColors[t.status]} shrink-0`} />
                              {statusLabels[t.status]}
                            </span>
                            {t.product && (
-                             <span className="bg-zinc-50 border border-zinc-100 text-zinc-500 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                             <span className="bg-zinc-100/55 text-zinc-500 text-[9px] font-medium px-2 py-0.5 rounded uppercase tracking-wider">
                                {t.product}
                              </span>
                            )}
@@ -1260,59 +1362,59 @@ const ProjectTrackingView = ({
                      {t.contactPhone && (
                        <button 
                          onClick={(e) => { e.stopPropagation(); window.location.href = `tel:${t.contactPhone}`; }} 
-                         className="absolute top-5.5 right-5.5 w-11 h-11 bg-zinc-50 border border-zinc-100 hover:bg-zinc-100 select-none cursor-pointer rounded-2xl flex items-center justify-center transition-colors active:scale-90"
+                         className="absolute top-5 right-5 w-9 h-9 bg-black/[0.02] border border-black/[0.04] hover:bg-black/[0.05] select-none cursor-pointer rounded-xl flex items-center justify-center transition-all active:scale-90"
                          title="拨打电话"
                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-zinc-600"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-zinc-500"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
                        </button>
                      )}
                      
                      {/* Metrics Ribbon */}
-                     <div className="flex bg-zinc-50 border border-black/[0.02] rounded-[16px] p-3.5 gap-4">
+                     <div className="grid grid-cols-2 bg-[#1A1A1A]/[0.012] border border-black/[0.02] rounded-xl p-3">
                         <div className="flex-1">
                            <div className="text-[9px] opacity-40 mb-1 font-bold tracking-widest uppercase">预期合同额</div>
-                           <div className="font-mono text-base font-bold text-[#1A1A1A] opacity-95">
+                           <div className="font-mono text-[14px] font-bold text-[#1A1A1A]/85">
                              {t.expectedContractAmount > 0 ? `¥${(t.expectedContractAmount / 10000).toLocaleString()}万` : '—'}
                            </div>
                         </div>
-                        <div className="w-[1px] bg-black/[0.05]"></div>
-                        <div className="flex-1">
+                        <div className="hidden"></div>
+                        <div className="flex-1 border-l border-black/[0.035] pl-4">
                            <div className="text-[9px] opacity-40 mb-1 font-bold tracking-widest uppercase">实际达成额</div>
-                           <div className="font-mono text-base font-bold text-emerald-800">
+                           <div className="font-mono text-[14px] font-bold text-emerald-600">
                              {t.actualContractAmount > 0 ? `¥${(t.actualContractAmount / 10000).toLocaleString()}万` : '—'}
                            </div>
                         </div>
                      </div>
                      
                      {/* Footer Info */}
-                     <div className="flex items-center justify-between text-[11px] font-mono opacity-60">
+                     <div className="flex items-center justify-between text-[10px] font-mono opacity-45">
                         <div className="flex items-center gap-1">
-                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                            <span>跟进: {t.lastFollowupDate || '首轮未录入'}</span>
                         </div>
-                        <div className="font-bold flex items-center gap-1 text-zinc-700">
-                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        <div className="font-semibold flex items-center gap-1 text-[#1A1A1A]/60">
+                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                            <span>{(t.cityManager || t.projectManager) ? `${t.cityManager || ''} ${t.projectManager || ''}`.trim() : '未分派'}</span>
                         </div>
                      </div>
 
                      {/* Mobile Card Action Drawer / Slider Buttons with at least 44px height hit targets */}
-                      <div className="flex items-center gap-2 mt-2 pt-3.5 border-t border-black/[0.04]" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1.5 mt-1.5 pt-3 border-t border-black/[0.035]" onClick={e => e.stopPropagation()}>
                         {t.status === 'terminated' ? (
                           <>
                             <button 
                               onClick={() => handleRestoreClick(t)} 
                               disabled={loadingAction !== null}
-                              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 transition-all cursor-pointer select-none active:scale-95 min-h-[44px]"
+                              className="px-3.5 py-1.5 text-[10.5px] font-bold rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 transition-all cursor-pointer select-none active:scale-95 min-h-[36px] flex items-center justify-center gap-1"
                             >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H17" /></svg>
+                              <RotateCcw className="w-3.5 h-3.5" strokeWidth={2.5} />
                               <span>恢复</span>
                             </button>
 
                             <button 
                               onClick={() => handleAction(t.id, 'details', () => onViewDetails(t))} 
                               disabled={loadingAction !== null}
-                              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl bg-white hover:bg-zinc-100 border border-black/10 text-zinc-800 transition-all cursor-pointer select-none active:scale-95 min-h-[44px]"
+                              className="px-3 py-1.5 text-[10.5px] font-medium rounded-lg bg-[#1A1A1A]/5 hover:bg-[#1A1A1A]/10 text-zinc-750 border border-black/5 transition-all cursor-pointer select-none active:scale-95 min-h-[36px] flex items-center justify-center gap-1"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                               <span>详情</span>
@@ -1321,7 +1423,7 @@ const ProjectTrackingView = ({
                             <button 
                               onClick={() => handleDeletePermanentlyClick(t)} 
                               disabled={loadingAction !== null}
-                              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl bg-rose-50 hover:bg-rose-100/50 border border-rose-200/50 text-rose-700 transition-all cursor-pointer select-none active:scale-95 min-h-[44px]"
+                              className="px-3 py-1.5 text-[10.5px] font-medium rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50/50 transition-all cursor-pointer select-none active:scale-95 min-h-[36px] flex items-center justify-center gap-1"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                               <span>删除</span>
@@ -1332,16 +1434,16 @@ const ProjectTrackingView = ({
                             <button 
                               onClick={() => handleAction(t.id, 'followup', () => onAddFollowup(t))} 
                               disabled={loadingAction !== null || t.status === 'archived'}
-                              className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer select-none active:scale-95 min-h-[44px] ${
+                              className={`px-3.5 py-1.5 text-[10.5px] font-bold rounded-lg transition-all cursor-pointer select-none active:scale-95 min-h-[36px] flex items-center justify-center gap-1 ${
                                 t.status === 'archived'
                                   ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
-                                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200/55 hover:bg-emerald-100/30'
+                                  : 'bg-[#1A1A1A] hover:bg-black text-white shadow-[0_2px_6px_rgba(0,0,0,0.06)]'
                               }`}
                             >
                               {loadingAction?.id === t.id && loadingAction?.type === 'followup' ? (
-                                <span className="w-3.5 h-3.5 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin"></span>
+                                <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></span>
                               ) : (
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                               )}
                               <span>新跟进</span>
                             </button>
@@ -1349,16 +1451,16 @@ const ProjectTrackingView = ({
                             <button 
                               onClick={() => handleAction(t.id, 'edit', () => onEdit(t))} 
                               disabled={loadingAction !== null || t.status === 'archived'}
-                              className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer select-none active:scale-95 min-h-[44px] ${
+                              className={`px-3 py-1.5 text-[10.5px] font-medium rounded-lg transition-all cursor-pointer select-none active:scale-95 min-h-[36px] flex items-center justify-center gap-1 ${
                                 t.status === 'archived'
                                   ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
-                                  : 'bg-white hover:bg-zinc-100 border border-black/10 text-zinc-800'
+                                  : 'bg-[#1A1A1A]/5 hover:bg-[#1A1A1A]/10 text-zinc-700 border border-black/5'
                               }`}
                             >
                               {loadingAction?.id === t.id && loadingAction?.type === 'edit' ? (
                                 <span className="w-3.5 h-3.5 border-2 border-zinc-800 border-t-transparent rounded-full animate-spin"></span>
                               ) : (
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                               )}
                               <span>修改</span>
                             </button>
@@ -1366,16 +1468,16 @@ const ProjectTrackingView = ({
                             <button 
                               onClick={() => handleAction(t.id, 'delete', () => onDelete(t.id))} 
                               disabled={loadingAction !== null || t.status === 'archived'}
-                              className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer select-none active:scale-95 min-h-[44px] ${
+                              className={`px-3 py-1.5 text-[10.5px] font-medium rounded-lg transition-all cursor-pointer select-none active:scale-95 min-h-[36px] flex items-center justify-center gap-1 ${
                                 t.status === 'archived'
                                   ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
-                                  : 'bg-rose-50 hover:bg-rose-100/50 border border-rose-200/50 text-rose-700'
+                                  : 'text-zinc-400 hover:text-rose-600 hover:bg-rose-50/50'
                               }`}
                             >
                               {loadingAction?.id === t.id && loadingAction?.type === 'delete' ? (
                                 <span className="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></span>
                               ) : (
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                               )}
                               <span>作废</span>
                             </button>
@@ -1507,6 +1609,12 @@ export default function App() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<string>('dashboard');
+  const [mobileSubTab, setMobileSubTab] = useState<'kanban' | 'overview'>('kanban');
+
+  useEffect(() => {
+    setMobileSubTab('kanban');
+  }, [currentView]);
+
   const [loadingStep, setLoadingStep] = useState<string>('正在对数据服务进行连接初始化...');
   const [useLocalMockMode, setUseLocalMockMode] = useState<boolean>(false);
   const [isDbLoaded, setIsDbLoaded] = useState(false);
@@ -1741,6 +1849,13 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
+  const [isIntroOpen, setIsIntroOpen] = useState(false);
+  const [draggedRequirementId, setDraggedRequirementId] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<RequirementStatus | null>(null);
+
+  const reqLongPressTimerRef = React.useRef<any>(null);
+  const reqTouchStartPosRef = React.useRef<{ x: number; y: number } | null>(null);
+  const reqHasTriggeredLongPressRef = React.useRef<boolean>(false);
   const [selectedMonth, setSelectedMonth] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`);
   const [selectedQuarter, setSelectedQuarter] = useState(`${new Date().getFullYear()}-Q${Math.floor((new Date().getMonth() + 3) / 3)}`);
   const [selectedYear, setSelectedYear] = useState(`${new Date().getFullYear()}`);
@@ -3325,6 +3440,86 @@ alter table system_settings disable row level security;
     }
   };
 
+  const handleTouchStart = (e: React.TouchEvent, reqId: string) => {
+    reqHasTriggeredLongPressRef.current = false;
+    const touch = e.touches[0];
+    reqTouchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+
+    if (reqLongPressTimerRef.current) {
+      clearTimeout(reqLongPressTimerRef.current);
+    }
+
+    reqLongPressTimerRef.current = setTimeout(() => {
+      reqHasTriggeredLongPressRef.current = true;
+      setDraggedRequirementId(reqId);
+      if (navigator.vibrate) {
+        try {
+          navigator.vibrate(80);
+        } catch (_) {}
+      }
+    }, 450);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!reqTouchStartPosRef.current) return;
+
+    const touch = e.touches[0];
+    const dx = touch.clientX - reqTouchStartPosRef.current.x;
+    const dy = touch.clientY - reqTouchStartPosRef.current.y;
+
+    if (reqHasTriggeredLongPressRef.current) {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+
+      const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
+      let parent: HTMLElement | null = elementUnderTouch as HTMLElement;
+      let targetStatus: RequirementStatus | null = null;
+      while (parent) {
+        const colStat = parent.getAttribute('data-column-status');
+        if (colStat) {
+          targetStatus = colStat as RequirementStatus;
+          break;
+        }
+        parent = parent.parentElement;
+      }
+      if (targetStatus) {
+        setDragOverColumn(targetStatus);
+      } else {
+        setDragOverColumn(null);
+      }
+    } else {
+      if (Math.sqrt(dx * dx + dy * dy) > 10) {
+        if (reqLongPressTimerRef.current) {
+          clearTimeout(reqLongPressTimerRef.current);
+          reqLongPressTimerRef.current = null;
+        }
+      }
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent, reqId: string) => {
+    if (reqLongPressTimerRef.current) {
+      clearTimeout(reqLongPressTimerRef.current);
+      reqLongPressTimerRef.current = null;
+    }
+
+    if (reqHasTriggeredLongPressRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (dragOverColumn) {
+        updateRequirementStatus(reqId, dragOverColumn);
+      }
+
+      setDraggedRequirementId(null);
+      setDragOverColumn(null);
+      reqHasTriggeredLongPressRef.current = false;
+    }
+    
+    reqTouchStartPosRef.current = null;
+  };
+
   const updateRequirementStatus = async (id: string, newStatus: RequirementStatus) => {
     const req = requirements.find(r => r.id === id);
     if (req && req.status !== newStatus) {
@@ -3945,6 +4140,13 @@ alter table system_settings disable row level security;
               </button>
             )}
             <button 
+              onClick={() => setIsIntroOpen(true)}
+              className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center text-[#1A1A1A]"
+              title="功能图谱介绍"
+            >
+              <Compass className="w-5 h-5" />
+            </button>
+            <button 
               onClick={handleLogout}
               className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center"
             >
@@ -4007,6 +4209,14 @@ alter table system_settings disable row level security;
             </button>
           )}
           <button 
+            onClick={() => setIsIntroOpen(true)}
+            className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center gap-1.5 font-sans"
+            title="产品图谱与介绍"
+          >
+            <Compass className="w-3.5 h-3.5" />
+            <span>介绍</span>
+          </button>
+          <button 
             onClick={handleLogout}
             className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center"
             title="退出登录"
@@ -4017,16 +4227,74 @@ alter table system_settings disable row level security;
       </header>
 
       <main className="flex-1 overflow-y-auto lg:overflow-hidden flex flex-col lg:grid lg:grid-cols-12 relative pb-[calc(env(safe-area-inset-bottom)+70px)] md:pb-0">
+        {/* Mobile Sub-view Switcher for multiple views */}
+        {(currentView === 'marketing' || currentView === 'rnd' || currentView === 'requirements' || currentView === 'dashboard') && (
+          <div className="lg:hidden w-full px-4 pt-4 bg-[#F7F6F2] border-b border-[#1A1A1A]/10 sticky top-0 z-30 flex justify-center pb-2 shrink-0">
+            <div className="flex bg-[#1A1A1A]/5 p-1 rounded-xl w-full max-w-sm border border-[#1A1A1A]/10 shadow-[0_2px_8px_rgba(0,0,0,0.05)]">
+              <button
+                onClick={() => {
+                  setMobileSubTab('kanban');
+                  if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+                    window.navigator.vibrate(10);
+                  }
+                }}
+                className={`flex-1 py-1.5 text-[12px] font-bold rounded-lg transition-all duration-200 tracking-wider flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer ${
+                  mobileSubTab === 'kanban' 
+                    ? 'bg-[#1A1A1A] text-[#F7F6F2] shadow-[0_4px_12px_rgba(0,0,0,0.15)] scale-[1.02]' 
+                    : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
+                }`}
+              >
+                {currentView === 'dashboard' ? (
+                  <Activity className="w-3.5 h-3.5" strokeWidth={2.5} />
+                ) : (
+                  <Trello className="w-3.5 h-3.5" strokeWidth={2.5} />
+                )}
+                <span>
+                  {currentView === 'dashboard' ? '大盘数据' : currentView === 'requirements' ? '需求看板' : currentView === 'marketing' ? '跟进看板' : '任务看板'}
+                </span>
+              </button>
+              <button
+                onClick={() => {
+                  setMobileSubTab('overview');
+                  if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+                    window.navigator.vibrate(10);
+                  }
+                }}
+                className={`flex-1 py-1.5 text-[12px] font-bold rounded-lg transition-all duration-200 tracking-wider flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer ${
+                  mobileSubTab === 'overview' 
+                    ? 'bg-[#1A1A1A] text-[#F7F6F2] shadow-[0_4px_12px_rgba(0,0,0,0.15)] scale-[1.02]' 
+                    : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
+                }`}
+              >
+                {currentView === 'dashboard' ? (
+                  <Target className="w-3.5 h-3.5" strokeWidth={2.5} />
+                ) : (
+                  <Activity className="w-3.5 h-3.5" strokeWidth={2.5} />
+                )}
+                <span>
+                  {currentView === 'dashboard' ? '目标推进' : currentView === 'requirements' ? '指标统计' : '指标与数据'}
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Sidebar / Planning Column - Only show if not in tracking view */}
-        <section className={`lg:col-span-3 lg:border-r border-[#1A1A1A] p-4 sm:p-6 lg:p-8 flex flex-col border-b lg:border-b-0 h-auto lg:h-full lg:overflow-y-auto ${currentView === 'tracking' ? 'hidden' : 'flex'} ${currentView === 'dashboard' ? 'order-2 lg:order-1' : ''}`}>
+        <section className={`lg:col-span-3 lg:border-r border-[#1A1A1A]/10 bg-[#FCFCFA]/45 backdrop-blur-sm p-4 sm:p-6 lg:p-8 flex flex-col border-b lg:border-b-0 h-auto lg:h-full lg:overflow-y-auto ${
+          currentView === 'tracking'
+            ? 'hidden'
+            : (currentView === 'marketing' || currentView === 'rnd' || currentView === 'requirements' || currentView === 'dashboard')
+              ? (mobileSubTab === 'kanban' ? 'hidden lg:flex' : 'flex')
+              : 'flex'
+        } ${currentView === 'dashboard' ? 'order-2 lg:order-1' : ''}`}>
           <div className="mb-10 lg:mb-auto flex-1">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-[11px] uppercase tracking-[0.2em] font-bold flex items-center">
-                <span className="w-2 h-2 bg-[#1A1A1A] mr-3"></span> {currentView === 'dashboard' ? `${selectedQuarter.split('-')[0]}年 ${selectedQuarter.split('-')[1]} 核心目标` : currentView === 'requirements' ? `${reqTimeFrame === 'month' ? selectedMonth.split('-')[0] + '年' + selectedMonth.split('-')[1] + '月' : reqTimeFrame === 'quarter' ? selectedQuarter.split('-')[0] + '年 ' + selectedQuarter.split('-')[1] : selectedYear + '年'} 需求统计` : `${selectedMonth.split('-')[0]}年${selectedMonth.split('-')[1]}月 目标`}
+              <h2 className="text-[11px] uppercase tracking-[0.2em] font-extrabold flex items-center text-[#1A1A1A]/80">
+                <span className="w-2.5 h-2.5 bg-[#1A1A1A] mr-3 rounded-sm scale-90"></span> {currentView === 'dashboard' ? `${selectedQuarter.split('-')[0]}年 ${selectedQuarter.split('-')[1]} 核心目标` : currentView === 'requirements' ? `${reqTimeFrame === 'month' ? selectedMonth.split('-')[0] + '年' + selectedMonth.split('-')[1] + '月' : reqTimeFrame === 'quarter' ? selectedQuarter.split('-')[0] + '年 ' + selectedQuarter.split('-')[1] : selectedYear + '年'} 需求统计` : `${selectedMonth.split('-')[0]}年${selectedMonth.split('-')[1]}月 目标`}
               </h2>
               <div className="flex items-center gap-2">
                 {currentView === 'requirements' && (
-                  <div className="flex gap-1 border border-[#1A1A1A]/20 p-0.5 bg-black/5">
+                  <div className="flex gap-1 border border-[#1A1A1A]/10 p-0.5 bg-black/[0.03] rounded-xl">
                     {[
                       { id: 'month', label: '月度' },
                       { id: 'quarter', label: '季度' },
@@ -4035,7 +4303,7 @@ alter table system_settings disable row level security;
                       <button
                         key={tf.id}
                         onClick={() => setReqTimeFrame(tf.id as any)}
-                        className={`text-[9px] px-2.5 py-1 font-bold uppercase tracking-widest transition-all ${reqTimeFrame === tf.id ? 'bg-[#1A1A1A] text-white shadow-sm' : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A] hover:bg-black/5'}`}
+                        className={`text-[9px] px-3 py-1 font-bold uppercase tracking-widest transition-all rounded-lg ${reqTimeFrame === tf.id ? 'bg-[#1A1A1A] text-white shadow-sm' : 'text-[#1A1A1A]/60 hover:text-[#1A1A1A] hover:bg-black/5'}`}
                       >
                         {tf.label}
                       </button>
@@ -4045,7 +4313,7 @@ alter table system_settings disable row level security;
                  {currentView === 'marketing' && (currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
                   <button 
                     onClick={openGoalModal}
-                    className="text-[9px] border border-[#1A1A1A] px-2 py-1 uppercase tracking-widest hover:bg-[#1A1A1A] hover:text-white transition-colors cursor-pointer shrink-0"
+                    className="text-[9px] border-2 border-[#1A1A1A] px-3 py-1.5 uppercase tracking-widest font-bold rounded-xl bg-white hover:bg-[#1A1A1A] hover:text-white transition-colors cursor-pointer shrink-0 shadow-[2px_2px_0px_#1A1A1A]"
                   >
                     设定市场指标
                   </button>
@@ -4055,18 +4323,18 @@ alter table system_settings disable row level security;
 
             {(currentView === 'dashboard' || (currentView === 'requirements' && reqTimeFrame === 'quarter')) && (
               <div className="mb-6 flex items-start">
-                <div className="flex flex-col items-center justify-center border border-[#1A1A1A]/20 bg-black/5 px-2 py-0 select-none mr-3 shrink-0">
+                <div className="flex flex-col items-center justify-center border border-[#1A1A1A]/10 bg-black/[0.03] hover:bg-black/[0.06] transition-colors rounded-xl px-2 py-0.5 select-none mr-3 shrink-0">
                   <button onClick={() => {
                     const newYear = parseInt(selectedQuarter.split('-')[0]) + 1;
                     setSelectedQuarter(`${newYear}-${selectedQuarter.split('-')[1]}`);
                     setSelectedMonth(`${newYear}-${selectedMonth.split('-')[1]}`);
-                  }} className="text-[8px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none">▲</button>
-                  <span className="text-[10px] font-bold shrink-0 uppercase tracking-widest leading-none my-0.5">{selectedQuarter.split('-')[0]}年</span>
+                  }} className="text-[10px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none cursor-pointer">▲</button>
+                  <span className="text-[10px] font-bold shrink-0 uppercase tracking-widest leading-none my-0.5 font-mono">{selectedQuarter.split('-')[0]}</span>
                   <button onClick={() => {
                     const newYear = parseInt(selectedQuarter.split('-')[0]) - 1;
                     setSelectedQuarter(`${newYear}-${selectedQuarter.split('-')[1]}`);
                     setSelectedMonth(`${newYear}-${selectedMonth.split('-')[1]}`);
-                  }} className="text-[8px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none">▼</button>
+                  }} className="text-[10px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none cursor-pointer">▼</button>
                 </div>
                 <div className="flex gap-1.5 overflow-x-auto pb-2 custom-scrollbar hide-scrollbar-on-mobile items-center flex-1" id="quarter-scroll-container">
                 {Array.from({ length: 4 }).map((_, i) => {
@@ -4078,7 +4346,7 @@ alter table system_settings disable row level security;
                       key={targetQuarter}
                       id={isSelected ? 'active-quarter-tab' : undefined}
                       onClick={() => setSelectedQuarter(targetQuarter)}
-                      className={`text-[10px] px-3 py-2 whitespace-nowrap border border-[#1A1A1A] transition-colors focus:outline-none ${isSelected ? 'bg-[#1A1A1A] text-white font-bold' : 'bg-transparent text-[#1A1A1A] hover:bg-[#1A1A1A]/5'}`}
+                      className={`text-[10px] px-4 py-2 whitespace-nowrap border rounded-xl transition-all duration-200 focus:outline-none cursor-pointer font-sans font-bold ${isSelected ? 'bg-[#1A1A1A] text-white border-transparent shadow-sm scale-110' : 'bg-white border-[#1A1A1A]/10 text-[#1A1A1A]/85 hover:bg-[#1A1A1A]/5 hover:border-[#1A1A1A]/30'}`}
                     >
                       {q}
                     </button>
@@ -4090,18 +4358,18 @@ alter table system_settings disable row level security;
 
             {(currentView === 'marketing' || currentView === 'rnd' || (currentView === 'requirements' && reqTimeFrame === 'month')) && (
               <div className="mb-6 flex items-start">
-                <div className="flex flex-col items-center justify-center border border-[#1A1A1A]/20 bg-black/5 px-2 py-0 select-none mr-3 shrink-0">
+                <div className="flex flex-col items-center justify-center border border-[#1A1A1A]/10 bg-black/[0.03] hover:bg-black/[0.06] transition-colors rounded-xl px-2 py-0.5 select-none mr-3 shrink-0">
                   <button onClick={() => {
                     const newYear = parseInt(selectedMonth.split('-')[0]) + 1;
                     setSelectedMonth(`${newYear}-${selectedMonth.split('-')[1]}`);
                     setSelectedQuarter(`${newYear}-${selectedQuarter.split('-')[1]}`);
-                  }} className="text-[8px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none">▲</button>
-                  <span className="text-[10px] font-bold shrink-0 uppercase tracking-widest leading-none my-0.5">{selectedMonth.split('-')[0]}年</span>
+                  }} className="text-[10px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none cursor-pointer">▲</button>
+                  <span className="text-[10px] font-bold shrink-0 uppercase tracking-widest leading-none my-0.5 font-mono">{selectedMonth.split('-')[0]}</span>
                   <button onClick={() => {
                     const newYear = parseInt(selectedMonth.split('-')[0]) - 1;
                     setSelectedMonth(`${newYear}-${selectedMonth.split('-')[1]}`);
                     setSelectedQuarter(`${newYear}-${selectedQuarter.split('-')[1]}`);
-                  }} className="text-[8px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none">▼</button>
+                  }} className="text-[10px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none cursor-pointer">▼</button>
                 </div>
                 <div className="flex gap-1.5 overflow-x-auto pb-2 custom-scrollbar hide-scrollbar-on-mobile items-center flex-1" id="month-scroll-container">
                 {Array.from({ length: 12 }).map((_, i) => {
@@ -4113,7 +4381,7 @@ alter table system_settings disable row level security;
                       key={targetMonth}
                       id={isSelected ? 'active-month-tab' : undefined}
                       onClick={() => setSelectedMonth(targetMonth)}
-                      className={`text-[10px] px-3 py-2 whitespace-nowrap border border-[#1A1A1A] transition-colors focus:outline-none ${isSelected ? 'bg-[#1A1A1A] text-white font-bold' : 'bg-transparent text-[#1A1A1A] hover:bg-[#1A1A1A]/5'}`}
+                      className={`text-[10px] px-3.5 py-1.5 whitespace-nowrap border rounded-xl transition-all duration-200 focus:outline-none cursor-pointer font-sans font-bold ${isSelected ? 'bg-[#1A1A1A] text-white border-transparent shadow-sm scale-110' : 'bg-white border-[#1A1A1A]/10 text-[#1A1A1A]/85 hover:bg-[#1A1A1A]/5 hover:border-[#1A1A1A]/30'}`}
                     >
                       {i + 1}月
                     </button>
@@ -4125,20 +4393,20 @@ alter table system_settings disable row level security;
 
             {(currentView === 'requirements' && reqTimeFrame === 'year') && (
               <div className="mb-6 flex items-start">
-                <div className="flex flex-col items-center justify-center border border-[#1A1A1A]/20 bg-black/5 px-2 py-0 select-none mr-3 shrink-0">
+                <div className="flex flex-col items-center justify-center border border-[#1A1A1A]/10 bg-black/[0.03] hover:bg-black/[0.06] transition-colors rounded-xl px-2 py-0.5 select-none mr-3 shrink-0">
                   <button onClick={() => {
                     const newYear = parseInt(selectedYear) + 1;
                     setSelectedYear(`${newYear}`);
                     setSelectedQuarter(`${newYear}-${selectedQuarter.split('-')[1]}`);
                     setSelectedMonth(`${newYear}-${selectedMonth.split('-')[1]}`);
-                  }} className="text-[8px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none">▲</button>
-                  <span className="text-[10px] font-bold shrink-0 uppercase tracking-widest leading-none my-0.5">选择年份</span>
+                  }} className="text-[10px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none cursor-pointer">▲</button>
+                  <span className="text-[10px] font-bold shrink-0 uppercase tracking-widest leading-none my-0.5 font-mono">年份</span>
                   <button onClick={() => {
                     const newYear = parseInt(selectedYear) - 1;
                     setSelectedYear(`${newYear}`);
                     setSelectedQuarter(`${newYear}-${selectedQuarter.split('-')[1]}`);
                     setSelectedMonth(`${newYear}-${selectedMonth.split('-')[1]}`);
-                  }} className="text-[8px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none">▼</button>
+                  }} className="text-[10px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none cursor-pointer">▼</button>
                 </div>
                 <div className="flex gap-1.5 overflow-x-auto pb-2 custom-scrollbar hide-scrollbar-on-mobile items-center flex-1" id="year-scroll-container">
                 {Array.from({ length: 5 }).map((_, i) => {
@@ -4149,7 +4417,7 @@ alter table system_settings disable row level security;
                       key={targetYear}
                       id={isSelected ? 'active-year-tab' : undefined}
                       onClick={() => setSelectedYear(targetYear)}
-                      className={`text-[10px] px-4 py-2 whitespace-nowrap border border-[#1A1A1A] transition-colors focus:outline-none ${isSelected ? 'bg-[#1A1A1A] text-white font-bold' : 'bg-transparent text-[#1A1A1A] hover:bg-[#1A1A1A]/5'}`}
+                      className={`text-[10px] px-4 py-2 whitespace-nowrap border rounded-xl transition-all duration-200 focus:outline-none cursor-pointer font-sans font-bold ${isSelected ? 'bg-[#1A1A1A] text-white border-transparent shadow-sm scale-110' : 'bg-white border-[#1A1A1A]/10 text-[#1A1A1A]/85 hover:bg-[#1A1A1A]/5 hover:border-[#1A1A1A]/30'}`}
                     >
                       {targetYear}年
                     </button>
@@ -4161,139 +4429,189 @@ alter table system_settings disable row level security;
 
             {currentView === 'marketing' && (
               <div className="mb-8 border-b border-[#1A1A1A]/10 pb-6">
-                <h3 className="text-sm font-serif italic font-bold mb-4 flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 bg-[#1A1A1A] rounded-full"></span>
-                  {selectedMonth} 月度核心指标概览
+                <h3 className="text-xs uppercase tracking-[0.15em] font-extrabold text-[#1A1A1A]/70 mb-4 flex items-center gap-2 font-sans">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                  {selectedMonth} 月度核心指标达成
                 </h3>
-                <div className="flex flex-col border-y border-[#1A1A1A]/10">
+                <div className="flex flex-col gap-3">
                   {/* Profit */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-2 border-b border-[#1A1A1A]/5 hover:bg-black/5 transition-colors group">
-                    <div className="flex items-center gap-2 w-full sm:w-auto mb-1 sm:mb-0">
-                      <span className="text-xs font-medium text-[#1A1A1A]">利润额</span>
-                      <span className="text-[9px] text-[#1A1A1A]/50 bg-black/5 px-1 py-0.5 rounded-sm shrink-0">万</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 w-full sm:w-auto">
-                      <div className="flex items-baseline gap-1">
-                          <span className="text-[9px] sm:hidden text-[#1A1A1A]/50 mr-1">进度</span>
-                          <span className="text-xs font-mono font-bold leading-none">{currentMonthActualProfit}</span>
-                          <span className="text-[9px] font-mono text-[#1A1A1A]/50 uppercase leading-none">/ {currentMonthTargetProfit} 目标</span>
+                  {(() => {
+                    const pct = currentMonthTargetProfit > 0 ? Math.min(100, Math.round((currentMonthActualProfit / currentMonthTargetProfit) * 100)) : 0;
+                    return (
+                      <div className="flex flex-col p-3 bg-white border border-[#1A1A1A]/10 rounded-2xl hover:bg-black/[0.01] transition-all group shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-[#1A1A1A]">利润额</span>
+                            <span className="text-[10px] text-[#1A1A1A]/50 bg-black/5 px-1.5 py-0.5 rounded font-mono shrink-0">万元</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold">{pct}%</span>
+                            {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
+                              <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white rounded-md px-1.5 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-baseline text-[10px] text-[#1A1A1A]/60 font-mono">
+                          <span>实际: <strong className="text-black">{currentMonthActualProfit}</strong></span>
+                          <span>目标: {currentMonthTargetProfit}</span>
+                        </div>
+                        <div className="w-full mt-2 bg-black/[0.04] h-1.5 rounded-full overflow-hidden">
+                          <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }}></div>
+                        </div>
                       </div>
-                      <div className="w-[40px] flex justify-end shrink-0">
-                        {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
-                          <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Contract */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-2 border-b border-[#1A1A1A]/5 hover:bg-black/5 transition-colors group">
-                    <div className="flex items-center gap-2 w-full sm:w-auto mb-1 sm:mb-0">
-                      <span className="text-xs font-medium text-[#1A1A1A]">合同签署额</span>
-                      <span className="text-[9px] text-[#1A1A1A]/50 bg-black/5 px-1 py-0.5 rounded-sm shrink-0">万</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 w-full sm:w-auto">
-                      <div className="flex items-baseline gap-1">
-                          <span className="text-[9px] sm:hidden text-[#1A1A1A]/50 mr-1">进度</span>
-                          <span className="text-xs font-mono font-bold leading-none">{currentMonthActualContract}</span>
-                          <span className="text-[9px] font-mono text-[#1A1A1A]/50 uppercase leading-none">/ {currentMonthTargetContract} 目标</span>
+                  {(() => {
+                    const pct = currentMonthTargetContract > 0 ? Math.min(100, Math.round((currentMonthActualContract / currentMonthTargetContract) * 100)) : 0;
+                    return (
+                      <div className="flex flex-col p-3 bg-white border border-[#1A1A1A]/10 rounded-2xl hover:bg-black/[0.01] transition-all group shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-[#1A1A1A]">合同签署额</span>
+                            <span className="text-[10px] text-[#1A1A1A]/50 bg-black/5 px-1.5 py-0.5 rounded font-mono shrink-0">万元</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold">{pct}%</span>
+                            {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
+                              <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white rounded-md px-1.5 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-baseline text-[10px] text-[#1A1A1A]/60 font-mono">
+                          <span>实际: <strong className="text-black">{currentMonthActualContract}</strong></span>
+                          <span>目标: {currentMonthTargetContract}</span>
+                        </div>
+                        <div className="w-full mt-2 bg-black/[0.04] h-1.5 rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }}></div>
+                        </div>
                       </div>
-                      <div className="w-[40px] flex justify-end shrink-0">
-                        {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
-                          <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Collection */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-2 border-b border-[#1A1A1A]/5 hover:bg-black/5 transition-colors group">
-                    <div className="flex items-center gap-2 w-full sm:w-auto mb-1 sm:mb-0">
-                      <span className="text-xs font-medium text-[#1A1A1A]">渠道回款完成</span>
-                      <span className="text-[9px] text-[#1A1A1A]/50 bg-black/5 px-1 py-0.5 rounded-sm shrink-0">万</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 w-full sm:w-auto">
-                      <div className="flex items-baseline gap-1">
-                          <span className="text-[9px] sm:hidden text-[#1A1A1A]/50 mr-1">进度</span>
-                          <span className="text-xs font-mono font-bold leading-none">{currentMonthActualCollection}</span>
-                          <span className="text-[9px] font-mono text-[#1A1A1A]/50 uppercase leading-none">/ {currentMonthTargetCollection} 目标</span>
+                  {(() => {
+                    const pct = currentMonthTargetCollection > 0 ? Math.min(100, Math.round((currentMonthActualCollection / currentMonthTargetCollection) * 100)) : 0;
+                    return (
+                      <div className="flex flex-col p-3 bg-white border border-[#1A1A1A]/10 rounded-2xl hover:bg-black/[0.01] transition-all group shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-[#1A1A1A]">渠道回款完成</span>
+                            <span className="text-[10px] text-[#1A1A1A]/50 bg-black/5 px-1.5 py-0.5 rounded font-mono shrink-0">万元</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold">{pct}%</span>
+                            {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
+                              <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white rounded-md px-1.5 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-baseline text-[10px] text-[#1A1A1A]/60 font-mono">
+                          <span>实际: <strong className="text-black">{currentMonthActualCollection}</strong></span>
+                          <span>目标: {currentMonthTargetCollection}</span>
+                        </div>
+                        <div className="w-full mt-2 bg-black/[0.04] h-1.5 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }}></div>
+                        </div>
                       </div>
-                      <div className="w-[40px] flex justify-end shrink-0">
-                        {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
-                          <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Lead */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-2 border-b border-[#1A1A1A]/5 hover:bg-black/5 transition-colors group">
-                    <div className="flex items-center gap-2 w-full sm:w-auto mb-1 sm:mb-0">
-                      <span className="text-xs font-medium text-[#1A1A1A]">潜在客户挖掘</span>
-                      <span className="text-[9px] text-[#1A1A1A]/50 bg-black/5 px-1 py-0.5 rounded-sm shrink-0">家</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 w-full sm:w-auto">
-                      <div className="flex items-baseline gap-1">
-                          <span className="text-[9px] sm:hidden text-[#1A1A1A]/50 mr-1">进度</span>
-                          <span className="text-xs font-mono font-bold leading-none">{currentLeadClients}</span>
-                          <span className="text-[9px] font-mono text-[#1A1A1A]/50 uppercase leading-none">/ {targetLeadClients} 目标</span>
+                  {(() => {
+                    const pct = targetLeadClients > 0 ? Math.min(100, Math.round((currentLeadClients / targetLeadClients) * 100)) : 0;
+                    return (
+                      <div className="flex flex-col p-3 bg-white border border-[#1A1A1A]/10 rounded-2xl hover:bg-black/[0.01] transition-all group shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-[#1A1A1A]">潜在客户挖掘</span>
+                            <span className="text-[10px] text-[#1A1A1A]/50 bg-black/5 px-1.5 py-0.5 rounded font-mono shrink-0">家</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold">{pct}%</span>
+                            {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
+                              <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white rounded-md px-1.5 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-baseline text-[10px] text-[#1A1A1A]/60 font-mono">
+                          <span>实际: <strong className="text-black">{currentLeadClients}</strong></span>
+                          <span>目标: {targetLeadClients}</span>
+                        </div>
+                        <div className="w-full mt-2 bg-black/[0.04] h-1.5 rounded-full overflow-hidden">
+                          <div className="h-full bg-amber-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }}></div>
+                        </div>
                       </div>
-                      <div className="w-[40px] flex justify-end shrink-0">
-                        {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
-                          <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Active */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-2 border-b border-[#1A1A1A]/5 hover:bg-black/5 transition-colors group">
-                    <div className="flex items-center gap-2 w-full sm:w-auto mb-1 sm:mb-0">
-                      <span className="text-xs font-medium text-[#1A1A1A]">意向客户跟进</span>
-                      <span className="text-[9px] text-[#1A1A1A]/50 bg-black/5 px-1 py-0.5 rounded-sm shrink-0">家</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 w-full sm:w-auto">
-                      <div className="flex items-baseline gap-1">
-                          <span className="text-[9px] sm:hidden text-[#1A1A1A]/50 mr-1">进度</span>
-                          <span className="text-xs font-mono font-bold leading-none">{currentActiveClients}</span>
-                          <span className="text-[9px] font-mono text-[#1A1A1A]/50 uppercase leading-none">/ {targetActiveClients} 目标</span>
+                  {(() => {
+                    const pct = targetActiveClients > 0 ? Math.min(100, Math.round((currentActiveClients / targetActiveClients) * 100)) : 0;
+                    return (
+                      <div className="flex flex-col p-3 bg-white border border-[#1A1A1A]/10 rounded-2xl hover:bg-black/[0.01] transition-all group shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-[#1A1A1A]">意向客户跟进</span>
+                            <span className="text-[10px] text-[#1A1A1A]/50 bg-black/5 px-1.5 py-0.5 rounded font-mono shrink-0">家</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold">{pct}%</span>
+                            {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
+                              <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white rounded-md px-1.5 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-baseline text-[10px] text-[#1A1A1A]/60 font-mono">
+                          <span>实际: <strong className="text-black">{currentActiveClients}</strong></span>
+                          <span>目标: {targetActiveClients}</span>
+                        </div>
+                        <div className="w-full mt-2 bg-black/[0.04] h-1.5 rounded-full overflow-hidden">
+                          <div className="h-full bg-cyan-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }}></div>
+                        </div>
                       </div>
-                      <div className="w-[40px] flex justify-end shrink-0">
-                        {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
-                          <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Lost */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-2 hover:bg-black/5 transition-colors group">
-                    <div className="flex items-center gap-2 w-full sm:w-auto mb-1 sm:mb-0">
-                      <span className="text-xs font-medium text-[#1A1A1A]">客户流失控制</span>
-                      <span className="text-[9px] text-[#1A1A1A]/50 bg-black/5 px-1 py-0.5 rounded-sm shrink-0">家</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 w-full sm:w-auto">
-                      <div className="flex items-baseline gap-1">
-                          <span className="text-[9px] sm:hidden text-[#1A1A1A]/50 mr-1">进度</span>
-                          <span className={`text-xs font-mono font-bold leading-none ${targetLostClients > 0 && currentLostClients > targetLostClients ? 'text-[#dc2626]' : ''}`}>{currentLostClients}</span>
-                          <span className="text-[9px] font-mono text-[#1A1A1A]/50 uppercase leading-none">/ {targetLostClients} 上限</span>
+                  {(() => {
+                    const pct = targetLostClients > 0 ? Math.min(100, Math.round((currentLostClients / targetLostClients) * 100)) : 0;
+                    const isOver = targetLostClients > 0 && currentLostClients > targetLostClients;
+                    return (
+                      <div className="flex flex-col p-3 bg-white border border-[#1A1A1A]/10 rounded-2xl hover:bg-black/[0.01] transition-all group shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-[#1A1A1A]">客户流失控制</span>
+                            <span className="text-[10px] text-[#1A1A1A]/50 bg-black/5 px-1.5 py-0.5 rounded font-mono shrink-0">家</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-mono font-bold ${isOver ? 'text-red-500 animate-pulse' : ''}`}>{pct}%</span>
+                            {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
+                              <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white rounded-md px-1.5 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-baseline text-[10px] text-[#1A1A1A]/60 font-mono">
+                          <span>实际: <strong className={`text-black ${isOver ? 'text-red-600 font-extrabold' : ''}`}>{currentLostClients}</strong></span>
+                          <span>上限: {targetLostClients}</span>
+                        </div>
+                        <div className="w-full mt-2 bg-black/[0.04] h-1.5 rounded-full overflow-hidden">
+                          <div className={`h-full ${isOver ? 'bg-red-500' : 'bg-rose-400'} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }}></div>
+                        </div>
                       </div>
-                      <div className="w-[40px] flex justify-end shrink-0">
-                        {(currentUser.department === 'marketing' && currentUser.roles.includes('组长')) && (
-                          <button onClick={openGoalModal} className="opacity-100 sm:opacity-0 group-hover:opacity-100 whitespace-nowrap text-[8px] uppercase border border-[#1A1A1A] bg-white px-2 py-0.5 transition-opacity cursor-pointer shadow-sm hover:bg-[#1A1A1A] hover:text-white">录入</button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}
+
             
             {currentView === 'rnd' && (
               <div className="mb-8 border-b border-[#1A1A1A]/10 pb-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-serif italic font-bold flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-[#1A1A1A] rounded-full"></span>
+                  <h3 className="text-xs uppercase tracking-[0.15em] font-extrabold text-[#1A1A1A]/70 flex items-center gap-2 font-sans">
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></span>
                     {selectedMonth} 上线产品数据看板
                   </h3>
                   {(currentUser.department === 'rnd' && currentUser.roles.includes('组长')) && (
@@ -4304,38 +4622,44 @@ alter table system_settings disable row level security;
                         groupId: currentUser.groupId
                       });
                       setIsReleaseGoalModalOpen(true);
-                    }} className="text-[9px] uppercase tracking-widest border border-[#1A1A1A] px-2 py-1 hover:bg-[#1A1A1A] hover:text-white transition-colors cursor-pointer">
+                    }} className="text-[9px] border-2 border-[#1A1A1A] px-3 py-1.5 uppercase tracking-widest font-bold rounded-xl bg-white hover:bg-[#1A1A1A] hover:text-white transition-all duration-200 cursor-pointer shadow-[2px_2px_0px_#1A1A1A]">
                       设定发布目标
                     </button>
                   )}
                 </div>
                 
                 {/* Stats Summary Panel */}
-                <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 border border-[#1A1A1A]/10 bg-[#1A1A1A]/5">
-                  <div className="flex flex-col border-r border-[#1A1A1A]/10 pr-4">
-                    <span className="text-[10px] uppercase tracking-widest opacity-60 font-bold mb-1">当月总目标</span>
-                    <span className="text-2xl font-serif italic">{rndReleaseStats.totalTarget}</span>
+                <div className="mb-6 grid grid-cols-2 gap-4 p-4 rounded-3xl border border-[#1A1A1A]/10 bg-white shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
+                  <div className="flex flex-col border-r border-[#1A1A1A]/5 pr-2">
+                    <span className="text-[9px] uppercase tracking-wider text-[#1A1A1A]/50 font-extrabold mb-1 font-sans">当月总目标</span>
+                    <span className="text-3xl font-bold font-mono tracking-tight text-[#1A1A1A]">{rndReleaseStats.totalTarget} <span className="text-xs font-normal text-[#1A1A1A]/50 font-sans">个</span></span>
                   </div>
-                  <div className="flex flex-col sm:border-r border-[#1A1A1A]/10 pr-4">
-                    <span className="text-[10px] uppercase tracking-widest opacity-60 font-bold mb-1">当月实际上线</span>
-                    <span className="text-2xl font-serif italic text-[#16a34a]">{rndReleaseStats.totalReleased}</span>
+                  <div className="flex flex-col pl-1">
+                    <span className="text-[9px] uppercase tracking-wider text-[#1A1A1A]/50 font-extrabold mb-1 font-sans">当月实际上线</span>
+                    <span className="text-3xl font-bold font-mono tracking-tight text-emerald-600">{rndReleaseStats.totalReleased} <span className="text-xs font-normal text-emerald-600/60 font-sans">个</span></span>
                   </div>
                   
                   {/* Group breakdown */}
-                  <div className="col-span-2 flex flex-col justify-center">
-                    <span className="text-[10px] uppercase tracking-widest opacity-60 font-bold mb-2">各小组明细</span>
-                    <div className="flex flex-wrap gap-x-4 gap-y-2">
-                      {rndReleaseStats.groups.length > 0 ? rndReleaseStats.groups.map(g => (
-                        <div key={g.id} className="flex items-center gap-2 text-xs">
-                           <span className="font-bold opacity-80">{g.name}:</span>
-                           <span className="font-mono">
-                             <span className="text-[#16a34a]">{g.released}</span>
-                             <span className="opacity-40">/</span>
-                             <span className="opacity-80">{g.target}</span>
-                           </span>
-                        </div>
-                      )) : (
-                        <span className="text-[9px] opacity-40 italic">暂无研发小组</span>
+                  <div className="col-span-2 border-t border-[#1A1A1A]/5 pt-3 flex flex-col justify-center">
+                    <span className="text-[9px] uppercase tracking-wider text-[#1A1A1A]/50 font-extrabold mb-2 font-sans">各研发团队进度明细</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {rndReleaseStats.groups.length > 0 ? rndReleaseStats.groups.map(g => {
+                        const pct = g.target > 0 ? Math.min(100, Math.round((g.released / g.target) * 100)) : 0;
+                        return (
+                          <div key={g.id} className="flex flex-col bg-black/[0.02] p-2 rounded-xl border border-black/[0.02]">
+                             <div className="flex items-center justify-between text-[10px] mb-1">
+                               <span className="font-bold text-[#1A1A1A]/85 font-sans">{g.name}</span>
+                               <span className="font-mono font-bold text-[#1A1A1A]/60">
+                                 <span className="text-emerald-600">{g.released}</span> / <span>{g.target}</span>
+                               </span>
+                             </div>
+                             <div className="h-1 bg-black/[0.05] rounded-full overflow-hidden">
+                               <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }}></div>
+                             </div>
+                          </div>
+                        );
+                      }) : (
+                        <span className="text-[9px] opacity-40 italic col-span-2">暂无研发小组</span>
                       )}
                     </div>
                   </div>
@@ -4347,38 +4671,44 @@ alter table system_settings disable row level security;
                       const group = groups.find(g => g.id === goal.groupId);
                       const canEdit = currentUser.groupId === goal.groupId && currentUser.roles.includes('组长');
                       return (
-                        <div key={goal.id} className="border border-[#1A1A1A]/10 p-3 hover:bg-[#1A1A1A]/5 transition-colors group relative cursor-pointer" onClick={() => {
+                        <div key={goal.id} className="bg-white border border-[#1A1A1A]/10 p-4 rounded-2xl hover:shadow-md hover:border-[#1A1A1A]/30 transition-all duration-200 group relative cursor-pointer" onClick={() => {
                           if (!canEdit) return;
                           setEditingReleaseGoal(goal);
                           setReleaseGoalForm(goal);
                           setIsReleaseGoalModalOpen(true);
                         }}>
                           {canEdit && (
-                            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={(e) => { e.stopPropagation(); deleteReleaseGoal(goal.id); }} className="text-[#1A1A1A]/50 hover:text-red-600 text-xs px-1">×</button>
+                            <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={(e) => { e.stopPropagation(); deleteReleaseGoal(goal.id); }} className="text-[#1A1A1A]/50 hover:text-red-600 text-sm font-bold bg-black/5 hover:bg-red-50 w-5 h-5 flex items-center justify-center rounded-full transition-colors">×</button>
                             </div>
                           )}
-                          <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-start justify-between gap-3 mb-2">
                              <div className="flex flex-col gap-1 w-full overflow-hidden">
                                <div 
-                                 className="text-xs font-bold leading-tight prose prose-sm prose-black max-w-none [&>p]:m-0"
+                                 className="text-xs font-bold leading-tight text-[#1A1A1A] prose prose-sm prose-black max-w-none [&>p]:m-0"
                                  dangerouslySetInnerHTML={{ __html: goal.title }}
                                />
-                               <span className="text-[9px] font-mono opacity-60 uppercase">{group?.name || '未知小组'}</span>
+                               <span className="text-[9px] font-mono opacity-50 uppercase tracking-wider font-semibold">{group?.name || '未知小组'}</span>
                              </div>
-                             <span className={`text-[9px] uppercase tracking-widest px-1.5 py-0.5 border ${goal.status === 'released' ? 'bg-[#16a34a]/10 text-[#16a34a] border-[#16a34a]/30' : goal.status === 'delayed' ? 'bg-[#dc2626]/10 text-[#dc2626] border-[#dc2626]/30' : 'bg-[#1A1A1A]/5 text-[#1A1A1A]/60 border-[#1A1A1A]/20'}`}>
+                             <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-lg shrink-0 border ${
+                               goal.status === 'released' 
+                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                 : goal.status === 'delayed' 
+                                   ? 'bg-red-50 text-red-700 border-red-200' 
+                                   : 'bg-amber-50 text-amber-700 border-amber-200'
+                             }`}>
                                 {goal.status === 'planned' ? '计划中' : goal.status === 'released' ? '已上线' : '已延期'}
                              </span>
                           </div>
                           
-                          <div className="flex gap-4 mt-3">
+                          <div className="grid grid-cols-2 gap-2 border-t border-black/[0.03] pt-2.5 mt-2.5">
                             <div className="flex flex-col gap-0.5">
-                              <span className="text-[8px] opacity-50 uppercase tracking-widest">预估时间</span>
-                              <span className="text-xs font-mono">{goal.targetDate || '-'}</span>
+                              <span className="text-[8px] opacity-40 uppercase tracking-widest font-extrabold font-sans">预估时间</span>
+                              <span className="text-[10px] font-mono text-black/70 font-semibold">{goal.targetDate || '-'}</span>
                             </div>
                             <div className="flex flex-col gap-0.5">
-                              <span className="text-[8px] opacity-50 uppercase tracking-widest">实际版本与时间</span>
-                              <span className="text-xs font-mono font-bold">{goal.actualVersion ? `${goal.actualVersion} (${goal.actualReleaseDate})` : '-'}</span>
+                              <span className="text-[8px] opacity-40 uppercase tracking-widest font-extrabold font-sans">实际版本与交付时间</span>
+                              <span className="text-[10px] font-mono font-bold text-black">{goal.actualVersion ? `${goal.actualVersion} (${goal.actualReleaseDate})` : '-'}</span>
                             </div>
                           </div>
                         </div>
@@ -4392,37 +4722,39 @@ alter table system_settings disable row level security;
             )}
 
             {currentView === 'requirements' ? (
-              <div className="space-y-8 animate-in fade-in slide-in-from-left-4 duration-500 mb-10">
+              <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-500 mb-10">
                 <div className="flex flex-col gap-6">
-                  <div className="border border-[#1A1A1A]/10 p-5 bg-white shadow-sm ring-1 ring-black/5">
-                    <div className="flex justify-between items-center mb-6">
-                      <h3 className="text-[10px] uppercase tracking-[0.2em] font-bold opacity-70 flex items-center gap-2">
-                         <span className="w-1.5 h-1.5 bg-[#1A1A1A]"></span> 核心指标数据
+                  {/* Core Metrics Grid */}
+                  <div className="border border-[#1A1A1A]/10 p-5 bg-white rounded-3xl shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
+                    <div className="flex justify-between items-center mb-5">
+                      <h3 className="text-xs uppercase tracking-[0.15em] font-extrabold text-[#1A1A1A]/70 flex items-center gap-2 font-sans">
+                         <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span> 核心需求指标数据
                       </h3>
                     </div>
-                    <div className="grid grid-cols-2 gap-y-8 gap-x-4">
-                      <div className="flex flex-col">
-                        <span className="text-4xl font-serif italic">{activeMonthReqs.length}</span>
-                        <span className="text-[9px] uppercase tracking-widest opacity-50 mt-1 font-bold">需求总计</span>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex flex-col bg-[#F9F9FB] p-3 rounded-2xl border border-[#1A1A1A]/5">
+                        <span className="text-3xl font-bold font-mono tracking-tight text-slate-800">{activeMonthReqs.length}</span>
+                        <span className="text-[9px] uppercase tracking-wider text-[#1A1A1A]/50 mt-1 font-extrabold font-sans">需求总计</span>
                       </div>
-                      <div className="flex flex-col">
-                        <span className="text-4xl font-serif italic text-[#1A1A1A]">{activeMonthReqs.filter(r => r.status === 'backlog').length}</span>
-                        <span className="text-[9px] uppercase tracking-widest opacity-50 mt-1 font-bold">待评审</span>
+                      <div className="flex flex-col bg-[#F9F9FB] p-3 rounded-2xl border border-[#1A1A1A]/5">
+                        <span className="text-3xl font-bold font-mono tracking-tight text-[#1A1A1A]">{activeMonthReqs.filter(r => r.status === 'backlog').length}</span>
+                        <span className="text-[9px] uppercase tracking-wider text-[#1A1A1A]/50 mt-1 font-extrabold font-sans">待评审数</span>
                       </div>
-                      <div className="flex flex-col">
-                        <span className="text-4xl font-serif italic text-[#1A1A1A]">{activeMonthReqs.filter(r => ['approved', 'planned'].includes(r.status)).length}</span>
-                        <span className="text-[9px] uppercase tracking-widest opacity-50 mt-1 font-bold">进行中</span>
+                      <div className="flex flex-col bg-[#F9F9FB] p-3 rounded-2xl border border-[#1A1A1A]/5">
+                        <span className="text-3xl font-bold font-mono tracking-tight text-[#1A1A1A]">{activeMonthReqs.filter(r => ['approved', 'planned'].includes(r.status)).length}</span>
+                        <span className="text-[9px] uppercase tracking-wider text-[#1A1A1A]/50 mt-1 font-extrabold font-sans">开发中 / 排期</span>
                       </div>
-                      <div className="flex flex-col">
-                        <span className="text-4xl font-serif italic text-[#16a34a]">{activeMonthReqs.length > 0 ? Math.round((activeMonthReqs.filter(r => r.status === 'completed').length / activeMonthReqs.length) * 100) : 0}%</span>
-                        <span className="text-[9px] uppercase tracking-widest opacity-50 mt-1 font-bold">交付率</span>
+                      <div className="flex flex-col bg-emerald-50/40 p-3 rounded-2xl border border-emerald-500/15">
+                        <span className="text-3xl font-bold font-mono tracking-tight text-emerald-600">{activeMonthReqs.length > 0 ? Math.round((activeMonthReqs.filter(r => r.status === 'completed').length / activeMonthReqs.length) * 100) : 0}%</span>
+                        <span className="text-[9px] uppercase tracking-wider text-emerald-700/60 mt-1 font-extrabold font-sans">交付率</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-white border border-[#1A1A1A]/10 p-5 h-[240px] flex flex-col">
-                    <h3 className="text-[10px] uppercase tracking-[0.1em] font-bold mb-6 flex items-center">
-                      <span className="w-1.5 h-1.5 bg-[#1A1A1A] mr-2"></span> 状态流转分布
+                  {/* Status distribution chart */}
+                  <div className="bg-white border border-[#1A1A1A]/10 p-5 rounded-3xl shadow-[0_4px_24px_rgba(0,0,0,0.02)] h-[240px] flex flex-col">
+                    <h3 className="text-xs uppercase tracking-[0.15em] font-extrabold text-[#1A1A1A]/70 mb-5 flex items-center gap-2 font-sans">
+                      <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span> 需求生命周期看板
                     </h3>
                     <div className="flex-1 w-full">
                       <ResponsiveContainer width="100%" height="100%">
@@ -4434,38 +4766,39 @@ alter table system_settings disable row level security;
                           { name: '完成', value: activeMonthReqs.filter(r => r.status === 'completed').length },
                         ]}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 8, fontWeight: 'bold'}} />
+                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 'bold'}} />
                           <YAxis axisLine={false} tickLine={false} hide />
                           <Tooltip 
-                            contentStyle={{ fontSize: '10px', borderRadius: '0', border: '1px solid #000', padding: '4px' }}
-                            cursor={{ fill: 'rgba(0,0,0,0.02)' }}
+                            contentStyle={{ fontSize: '10px', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '6px 10px', backgroundColor: '#FFF', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
+                            cursor={{ fill: 'rgba(0,0,0,0.01)' }}
                           />
-                          <Bar dataKey="value" fill="#1A1A1A" radius={[2, 2, 0, 0]} />
+                          <Bar dataKey="value" fill="#4f46e5" radius={[4, 4, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
 
-                  <div className="bg-white border border-[#1A1A1A]/10 p-5">
-                    <h3 className="text-[10px] uppercase tracking-[0.2em] font-bold opacity-70 mb-6 flex items-center">
-                      <span className="w-1.5 h-1.5 bg-[#1A1A1A] mr-2"></span> 业务优先级 (P0-P2)
+                  {/* Priority Breakdown */}
+                  <div className="bg-white border border-[#1A1A1A]/10 p-5 rounded-3xl shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
+                    <h3 className="text-xs uppercase tracking-[0.15em] font-extrabold text-[#1A1A1A]/70 mb-5 flex items-center gap-2 font-sans">
+                       <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span> 业务优先级覆盖
                     </h3>
                     <div className="space-y-4">
                       {[
-                        { name: 'P0 - 紧急响应', count: activeMonthReqs.filter(r => r.priority === 'high').length, bgColor: 'bg-red-600', textColor: 'text-red-600' },
-                        { name: 'P1 - 核心需求', count: activeMonthReqs.filter(r => r.priority === 'medium').length, bgColor: 'bg-amber-600', textColor: 'text-amber-600' },
-                        { name: 'P2 - 持续优化', count: activeMonthReqs.filter(r => r.priority === 'low').length, bgColor: 'bg-gray-400', textColor: 'text-gray-400' },
+                        { name: 'P0 - 紧急响应', count: activeMonthReqs.filter(r => r.priority === 'high').length, bgColor: 'bg-rose-500', textColor: 'text-rose-600', badgeBag: 'bg-rose-50 border-rose-100' },
+                        { name: 'P1 - 核心需求', count: activeMonthReqs.filter(r => r.priority === 'medium').length, bgColor: 'bg-amber-500', textColor: 'text-amber-600', badgeBag: 'bg-amber-50 border-amber-100' },
+                        { name: 'P2 - 持续优化', count: activeMonthReqs.filter(r => r.priority === 'low').length, bgColor: 'bg-slate-400', textColor: 'text-slate-500', badgeBag: 'bg-slate-50 border-slate-100' },
                       ].map((item, i) => {
                         const total = activeMonthReqs.length || 1;
                         const percent = (item.count / total) * 100;
                         return (
-                          <div key={i} className="flex flex-col gap-1.5">
-                            <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-wider">
-                              <span className="opacity-60">{item.name}</span>
-                              <span className={item.textColor}>{item.count}</span>
+                          <div key={i} className={`flex flex-col gap-1.5 p-2 rounded-2xl border ${item.badgeBag}`}>
+                            <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-wider font-sans px-1">
+                              <span className="opacity-70">{item.name}</span>
+                              <span className={`${item.textColor} font-mono font-black`}>{item.count}</span>
                             </div>
-                            <div className="h-1 bg-black/5 overflow-hidden rounded-full">
-                              <div className={`h-full ${item.bgColor}`} style={{ width: `${percent}%` }}></div>
+                            <div className="h-1.5 bg-black/[0.03] overflow-hidden rounded-full">
+                              <div className={`h-full ${item.bgColor} rounded-full transition-all duration-500`} style={{ width: `${percent}%` }}></div>
                             </div>
                           </div>
                         );
@@ -4473,25 +4806,29 @@ alter table system_settings disable row level security;
                     </div>
                   </div>
 
-                  <div className="bg-white border border-[#1A1A1A]/10 p-5">
+                  {/* Source Distribution */}
+                  <div className="bg-white border border-[#1A1A1A]/10 p-5 rounded-3xl shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
+                    <h3 className="text-xs uppercase tracking-[0.15em] font-extrabold text-[#1A1A1A]/70 mb-5 flex items-center gap-2 font-sans">
+                       <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span> 需求来源渠道
+                    </h3>
                     <div className="space-y-4">
                        {[
-                         { id: 'customer', name: '客户反馈' },
-                         { id: 'marketing', name: '市场调研' },
-                         { id: 'product', name: '产品规划' },
-                         { id: 'tech', name: '技术演进' },
-                         { id: 'internal', name: '内部需求' }
+                         { id: 'customer', name: '客户反馈', barBg: 'bg-indigo-500' },
+                         { id: 'marketing', name: '市场调研', barBg: 'bg-sky-500' },
+                         { id: 'product', name: '产品规划', barBg: 'bg-violet-500' },
+                         { id: 'tech', name: '技术演进', barBg: 'bg-purple-500' },
+                         { id: 'internal', name: '内部需求', barBg: 'bg-emerald-500' }
                        ].map(src => {
                          const count = activeMonthReqs.filter(r => r.source === src.id).length;
                          const percentage = activeMonthReqs.length > 0 ? Math.round((count / activeMonthReqs.length) * 100) : 0;
                          return (
-                           <div key={src.id} className="group">
-                             <div className="flex justify-between text-[9px] uppercase tracking-wider font-bold mb-1.5">
-                               <span className="opacity-60">{src.name}</span>
-                               <span className="opacity-40">{count}</span>
+                           <div key={src.id} className="group p-1.5 rounded-xl hover:bg-black/[0.01]">
+                             <div className="flex justify-between text-[10px] tracking-wide font-normal font-sans mb-1.5">
+                               <span className="opacity-70 font-semibold">{src.name}</span>
+                               <span className="font-mono font-bold text-black/60">{count}</span>
                              </div>
-                             <div className="h-1 bg-black/5 overflow-hidden">
-                               <div className="h-full bg-[#1A1A1A] transition-all duration-700" style={{ width: `${percentage}%` }}></div>
+                             <div className="h-1 bg-black/[0.03] overflow-hidden rounded-full">
+                               <div className={`h-full ${src.barBg} transition-all duration-500 rounded-full`} style={{ width: `${percentage}%` }}></div>
                              </div>
                            </div>
                          )
@@ -4499,11 +4836,12 @@ alter table system_settings disable row level security;
                     </div>
                   </div>
 
-                  <div className="bg-white border border-[#1A1A1A]/10 p-5">
-                    <h3 className="text-[10px] uppercase tracking-[0.2em] font-bold opacity-70 mb-6 flex items-center">
-                      <span className="w-1.5 h-1.5 bg-[#1A1A1A] mr-2"></span> 研发各组需求分析 (总计 / 已交付)
+                  {/* RND Requirements workload division */}
+                  <div className="bg-white border border-[#1A1A1A]/10 p-5 rounded-3xl shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
+                    <h3 className="text-xs uppercase tracking-[0.15em] font-extrabold text-[#1A1A1A]/70 mb-5 flex items-center gap-2 font-sans">
+                      <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span> 团队需求负荷与进度 (总计 / 已交付)
                     </h3>
-                    <div className="space-y-5">
+                    <div className="space-y-4">
                       {(() => {
                         const groupStats = groups.filter(g => g.category === 'rnd').map(group => {
                           const getRequirementGroup = (req: Requirement) => {
@@ -4513,7 +4851,7 @@ alter table system_settings disable row level security;
                             if (req.projectId) {
                               const proj = projects.find(p => p.id === req.projectId);
                               if (proj?.managerId) {
-                                return members.find(m => m.id === proj.managerId)?.groupId;
+                                  return members.find(m => m.id === proj.managerId)?.groupId;
                               }
                             }
                             return null;
@@ -4529,18 +4867,18 @@ alter table system_settings disable row level security;
                           const totalPercent = (stat.total / maxTotal) * 100;
                           const completedPercent = stat.total > 0 ? (stat.completed / stat.total) * 100 : 0;
                           return (
-                            <div key={stat.id} className="group">
-                              <div className="flex justify-between items-end mb-1.5">
-                                <span className="text-[10px] uppercase tracking-widest font-bold opacity-60 leading-none">{stat.name}</span>
+                            <div key={stat.id} className="group p-1.5 rounded-xl hover:bg-black/[0.01]">
+                              <div className="flex justify-between items-end mb-1.5 font-sans">
+                                <span className="text-[10px] font-bold text-black/75 leading-none">{stat.name}</span>
                                 <span className="text-[10px] font-mono leading-none">
                                   <span className="text-[#1A1A1A] opacity-50">{stat.total}</span>
                                   <span className="mx-1 opacity-20">/</span>
-                                  <span className="text-[#16a34a] font-bold opacity-80">{stat.completed}</span>
+                                  <span className="text-emerald-600 font-bold">{stat.completed}</span>
                                 </span>
                               </div>
-                              <div className="h-1.5 bg-black/5 overflow-hidden flex w-full">
-                                <div className="h-full bg-black/20 transition-all duration-700" style={{ width: `${totalPercent - (totalPercent * completedPercent / 100)}%` }} title={`未交付: ${stat.total - stat.completed}`} />
-                                <div className="h-full bg-[#16a34a] transition-all duration-700" style={{ width: `${totalPercent * completedPercent / 100}%` }} title={`已交付: ${stat.completed}`} />
+                              <div className="h-1.5 bg-black/[0.03] overflow-hidden flex w-full rounded-full">
+                                <div className="h-full bg-slate-300 rounded-l transition-all duration-500" style={{ width: `${totalPercent - (totalPercent * completedPercent / 100)}%` }} title={`未交付: ${stat.total - stat.completed}`} />
+                                <div className="h-full bg-emerald-500 rounded-r transition-all duration-500" style={{ width: `${totalPercent * completedPercent / 100}%` }} title={`已交付: ${stat.completed}`} />
                               </div>
                             </div>
                           );
@@ -4603,7 +4941,17 @@ alter table system_settings disable row level security;
         </section>
 
         {/* Main Schedule / Weekly Breakdown */}
-        <section className={`${currentView === 'tracking' ? 'lg:col-span-12 p-0 lg:overflow-hidden' : 'lg:col-span-9 p-4 sm:p-6 lg:p-8 lg:overflow-y-auto'} flex flex-col border-b border-[#1A1A1A] lg:border-b-0 h-auto lg:h-full bg-[#F7F6F2] ${currentView === 'dashboard' ? 'order-1 lg:order-2' : ''}`}>
+        <section className={`${
+          currentView === 'tracking' 
+            ? 'lg:col-span-12 p-0 lg:overflow-hidden' 
+            : 'lg:col-span-9 p-4 sm:p-6 lg:p-8 lg:overflow-y-auto'
+        } flex flex-col border-b border-[#1A1A1A] lg:border-b-0 h-auto lg:h-full bg-[#F7F6F2] ${
+          currentView === 'dashboard' ? 'order-1 lg:order-2' : ''
+        } ${
+          (currentView === 'marketing' || currentView === 'rnd' || currentView === 'requirements' || currentView === 'dashboard')
+            ? (mobileSubTab === 'overview' ? 'hidden lg:flex' : 'flex')
+            : 'flex'
+        }`}>
           <div className="flex-1 flex flex-col min-h-0">
             {/* Requirements View */}
             {currentView === 'requirements' && (
@@ -4702,7 +5050,33 @@ alter table system_settings disable row level security;
                   
                   <div className="flex xl:grid xl:grid-cols-6 gap-4 sm:gap-6 pb-4 px-4 sm:px-0">
                   {(['backlog', 'reviewing', 'approved', 'rejected', 'planned', 'completed'] as RequirementStatus[]).map((status) => (
-                    <div key={status} className="flex flex-col gap-4 w-[85vw] sm:w-[320px] xl:w-auto shrink-0 snap-center sm:snap-start">
+                    <div 
+                      key={status} 
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (dragOverColumn !== status) {
+                          setDragOverColumn(status);
+                        }
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverColumn === status) {
+                          setDragOverColumn(null);
+                        }
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const reqId = e.dataTransfer.getData('text/plain') || draggedRequirementId;
+                        if (reqId) {
+                          updateRequirementStatus(reqId, status);
+                        }
+                        setDraggedRequirementId(null);
+                        setDragOverColumn(null);
+                      }}
+                      data-column-status={status}
+                      className={`flex flex-col gap-4 w-[85vw] sm:w-[320px] xl:w-auto shrink-0 snap-center sm:snap-start p-2 rounded-2xl transition-all duration-300 select-none ${
+                        dragOverColumn === status ? 'bg-[#1A1A1A]/5 ring-2 ring-[#1A1A1A]/20 scale-[1.01]' : 'border-2 border-transparent'
+                      }`}
+                    >
                       <div className="flex items-center justify-between px-2 sm:px-1 mb-2">
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${
@@ -4729,11 +5103,32 @@ alter table system_settings disable row level security;
                         {pruneDuplicates(displayRequirements.filter(r => r.status === status)).map((req) => (
                           <div 
                             key={req.id} 
-                            onClick={() => {
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData('text/plain', req.id);
+                              setDraggedRequirementId(req.id);
+                            }}
+                            onDragEnd={() => {
+                              setDraggedRequirementId(null);
+                              setDragOverColumn(null);
+                            }}
+                            onTouchStart={(e) => handleTouchStart(e, req.id)}
+                            onTouchMove={handleTouchMove}
+                            onTouchEnd={(e) => handleTouchEnd(e, req.id)}
+                            onClick={(e) => {
+                              if (reqHasTriggeredLongPressRef.current) {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                return;
+                              }
                               setSelectedRequirement(req);
                               setIsRequirementDetailModalOpen(true);
                             }}
-                            className={`p-5 hover:shadow-md transition-transform active:scale-[0.98] group relative overflow-hidden bg-white/80 backdrop-blur-md rounded-2xl border border-black/5 cursor-pointer shadow-[0_2px_10px_rgb(0,0,0,0.02)] ${
+                            className={`p-5 hover:shadow-md transition-all duration-200 group relative overflow-hidden bg-white/80 backdrop-blur-md rounded-2xl border border-black/5 cursor-grab active:cursor-grabbing shadow-[0_2px_10px_rgb(0,0,0,0.02)] ${
+                              draggedRequirementId === req.id 
+                                ? 'opacity-40 scale-[0.98] border-dashed border-[#1A1A1A]/40 rotate-1' 
+                                : 'hover:scale-[1.01] active:scale-[0.99]'
+                            } ${
                               req.status === 'backlog' ? 'border-l-4 border-l-gray-300' :
                               req.status === 'reviewing' ? 'border-l-4 border-l-blue-400' :
                               req.status === 'approved' ? 'border-l-4 border-l-emerald-400' :
@@ -5914,18 +6309,22 @@ alter table system_settings disable row level security;
       {/* Add Task Modal */}
       {isTaskModalOpen && (
         <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
-          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
-          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
-          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
-            <button 
-              onClick={() => setIsTaskModalOpen(false)}
-              className="absolute top-4 right-4 text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
-            >
-              <span className="text-xl">×</span>
-            </button>
-            <h3 className="text-2xl font-serif italic mb-6">规划本周行动项</h3>
-            <form onSubmit={handleTaskSubmit} className="space-y-6 max-h-[80vh] flex flex-col">
-              <div className="overflow-y-auto pr-2 space-y-6">
+          <div className="bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-md h-[90dvh] sm:h-auto max-h-[90dvh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-none relative">
+            <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2 z-50"></div>
+            
+            {/* Header */}
+            <div className="flex justify-between items-center px-6 sm:px-8 py-4 pt-7 sm:py-6 border-b border-[#1A1A1A]/5 bg-black/[0.02] shrink-0">
+              <h3 className="text-xl sm:text-2xl font-serif italic">规划本周行动项</h3>
+              <button 
+                onClick={() => setIsTaskModalOpen(false)}
+                className="opacity-40 hover:opacity-100 transition-opacity p-2 -mr-2"
+              >
+                <span className="text-xl font-light leading-none">×</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleTaskSubmit} className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 overflow-y-auto px-6 py-6 sm:px-8 space-y-6 custom-scrollbar">
                 {taskForms.map((form, index) => (
                   <div key={form.id} className="relative border border-[#1A1A1A]/10 p-4 bg-white">
                     {taskForms.length > 1 && (
@@ -6031,11 +6430,11 @@ alter table system_settings disable row level security;
                   </div>
                 ))}
               </div>
-              <div className="flex justify-between items-center pt-4 border-t border-[#1A1A1A]/10 mt-auto">
+              <div className="px-6 py-4 sm:px-8 sm:py-5 border-t border-[#1A1A1A]/10 bg-gray-50 flex shrink-0 justify-between items-center gap-3 pb-[calc(env(safe-area-inset-bottom)+16px)] sm:pb-5 relative z-10 w-full animate-in fade-in">
                 <button 
                   type="button"
                   onClick={() => setTaskForms([...taskForms, { id: generateId(), title: '', plannedProgress: '0', startDate: format(new Date(), 'yyyy-MM-dd'), endDate: format(currentWeekDate, 'yyyy-MM-dd'), projectName: '', outcome: '' }])}
-                  className="flex items-center justify-center text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.1em] px-4 py-2 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white transition-all active:translate-y-px"
+                  className="flex items-center justify-center text-[#1A1A1A] bg-white text-[11.5px] sm:text-xs font-bold uppercase tracking-[0.05em] px-4 py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/20 hover:border-[#1A1A1A] hover:bg-[#1A1A1A]/5 transition-all active:translate-y-px"
                 >
                   + 添加任务项
                 </button>
@@ -6043,7 +6442,7 @@ alter table system_settings disable row level security;
                   <button 
                     type="button"
                     onClick={() => setIsTaskModalOpen(false)}
-                    className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200"
+                    className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200 bg-white"
                   >
                     取消
                   </button>
@@ -6164,127 +6563,136 @@ alter table system_settings disable row level security;
       {/* Add Requirement Modal */}
       {isRequirementModalOpen && (
         <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
-          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
-          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
-          <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
-            <button 
-              onClick={() => {
-                setIsRequirementModalOpen(false);
-                setEditingRequirementId(null);
-                setRequirementForm({ title: '', description: '', linkUrl: '', priority: 'medium', source: 'customer', customerName: '', internalSourceDetail: '', assigneeId: '' });
-              }}
-              className="absolute top-4 right-4 text-[#1A1A1A]/60 hover:text-[#1A1A1A]"
-            >
-              <span className="text-xl">×</span>
-            </button>
-            <h3 className="text-2xl font-serif italic mb-6">{editingRequirementId ? '编辑产品需求' : '提交新产品需求'}</h3>
-            <form onSubmit={handleRequirementSubmit} className="space-y-5">
-              <div>
-                <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">需求标题</label>
-                <input 
-                  type="text" 
-                  value={requirementForm.title}
-                  onChange={(e) => setRequirementForm({...requirementForm, title: e.target.value})}
-                  className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-2 text-sm"
-                  placeholder="简洁明了的标题更受欢迎"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">链接地址（选填）</label>
-                <input 
-                  type="url" 
-                  value={requirementForm.linkUrl}
-                  onChange={(e) => setRequirementForm({...requirementForm, linkUrl: e.target.value})}
-                  className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-2 text-sm"
-                  placeholder="相关的参考链接、竞品链接或设计稿链接等"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">优先级</label>
-                <div className="flex gap-4">
-                  {(['low', 'medium', 'high'] as Priority[]).map(p => (
-                    <label key={p} className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="radio" 
-                        name="priority"
-                        checked={requirementForm.priority === p}
-                        onChange={() => setRequirementForm({...requirementForm, priority: p})}
-                        className="accent-[#1A1A1A]"
-                      />
-                      <span className="text-[10px] uppercase tracking-widest font-bold opacity-60">
-                        {p === 'high' ? 'P0-紧急' : p === 'medium' ? 'P1-正常' : 'P2-低'}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">需求来源</label>
-                <select 
-                  value={requirementForm.source}
-                  onChange={(e) => setRequirementForm({...requirementForm, source: e.target.value})}
-                  className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-2 text-sm"
-                  required
-                >
-                  <option value="customer">客户反馈</option>
-                  <option value="marketing">市场调研</option>
-                  <option value="product">产品规划</option>
-                  <option value="tech">技术演进</option>
-                  <option value="internal">公司内部需求</option>
-                </select>
-              </div>
-              
-              {requirementForm.source === 'customer' && (
-                <div className="animate-in fade-in slide-in-from-top-2">
-                  <label className="block text-[10px] uppercase tracking-widest font-bold mb-2 text-[#1A1A1A]">客户名称</label>
-                  <input 
-                    type="text" 
-                    value={requirementForm.customerName}
-                    onChange={(e) => setRequirementForm({...requirementForm, customerName: e.target.value})}
-                    className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-2 text-sm"
-                    placeholder="请输入客户名称"
-                    required
-                  />
-                </div>
-              )}
+          <div className="bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-md h-[90dvh] sm:h-auto max-h-[90dvh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-none relative">
+            <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2 z-50"></div>
+            
+            {/* Header */}
+            <div className="flex justify-between items-center px-6 sm:px-8 py-4 pt-7 sm:py-6 border-b border-[#1A1A1A]/5 bg-black/[0.02] shrink-0">
+              <h3 className="text-xl sm:text-2xl font-serif italic">{editingRequirementId ? '编辑产品需求' : '提交新产品需求'}</h3>
+              <button 
+                onClick={() => {
+                  setIsRequirementModalOpen(false);
+                  setEditingRequirementId(null);
+                  setRequirementForm({ title: '', description: '', linkUrl: '', priority: 'medium', source: 'customer', customerName: '', internalSourceDetail: '', assigneeId: '' });
+                }}
+                className="opacity-40 hover:opacity-100 transition-opacity p-2 -mr-2"
+              >
+                <span className="text-xl font-light leading-none">×</span>
+              </button>
+            </div>
 
-              {requirementForm.source === 'internal' && (
-                <div className="animate-in fade-in slide-in-from-top-2">
-                  <label className="block text-[10px] uppercase tracking-widest font-bold mb-2 text-[#1A1A1A]">具体来源说明</label>
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleRequirementSubmit} className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 overflow-y-auto px-6 py-6 sm:px-8 space-y-5 custom-scrollbar">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">需求标题</label>
                   <input 
                     type="text" 
-                    value={requirementForm.internalSourceDetail}
-                    onChange={(e) => setRequirementForm({...requirementForm, internalSourceDetail: e.target.value})}
+                    value={requirementForm.title}
+                    onChange={(e) => setRequirementForm({...requirementForm, title: e.target.value})}
                     className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-2 text-sm"
-                    placeholder="请输入具体来源说明（如：财务部、高管要求等）"
+                    placeholder="简洁明了的标题更受欢迎"
                     required
                   />
                 </div>
-              )}
-              
-              <div>
-                <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">负责人</label>
-                <select 
-                  value={requirementForm.assigneeId}
-                  onChange={(e) => setRequirementForm({...requirementForm, assigneeId: e.target.value})}
-                  className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-2 text-sm"
-                >
-                  <option value="">待分配</option>
-                  {members.filter(m => m.department !== 'marketing').map(m => (
-                    <option key={m.id} value={m.id}>{m.name} ({m.department === 'rnd' ? '研发' : '管理'})</option>
-                  ))}
-                </select>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">链接地址（选填）</label>
+                  <input 
+                    type="url" 
+                    value={requirementForm.linkUrl}
+                    onChange={(e) => setRequirementForm({...requirementForm, linkUrl: e.target.value})}
+                    className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-2 text-sm"
+                    placeholder="相关的参考链接、竞品链接或设计稿链接等"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">优先级</label>
+                  <div className="flex gap-4">
+                    {(['low', 'medium', 'high'] as Priority[]).map(p => (
+                      <label key={p} className="flex items-center gap-2 cursor-pointer">
+                        <input 
+                          type="radio" 
+                          name="priority"
+                          checked={requirementForm.priority === p}
+                          onChange={() => setRequirementForm({...requirementForm, priority: p})}
+                          className="accent-[#1A1A1A]"
+                        />
+                        <span className="text-[10px] uppercase tracking-widest font-bold opacity-60">
+                          {p === 'high' ? 'P0-紧急' : p === 'medium' ? 'P1-正常' : 'P2-低'}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">需求来源</label>
+                  <select 
+                    value={requirementForm.source}
+                    onChange={(e) => setRequirementForm({...requirementForm, source: e.target.value})}
+                    className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-2 text-sm"
+                    required
+                  >
+                    <option value="customer">客户反馈</option>
+                    <option value="marketing">市场调研</option>
+                    <option value="product">产品规划</option>
+                    <option value="tech">技术演进</option>
+                    <option value="internal">公司内部需求</option>
+                  </select>
+                </div>
+                
+                {requirementForm.source === 'customer' && (
+                  <div className="animate-in fade-in slide-in-from-top-2">
+                    <label className="block text-[10px] uppercase tracking-widest font-bold mb-2 text-[#1A1A1A]">客户名称</label>
+                    <input 
+                      type="text" 
+                      value={requirementForm.customerName}
+                      onChange={(e) => setRequirementForm({...requirementForm, customerName: e.target.value})}
+                      className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-2 text-sm"
+                      placeholder="请输入客户名称"
+                      required
+                    />
+                  </div>
+                )}
+
+                {requirementForm.source === 'internal' && (
+                  <div className="animate-in fade-in slide-in-from-top-2">
+                    <label className="block text-[10px] uppercase tracking-widest font-bold mb-2 text-[#1A1A1A]">具体来源说明</label>
+                    <input 
+                      type="text" 
+                      value={requirementForm.internalSourceDetail}
+                      onChange={(e) => setRequirementForm({...requirementForm, internalSourceDetail: e.target.value})}
+                      className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-2 text-sm"
+                      placeholder="请输入具体来源说明（如：财务部、高管要求等）"
+                      required
+                    />
+                  </div>
+                )}
+                
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">负责人</label>
+                  <select 
+                    value={requirementForm.assigneeId}
+                    onChange={(e) => setRequirementForm({...requirementForm, assigneeId: e.target.value})}
+                    className="w-full bg-transparent border-b border-[#1A1A1A]/30 focus:border-[#1A1A1A] outline-none py-2 text-sm"
+                  >
+                    <option value="">待分配</option>
+                    {members.filter(m => m.department !== 'marketing').map(m => (
+                      <option key={m.id} value={m.id}>{m.name} ({m.department === 'rnd' ? '研发' : '管理'})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">需求描述</label>
+                  <RichTextEditor 
+                    value={requirementForm.description}
+                    onChange={(val) => setRequirementForm({...requirementForm, description: val})}
+                    placeholder="详细描述需求场景、痛点及预期效果..."
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-[10px] uppercase tracking-widest font-bold mb-2">需求描述</label>
-                <RichTextEditor 
-                  value={requirementForm.description}
-                  onChange={(val) => setRequirementForm({...requirementForm, description: val})}
-                  placeholder="详细描述需求场景、痛点及预期效果..."
-                />
-              </div>
-              <div className="pt-5 flex justify-end gap-3.5 border-t border-[#1A1A1A]/10 mt-2">
+
+              {/* Sticky Footer */}
+              <div className="px-6 py-4 sm:px-8 sm:py-5 border-t border-[#1A1A1A]/10 bg-gray-50 flex shrink-0 justify-end gap-3.5 pb-[calc(env(safe-area-inset-bottom)+16px)] sm:pb-5 relative z-10 w-full">
                 <button 
                   type="button"
                   onClick={() => {
@@ -6292,7 +6700,7 @@ alter table system_settings disable row level security;
                     setEditingRequirementId(null);
                     setRequirementForm({ title: '', description: '', linkUrl: '', priority: 'medium', source: 'customer', customerName: '', internalSourceDetail: '', assigneeId: '' });
                   }}
-                  className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200"
+                  className="flex items-center justify-center text-[#1A1A1A]/60 hover:text-[#1A1A1A] text-[11px] sm:text-xs font-bold uppercase tracking-[0.15em] px-5 py-3 sm:py-2.5 min-h-[44px] sm:min-h-[40px] border border-[#1A1A1A]/10 hover:border-[#1A1A1A] hover:bg-black/[0.02] active:translate-y-px transition-all duration-200 bg-white"
                 >
                   取消
                 </button>
@@ -6860,7 +7268,7 @@ alter table system_settings disable row level security;
             className="absolute inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm"
             onClick={() => { setIsRejectRequirementModalOpen(false); setReqToReject(null); setRejectReason(''); }}
           />
-          <div className="relative bg-[#F7F6F2] p-8 max-w-sm w-full border border-[#1A1A1A] shadow-2xl">
+          <div className="relative bg-[#F7F6F2] p-6 pt-8 sm:p-8 pb-[calc(env(safe-area-inset-bottom)+20px)] sm:pb-8 max-w-sm w-full border border-[#1A1A1A] shadow-2xl rounded-t-2xl sm:rounded-none">
             <h3 className="text-lg font-serif italic mb-6">请输入驳回原因</h3>
             <textarea
               value={rejectReason}
@@ -6895,7 +7303,7 @@ alter table system_settings disable row level security;
             className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm"
             onClick={() => setIsRequirementDetailModalOpen(false)}
           />
-          <div className="relative bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-2xl h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-sm">
+          <div className="relative bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-2xl h-[90dvh] sm:h-auto max-h-[90dvh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-none">
             <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2 z-50"></div>
             <div className="flex justify-between items-center px-6 sm:px-8 py-5 pt-8 sm:pt-5 border-b border-[#1A1A1A]/5 bg-black/[0.02] shrink-0">
               <div className="flex items-center gap-3">
@@ -7049,7 +7457,7 @@ alter table system_settings disable row level security;
               )}
             </div>
             
-            <div className="px-8 py-5 border-t border-[#1A1A1A]/10 bg-gray-50 flex justify-end gap-3 sm:gap-4 shadow-[0_-4px_10px_rgba(0,0,0,0.02)] relative z-10">
+            <div className="px-6 py-4 sm:px-8 sm:py-5 border-t border-[#1A1A1A]/10 bg-gray-50 flex justify-end gap-3 sm:gap-4 shadow-[0_-4px_10px_rgba(0,0,0,0.02)] relative z-10 pb-[calc(env(safe-area-inset-bottom)+16px)] sm:pb-5">
               {(isSystemAdmin || currentUser?.id === selectedRequirement.submitterId) && (
                 <button 
                   onClick={() => {
@@ -7181,7 +7589,7 @@ alter table system_settings disable row level security;
               </div>
             </div>
             
-            <div className="p-8 border-t border-[#1A1A1A]/5 flex justify-end">
+            <div className="px-6 py-4 sm:p-8 border-t border-[#1A1A1A]/5 flex justify-end pb-[calc(env(safe-area-inset-bottom)+16px)] sm:pb-8 bg-gray-50/50">
               <button 
                 onClick={() => setIsTaskDetailModalOpen(false)}
                 className="text-[10px] font-bold uppercase tracking-widest bg-[#1A1A1A] text-white px-8 py-3 hover:bg-black transition-all active:translate-y-0.5 shadow-lg"
@@ -7270,7 +7678,7 @@ alter table system_settings disable row level security;
               </div>
             </div>
             
-            <div className="p-8 border-t border-[#1A1A1A]/5 flex justify-end">
+            <div className="px-6 py-4 sm:p-8 border-t border-[#1A1A1A]/5 flex justify-end pb-[calc(env(safe-area-inset-bottom)+16px)] sm:pb-8 bg-gray-50/50">
               <button 
                 onClick={() => setIsOutcomeDetailModalOpen(false)}
                 className="text-[10px] font-bold uppercase tracking-widest bg-[#1A1A1A] text-white px-8 py-3 hover:bg-black transition-all active:translate-y-0.5 shadow-lg"
@@ -7313,7 +7721,7 @@ alter table system_settings disable row level security;
               </div>
             </div>
             
-            <div className="p-8 border-t border-[#1A1A1A]/5 flex justify-end">
+            <div className="px-6 py-4 sm:p-8 border-t border-[#1A1A1A]/5 flex justify-end pb-[calc(env(safe-area-inset-bottom)+16px)] sm:pb-8 bg-gray-50/50">
               <button 
                 onClick={() => setIsGoalDetailModalOpen(false)}
                 className="text-[10px] font-bold uppercase tracking-widest bg-[#1A1A1A] text-white px-8 py-3 hover:bg-black transition-all active:translate-y-0.5 shadow-lg"
@@ -7354,6 +7762,10 @@ alter table system_settings disable row level security;
       )}
       {isGuideModalOpen && (
         <GuideModal onClose={() => setIsGuideModalOpen(false)} content={guideContent} />
+      )}
+
+      {isIntroOpen && (
+        <TrackFlowIntro onClose={() => setIsIntroOpen(false)} />
       )}
 
       {/* Central Database API Warning Toast / Dialog */}
