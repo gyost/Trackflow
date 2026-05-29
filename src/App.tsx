@@ -1058,19 +1058,39 @@ const ProjectTrackingView = ({
               <button 
                 onClick={() => {
                    if (filtered.length === 0) return;
-                   const headers = ['客户名称', '状态', '合作意向/产品', '市场负责人', '项目负责人', '预期(万)', '已达成(万)', '最近跟进', '联系人', '联系电话'];
-                   const rows = filtered.map((t) => [
-                     t.customerName || '',
-                     statusLabels[t.status] || '',
-                     t.product || '',
-                     t.cityManager || '',
-                     t.projectManager || '',
-                     (t.expectedContractAmount > 0 ? (t.expectedContractAmount / 10000).toFixed(2) : '0'),
-                     (t.actualContractAmount > 0 ? (t.actualContractAmount / 10000).toFixed(2) : '0'),
-                     t.lastFollowupDate || '',
-                     t.contactName || '',
-                     t.contactPhone || ''
-                   ]);
+                   const headers = ['客户名称', '状态', '合作意向/产品', '市场负责人', '项目负责人', '预期(万)', '已达成(万)', '最近跟进', '联系人', '联系电话', '跟进内容详情'];
+                   const rows = filtered.map((t) => {
+                     const followupsText = (t.followupRecords || [])
+                       .map(record => {
+                          let cleanContent = record.content || '';
+                          cleanContent = cleanContent.replace(/<br\s*\/?>/gi, '\n');
+                          cleanContent = cleanContent.replace(/<\/p>/gi, '\n');
+                          cleanContent = cleanContent.replace(/<p>/gi, '');
+                          cleanContent = cleanContent.replace(/<[^>]+>/g, '');
+                          cleanContent = cleanContent
+                            .replace(/&nbsp;/gi, ' ')
+                            .replace(/&amp;/gi, '&')
+                            .replace(/&lt;/gi, '<')
+                            .replace(/&gt;/gi, '>')
+                            .replace(/&quot;/gi, '"')
+                            .replace(/&#39;/gi, "'");
+                          return `【${record.date}】${cleanContent.trim()}`;
+                       })
+                       .join('\n');
+                     return [
+                       t.customerName || '',
+                       statusLabels[t.status] || '',
+                       t.product || '',
+                       t.cityManager || '',
+                       t.projectManager || '',
+                       (t.expectedContractAmount > 0 ? (t.expectedContractAmount / 10000).toFixed(2) : '0'),
+                       (t.actualContractAmount > 0 ? (t.actualContractAmount / 10000).toFixed(2) : '0'),
+                       t.lastFollowupDate || '',
+                       t.contactName || '',
+                       t.contactPhone || '',
+                       followupsText
+                     ];
+                   });
                    const csvContent = [
                      headers.join(','),
                      ...rows.map(e => e.map(item => `"${String(item).replace(/"/g, '""')}"`).join(','))
