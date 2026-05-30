@@ -40,6 +40,7 @@ export interface ProjectTracking {
   updatedAt: string;
   createdAt?: string;
   followupRecords?: FollowupRecord[];
+  terminationReason?: string;
 }
 
 export interface FollowupRecord {

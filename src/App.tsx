@@ -17,7 +17,7 @@ import {
 } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { HelpCircle, LayoutDashboard, Target, TrendingUp, Code2, ClipboardList, User, Settings, LogOut, Search, Plus, Download, Upload, FileSpreadsheet, Filter, Coins, FileText, Wallet, Users, UserX, CheckCircle2, AlertTriangle, X, Info, XCircle, Trello, Activity, RotateCcw } from 'lucide-react';
+import { HelpCircle, LayoutDashboard, Target, TrendingUp, Code2, ClipboardList, User, Settings, LogOut, Search, Plus, Download, Upload, FileSpreadsheet, Filter, Coins, FileText, Wallet, Users, UserX, CheckCircle2, AlertTriangle, X, Info, XCircle, Trello, Activity, RotateCcw, RefreshCw } from 'lucide-react';
 import { mockProjects, mockPlans as initialPlans, mockTasks as initialTasks, mockOutcomes as initialOutcomes, mockMembers, mockGroups, mockRequirements as initialRequirements } from './mockData';
 import { Plan, Task, Outcome, Group, Member, Project, Status, Priority, Requirement, RequirementStatus, RequirementHistory, ReleaseGoal, ProjectTracking, TrackingStatus, FollowupRecord, RolePermission } from './types';
 import { generateId } from './lib/utils';
@@ -1058,7 +1058,7 @@ const ProjectTrackingView = ({
               <button 
                 onClick={() => {
                    if (filtered.length === 0) return;
-                   const headers = ['客户名称', '状态', '合作意向/产品', '市场负责人', '项目负责人', '预期(万)', '已达成(万)', '最近跟进', '联系人', '联系电话', '跟进内容详情'];
+                   const headers = ['客户名称', '状态', '合作意向/产品', '市场负责人', '项目负责人', '预期(万)', '已达成(万)', '最近跟进', '联系人', '联系电话', '跟进内容详情', '作废理由'];
                    const rows = filtered.map((t) => {
                      const followupsText = (t.followupRecords || [])
                        .map(record => {
@@ -1088,7 +1088,8 @@ const ProjectTrackingView = ({
                        t.lastFollowupDate || '',
                        t.contactName || '',
                        t.contactPhone || '',
-                       followupsText
+                       followupsText,
+                       t.terminationReason || ''
                      ];
                    });
                    const csvContent = [
@@ -1639,6 +1640,21 @@ export default function App() {
   const [useLocalMockMode, setUseLocalMockMode] = useState<boolean>(false);
   const [isDbLoaded, setIsDbLoaded] = useState(false);
   const [apiError, setApiError] = useState<CentralError | null>(null);
+  
+  // 页面数据自动更新相关状态
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(true);
+  const [syncCountdown, setSyncCountdown] = useState<number>(15);
+  const [syncCount, setSyncCount] = useState<number>(0);
+  const isMountedRef = React.useRef<boolean>(true);
+  
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const [rolePermissions, setRolePermissions] = useState<RolePermission[]>(() => {
     const saved = localStorage.getItem('role_permissions');
@@ -1756,7 +1772,7 @@ export default function App() {
   const [trackingForm, setTrackingForm] = useState<Omit<ProjectTracking, 'id' | 'updatedAt'>>({
     customerName: '', status: 'followup', product: '', cityManager: '', projectManager: '',
     expectedContractAmount: 0, actualContractAmount: 0, contactName: '', contactPhone: '',
-    createdAt: format(new Date(), 'yyyy-MM-dd')
+    createdAt: format(new Date(), 'yyyy-MM-dd'), terminationReason: ''
   });
   const [trackingFilterStatus, setTrackingFilterStatus] = useState<TrackingStatus | 'all'>('all');
   const [trackingSearchTerm, setTrackingSearchTerm] = useState('');
@@ -1775,6 +1791,7 @@ export default function App() {
   const [mobileDetailTab, setMobileDetailTab] = useState<'timeline' | 'info'>('timeline');
   const [isTerminateTrackingModalOpen, setIsTerminateTrackingModalOpen] = useState(false);
   const [trackingToTerminate, setTrackingToTerminate] = useState<string | null>(null);
+  const [terminationReasonInput, setTerminationReasonInput] = useState('');
   const [selectedTrackingDetail, setSelectedTrackingDetail] = useState<ProjectTracking | null>(null);
   const statusColors: Record<TrackingStatus, string> = {
     followup: 'bg-amber-500', 
@@ -2003,198 +2020,242 @@ export default function App() {
     `;
   });
 
-  useEffect(() => {
-    let mounted = true;
-    const fetchData = async () => {
-      if (useLocalMockMode) {
-        console.log('fetchData: Local mock mode active, skipping cloud fetch');
-        setProjects(mockProjects);
-        setPlans(initialPlans);
-        setTasks(initialTasks);
-        setOutcomes(initialOutcomes);
-        setRequirements(initialRequirements);
-        setReleaseGoals([]);
-        setProjectTrackings([]);
-        setIsDbLoaded(true);
-        setIsLoadingData(false);
-        return;
-      }
+  // 全局数据刷新与自动同步功能 (支持后台静默加载)
+  const refreshAllData = React.useCallback(async (isBackground = false) => {
+    if (useLocalMockMode) {
+      console.log('fetchData: Local mock mode active, skipping cloud fetch');
+      setProjects(mockProjects);
+      setPlans(initialPlans);
+      setTasks(initialTasks);
+      setOutcomes(initialOutcomes);
+      setRequirements(initialRequirements);
+      setReleaseGoals([]);
+      setProjectTrackings([]);
+      setIsDbLoaded(true);
+      if (!isBackground) setIsLoadingData(false);
+      setLastSyncTime(new Date());
+      setSyncCount(prev => prev + 1);
+      return;
+    }
 
+    if (isBackground) {
+      setIsSyncing(true);
+    } else {
       setIsLoadingData(true);
       setLoadingStep('正在连接组织管理服务并识别您的归属组织 (organizations)...');
-      try {
+    }
+
+    try {
+      if (!isBackground) {
         await getOrganizationId();
-      } catch (err: any) {
-        console.warn('Failed to init organization', err);
-        const errObj = err as any;
-        const details = errObj?.message || errObj?.details || String(err);
+      }
+    } catch (err: any) {
+      console.warn('Failed to init organization', err);
+      const errObj = err as any;
+      const details = errObj?.message || errObj?.details || String(err);
+      if (!isBackground) {
         setDataError('组织初始化失败: ' + details);
         setIsLoadingData(false);
-        return;
+      } else {
+        setSyncError('自动更新组织初始化失败: ' + details);
+        setIsSyncing(false);
       }
-      if (!mounted) return;
+      return;
+    }
+
+    if (!isMountedRef.current) return;
+    if (!isBackground) {
       setDataError(null);
       setLoadingStep('正在与 Supabase 云服务建立连接，加载底层数据模型...');
-      console.log('fetchData: START');
-      try {
-        const fetchPromise = Promise.all([
-          apiService.getProjects(),
-          apiService.getPlans(),
-          apiService.getTasks(),
-          apiService.getOutcomes(),
-          apiService.getRequirements(),
-          apiService.getReleaseGoals(),
-          apiService.getProjectTrackings(),
-          apiService.getGroups(),
-          apiService.getMembers(),
-          apiService.getSystemSettings(),
-          apiService.getPermissions()
-        ]);
-        
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('请求超时 (15秒)')), 15000)
-        );
+    }
+    console.log('fetchData: START', isBackground ? '(Background)' : '(Foreground)');
+    try {
+      const fetchPromise = Promise.all([
+        apiService.getProjects(),
+        apiService.getPlans(),
+        apiService.getTasks(),
+        apiService.getOutcomes(),
+        apiService.getRequirements(),
+        apiService.getReleaseGoals(),
+        apiService.getProjectTrackings(),
+        apiService.getGroups(),
+        apiService.getMembers(),
+        apiService.getSystemSettings(),
+        apiService.getPermissions()
+      ]);
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('请求超时 (15秒)')), 15000)
+      );
 
-        console.log('fetchData: Waiting for initial fetch');
-        const results = await Promise.race([fetchPromise, timeoutPromise]) as any;
-        let [
-          projectsData, 
-          plansData, 
-          tasksData, 
-          outcomesData, 
-          requirementsData, 
-          releaseGoalsData, 
-          trackingsData,
-          groupsData,
-          membersData,
-          systemSettingsData,
-          permissionsData
-        ] = results;
-        console.log('fetchData: Initial fetch done');
+      const results = await Promise.race([fetchPromise, timeoutPromise]) as any;
+      let [
+        projectsData, 
+        plansData, 
+        tasksData, 
+        outcomesData, 
+        requirementsData, 
+        releaseGoalsData, 
+        trackingsData,
+        groupsData,
+        membersData,
+        systemSettingsData,
+        permissionsData
+      ] = results;
+      console.log('fetchData: fetch done');
 
-        if (projectsData.length === 0) {
-           setLoadingStep('检测到全新数据库，正在写入预制业务演示数据以配置核心看板...');
-           console.log('fetchData: No projects found, starting seed');
-           const seedService = await import('./services/seedService');
-           
-           const seeded = await Promise.race([
-               seedService.seedSupabase(),
-               new Promise<boolean>((_, reject) => setTimeout(() => reject(new Error('Seed 请求超时 (15秒)')), 15000))
-           ]);
-           
-           console.log('fetchData: Seed result:', seeded);
-           if (seeded && mounted) {
-               console.log('fetchData: Fetching data after seed');
-               const seedFetchPromise = Promise.all([
-                 apiService.getProjects(), 
-                 apiService.getPlans(), 
-                 apiService.getTasks(), 
-                 apiService.getOutcomes(), 
-                 apiService.getRequirements(), 
-                 apiService.getReleaseGoals(), 
-                 apiService.getProjectTrackings(),
-                 apiService.getGroups(),
-                 apiService.getMembers(),
-                 apiService.getSystemSettings(),
-                 apiService.getPermissions()
-               ]);
-               const seedResults = await Promise.race([seedFetchPromise, timeoutPromise]) as any;
-               const [p, pl, t, o, r, rg, tr, gData, mData, sData, permData] = seedResults;
-               
-               console.log('fetchData: Seed fetch done');
-               projectsData = p;
-               plansData = pl;
-               tasksData = t;
-               outcomesData = o;
-               requirementsData = r;
-               releaseGoalsData = rg || [];
-               trackingsData = tr || [];
-               groupsData = gData;
-               membersData = mData;
-               systemSettingsData = sData;
-               permissionsData = permData;
-           }
-        }
-
-        if (mounted) {
-          setLoadingStep('获取核心数据模型成功，正在组装渲染业务看板...');
-          console.log('fetchData: Setting state');
-          setProjects(pruneDuplicates(projectsData));
-          setPlans(pruneDuplicates(plansData));
-          setTasks(pruneDuplicates(tasksData));
-          setOutcomes(pruneDuplicates(outcomesData));
-          setRequirements(pruneDuplicates(requirementsData));
-          setReleaseGoals(pruneDuplicates(releaseGoalsData || []));
-          setProjectTrackings(pruneDuplicates(trackingsData || []));
-
-          // 处理核心设置数据的自愈机制
-          let finalGroups = groups;
-          if (groupsData && groupsData.length > 0) {
-            finalGroups = pruneDuplicates(groupsData);
-          } else {
-            console.log('No groups in database, uploading initial ones...');
-            await apiService.saveGroups(groups).catch(e => console.warn('Sync initial groups failed', e));
-          }
-
-          let finalMembers = members;
-          if (membersData && membersData.length > 0) {
-            finalMembers = pruneDuplicates(membersData);
-          } else {
-            console.log('No members in database, uploading initial ones...');
-            await apiService.saveMembers(members).catch(e => console.warn('Sync initial members failed', e));
-          }
-
-          if (systemSettingsData) {
-            setAuthorizedCompanies(systemSettingsData.authorizedCompanies);
-            setAnnualTargetProfit(systemSettingsData.annualTargetProfit);
-            setGuideContent(systemSettingsData.guideContent);
-          } else {
-            console.log('No system settings in database, uploading initial ones...');
-            await apiService.saveSystemSettings({ authorizedCompanies, annualTargetProfit, guideContent }).catch(e => console.warn('Sync initial system settings failed', e));
-          }
-
-          setGroups(pruneDuplicates(finalGroups));
-          setMembers(pruneDuplicates(finalMembers));
-
-          // 开启默认角色分配权限
-          if (permissionsData && permissionsData.length > 0) {
-            setRolePermissions(permissionsData);
-          } else {
-            console.log('No permissions rules found, uploading initial ones...');
-            const defaults = [
-              { roleName: '系统管理员', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE', 'MANAGE_SYSTEM_SETTINGS'] },
-              { roleName: '项目经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
-              { roleName: '部门经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
-              { roleName: '产品总监', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL'] },
-              { roleName: '市场总监', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL'] },
-              { roleName: '组长', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL', 'MANAGE_PLAN_TASK'] },
-              { roleName: '产品经理', permissions: ['VIEW_DASHBOARD', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT'] },
-              { roleName: '研发经理', permissions: ['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK'] },
-              { roleName: '测试经理', permissions: ['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK'] },
-              { roleName: '市场人员', permissions: ['VIEW_DASHBOARD', 'VIEW_MARKETING'] }
-            ];
-            setRolePermissions(defaults);
-            await apiService.savePermissions(defaults).catch(e => console.warn('Sync initial permissions failed', e));
-          }
-          
-          setIsDbLoaded(true);
-          console.log('fetchData: State set successfully');
-        }
-      } catch (err) {
-        console.warn('Failed to fetch data:', err);
-        if (mounted) {
-           const errObj = err as any;
-           const details = errObj?.message || errObj?.details || String(err);
-           setDataError('与数据库连接失败: ' + details);
-        }
-      } finally {
-        console.log('fetchData: FINISHED');
-        if (mounted) setIsLoadingData(false);
+      if (projectsData.length === 0 && !isBackground) {
+         setLoadingStep('检测到全新数据库，正在写入预制业务演示数据以配置核心看板...');
+         console.log('fetchData: No projects found, starting seed');
+         const seedService = await import('./services/seedService');
+         
+         const seeded = await Promise.race([
+             seedService.seedSupabase(),
+             new Promise<boolean>((_, reject) => setTimeout(() => reject(new Error('Seed 请求超时 (15秒)')), 15000))
+         ]);
+         
+         console.log('fetchData: Seed result:', seeded);
+         if (seeded && isMountedRef.current) {
+             console.log('fetchData: Fetching data after seed');
+             const seedFetchPromise = Promise.all([
+               apiService.getProjects(), 
+               apiService.getPlans(), 
+               apiService.getTasks(), 
+               apiService.getOutcomes(), 
+               apiService.getRequirements(), 
+               apiService.getReleaseGoals(), 
+               apiService.getProjectTrackings(),
+               apiService.getGroups(),
+               apiService.getMembers(),
+               apiService.getSystemSettings(),
+               apiService.getPermissions()
+             ]);
+             const seedResults = await Promise.race([seedFetchPromise, timeoutPromise]) as any;
+             const [p, pl, t, o, r, rg, tr, gData, mData, sData, permData] = seedResults;
+             
+             projectsData = p;
+             plansData = pl;
+             tasksData = t;
+             outcomesData = o;
+             requirementsData = r;
+             releaseGoalsData = rg || [];
+             trackingsData = tr || [];
+             groupsData = gData;
+             membersData = mData;
+             systemSettingsData = sData;
+             permissionsData = permData;
+         }
       }
-    };
-    fetchData();
-    return () => { mounted = false; };
+
+      if (isMountedRef.current) {
+        if (!isBackground) setLoadingStep('获取核心数据模型成功，正在组装渲染业务看板...');
+        
+        setProjects(pruneDuplicates(projectsData));
+        setPlans(pruneDuplicates(plansData));
+        setTasks(pruneDuplicates(tasksData));
+        setOutcomes(pruneDuplicates(outcomesData));
+        setRequirements(pruneDuplicates(requirementsData));
+        setReleaseGoals(pruneDuplicates(releaseGoalsData || []));
+        setProjectTrackings(pruneDuplicates(trackingsData || []));
+
+        // 处理核心设置数据的自愈机制
+        let finalGroups = groups;
+        if (groupsData && groupsData.length > 0) {
+          finalGroups = pruneDuplicates(groupsData);
+        } else if (!isBackground) {
+          console.log('No groups in database, uploading initial ones...');
+          await apiService.saveGroups(groups).catch(e => console.warn('Sync initial groups failed', e));
+        }
+
+        let finalMembers = members;
+        if (membersData && membersData.length > 0) {
+          finalMembers = pruneDuplicates(membersData);
+        } else if (!isBackground) {
+          console.log('No members in database, uploading initial ones...');
+          await apiService.saveMembers(members).catch(e => console.warn('Sync initial members failed', e));
+        }
+
+        if (systemSettingsData) {
+          setAuthorizedCompanies(systemSettingsData.authorizedCompanies);
+          setAnnualTargetProfit(systemSettingsData.annualTargetProfit);
+          setGuideContent(systemSettingsData.guideContent);
+        } else if (!isBackground) {
+          console.log('No system settings in database, uploading initial ones...');
+          await apiService.saveSystemSettings({ authorizedCompanies, annualTargetProfit, guideContent }).catch(e => console.warn('Sync initial system settings failed', e));
+        }
+
+        setGroups(pruneDuplicates(finalGroups));
+        setMembers(pruneDuplicates(finalMembers));
+
+        // 默认角色分配权限
+        if (permissionsData && permissionsData.length > 0) {
+          setRolePermissions(permissionsData);
+        } else if (!isBackground) {
+          console.log('No permissions rules found, uploading initial ones...');
+          const defaults = [
+            { roleName: '系统管理员', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE', 'MANAGE_SYSTEM_SETTINGS'] },
+            { roleName: '项目经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
+            { roleName: '部门经理', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_PLAN_TASK', 'EDIT_RELEASE_GOAL', 'REVIEW_DELIVERABLE'] },
+            { roleName: '产品总监', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT', 'EDIT_RELEASE_GOAL'] },
+            { roleName: '市场总监', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL'] },
+            { roleName: '组长', permissions: ['VIEW_DASHBOARD', 'VIEW_TRACKING', 'VIEW_MARKETING', 'VIEW_RND', 'VIEW_REQUIREMENTS', 'EDIT_RELEASE_GOAL', 'MANAGE_PLAN_TASK'] },
+            { roleName: '产品经理', permissions: ['VIEW_DASHBOARD', 'VIEW_REQUIREMENTS', 'MANAGE_REQUIREMENT'] },
+            { roleName: '研发经理', permissions: ['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK'] },
+            { roleName: '测试经理', permissions: ['VIEW_DASHBOARD', 'VIEW_RND', 'MANAGE_PLAN_TASK'] },
+            { roleName: '市场人员', permissions: ['VIEW_DASHBOARD', 'VIEW_MARKETING'] }
+          ];
+          setRolePermissions(defaults);
+          await apiService.savePermissions(defaults).catch(e => console.warn('Sync initial permissions failed', e));
+        }
+        
+        setIsDbLoaded(true);
+        setLastSyncTime(new Date());
+        setSyncError(null);
+        setSyncCount(prev => prev + 1);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch data:', err);
+      if (isMountedRef.current) {
+         const errObj = err as any;
+         const details = errObj?.message || errObj?.details || String(err);
+         if (!isBackground) {
+           setDataError('与数据库连接失败: ' + details);
+         } else {
+           setSyncError('局域数据同步异常: ' + details);
+         }
+      }
+    } finally {
+      if (isMountedRef.current) {
+        if (!isBackground) setIsLoadingData(false);
+        setIsSyncing(false);
+      }
+    }
   }, [useLocalMockMode]);
+
+  // 初始加载 Hook
+  useEffect(() => {
+    refreshAllData(false);
+  }, [useLocalMockMode, refreshAllData]);
+
+  // 自动刷新 定时器 Hook
+  useEffect(() => {
+    let timer: any;
+    if (autoSyncEnabled && isDbLoaded) {
+      setSyncCountdown(15); // 重置倒计时为15秒
+      timer = setInterval(() => {
+        setSyncCountdown(prev => {
+          if (prev <= 1) {
+            refreshAllData(true); // 后台静默刷新数据
+            return 15;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [autoSyncEnabled, isDbLoaded, refreshAllData]);
 
   useEffect(() => {
     localStorage.setItem('guideContent', guideContent);
@@ -3172,6 +3233,7 @@ alter table system_settings disable row level security;
 
   const terminateTracking = async (id: string) => {
     setTrackingToTerminate(id);
+    setTerminationReasonInput('');
     setIsTerminateTrackingModalOpen(true);
   };
 
@@ -3179,10 +3241,18 @@ alter table system_settings disable row level security;
     if (trackingToTerminate) {
       const tracking = projectTrackings.find(t => t.id === trackingToTerminate);
       if (tracking) {
-        const updated = { ...tracking, status: 'terminated' as TrackingStatus, updatedAt: new Date().toISOString() };
+        const updated = { 
+          ...tracking, 
+          status: 'terminated' as TrackingStatus, 
+          terminationReason: terminationReasonInput,
+          updatedAt: new Date().toISOString() 
+        };
         try {
           await apiService.saveProjectTracking(updated);
           setProjectTrackings(prev => prev.map(t => t.id === trackingToTerminate ? updated : t));
+          if (selectedTrackingDetail && selectedTrackingDetail.id === trackingToTerminate) {
+            setSelectedTrackingDetail(updated);
+          }
           window.showToast?.('项目已终止跟进', 'info');
         } catch (err) {
           console.warn('Failed to terminate tracking', err);
@@ -3191,16 +3261,24 @@ alter table system_settings disable row level security;
       }
       setIsTerminateTrackingModalOpen(false);
       setTrackingToTerminate(null);
+      setTerminationReasonInput('');
     }
   };
 
   const updateTrackingStatus = async (id: string, status: TrackingStatus) => {
+    if (status === 'terminated') {
+      terminateTracking(id);
+      return;
+    }
     const tracking = projectTrackings.find(t => t.id === id);
     if (tracking) {
       const updated = { ...tracking, status, updatedAt: new Date().toISOString() };
       try {
         await apiService.saveProjectTracking(updated);
         setProjectTrackings(prev => prev.map(t => t.id === id ? updated : t));
+        if (selectedTrackingDetail && selectedTrackingDetail.id === id) {
+          setSelectedTrackingDetail(updated);
+        }
         window.showToast?.('项目跟进状态更新成功', 'success');
       } catch (err) {
         console.warn('Failed to update tracking status', err);
@@ -4342,7 +4420,7 @@ alter table system_settings disable row level security;
             </div>
 
             {(currentView === 'dashboard' || (currentView === 'requirements' && reqTimeFrame === 'quarter')) && (
-              <div className="mb-6 flex items-start">
+              <div className="mb-6 flex items-center pt-1.5">
                 <div className="flex flex-col items-center justify-center border border-[#1A1A1A]/10 bg-black/[0.03] hover:bg-black/[0.06] transition-colors rounded-xl px-2 py-0.5 select-none mr-3 shrink-0">
                   <button onClick={() => {
                     const newYear = parseInt(selectedQuarter.split('-')[0]) + 1;
@@ -4356,7 +4434,7 @@ alter table system_settings disable row level security;
                     setSelectedMonth(`${newYear}-${selectedMonth.split('-')[1]}`);
                   }} className="text-[10px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none cursor-pointer">▼</button>
                 </div>
-                <div className="flex gap-1.5 overflow-x-auto pb-2 custom-scrollbar hide-scrollbar-on-mobile items-center flex-1" id="quarter-scroll-container">
+                <div className="flex gap-1.5 overflow-x-auto pt-1 pb-2.5 px-1 -mx-1 custom-scrollbar hide-scrollbar-on-mobile items-center flex-1" id="quarter-scroll-container">
                 {Array.from({ length: 4 }).map((_, i) => {
                   const q = `Q${i + 1}`;
                   const targetQuarter = `${selectedQuarter.split('-')[0]}-${q}`;
@@ -4366,8 +4444,13 @@ alter table system_settings disable row level security;
                       key={targetQuarter}
                       id={isSelected ? 'active-quarter-tab' : undefined}
                       onClick={() => setSelectedQuarter(targetQuarter)}
-                      className={`text-[10px] px-4 py-2 whitespace-nowrap border rounded-xl transition-all duration-200 focus:outline-none cursor-pointer font-sans font-bold ${isSelected ? 'bg-[#1A1A1A] text-white border-transparent shadow-sm scale-110' : 'bg-white border-[#1A1A1A]/10 text-[#1A1A1A]/85 hover:bg-[#1A1A1A]/5 hover:border-[#1A1A1A]/30'}`}
+                      className={`text-[10px] px-4 py-2 whitespace-nowrap border rounded-xl transition-all duration-200 focus:outline-none cursor-pointer font-sans font-bold inline-flex items-center justify-center gap-1.5 ${
+                        isSelected 
+                          ? 'bg-[#1A1A1A] text-white border-[#1A1A1A] shadow-[2.5px_2.5px_0px_0px_rgba(26,26,26,0.2)] -translate-x-[1px] -translate-y-[1px]' 
+                          : 'bg-white border-[#1A1A1A]/10 text-[#1A1A1A]/85 hover:bg-[#1A1A1A]/5 hover:border-[#1A1A1A]/30 hover:-translate-y-[0.5px] hover:shadow-[1px_1px_0px_0px_rgba(26,26,26,0.1)]'
+                      }`}
                     >
+                      {isSelected && <span className="w-1.5 h-1.5 bg-[#10B981] rounded-full shrink-0 animate-pulse"></span>}
                       {q}
                     </button>
                   )
@@ -4377,7 +4460,7 @@ alter table system_settings disable row level security;
             )}
 
             {(currentView === 'marketing' || currentView === 'rnd' || (currentView === 'requirements' && reqTimeFrame === 'month')) && (
-              <div className="mb-6 flex items-start">
+              <div className="mb-6 flex items-center pt-1.5">
                 <div className="flex flex-col items-center justify-center border border-[#1A1A1A]/10 bg-black/[0.03] hover:bg-black/[0.06] transition-colors rounded-xl px-2 py-0.5 select-none mr-3 shrink-0">
                   <button onClick={() => {
                     const newYear = parseInt(selectedMonth.split('-')[0]) + 1;
@@ -4391,7 +4474,7 @@ alter table system_settings disable row level security;
                     setSelectedQuarter(`${newYear}-${selectedQuarter.split('-')[1]}`);
                   }} className="text-[10px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none cursor-pointer">▼</button>
                 </div>
-                <div className="flex gap-1.5 overflow-x-auto pb-2 custom-scrollbar hide-scrollbar-on-mobile items-center flex-1" id="month-scroll-container">
+                <div className="flex gap-1.5 overflow-x-auto pt-1 pb-2.5 px-1 -mx-1 custom-scrollbar hide-scrollbar-on-mobile items-center flex-1" id="month-scroll-container">
                 {Array.from({ length: 12 }).map((_, i) => {
                   const m = String(i + 1).padStart(2, '0');
                   const targetMonth = `${selectedMonth.split('-')[0]}-${m}`;
@@ -4401,8 +4484,13 @@ alter table system_settings disable row level security;
                       key={targetMonth}
                       id={isSelected ? 'active-month-tab' : undefined}
                       onClick={() => setSelectedMonth(targetMonth)}
-                      className={`text-[10px] px-3.5 py-1.5 whitespace-nowrap border rounded-xl transition-all duration-200 focus:outline-none cursor-pointer font-sans font-bold ${isSelected ? 'bg-[#1A1A1A] text-white border-transparent shadow-sm scale-110' : 'bg-white border-[#1A1A1A]/10 text-[#1A1A1A]/85 hover:bg-[#1A1A1A]/5 hover:border-[#1A1A1A]/30'}`}
+                      className={`text-[10px] px-3.5 py-1.5 whitespace-nowrap border rounded-xl transition-all duration-200 focus:outline-none cursor-pointer font-sans font-bold inline-flex items-center justify-center gap-1.5 ${
+                        isSelected 
+                          ? 'bg-[#1A1A1A] text-white border-[#1A1A1A] shadow-[2.5px_2.5px_0px_0px_rgba(26,26,26,0.2)] -translate-x-[1px] -translate-y-[1px]' 
+                          : 'bg-white border-[#1A1A1A]/10 text-[#1A1A1A]/85 hover:bg-[#1A1A1A]/5 hover:border-[#1A1A1A]/30 hover:-translate-y-[0.5px] hover:shadow-[1px_1px_0px_0px_rgba(26,26,26,0.1)]'
+                      }`}
                     >
+                      {isSelected && <span className="w-1.5 h-1.5 bg-[#10B981] rounded-full shrink-0 animate-pulse"></span>}
                       {i + 1}月
                     </button>
                   )
@@ -4412,7 +4500,7 @@ alter table system_settings disable row level security;
             )}
 
             {(currentView === 'requirements' && reqTimeFrame === 'year') && (
-              <div className="mb-6 flex items-start">
+              <div className="mb-6 flex items-center pt-1.5">
                 <div className="flex flex-col items-center justify-center border border-[#1A1A1A]/10 bg-black/[0.03] hover:bg-black/[0.06] transition-colors rounded-xl px-2 py-0.5 select-none mr-3 shrink-0">
                   <button onClick={() => {
                     const newYear = parseInt(selectedYear) + 1;
@@ -4428,7 +4516,7 @@ alter table system_settings disable row level security;
                     setSelectedMonth(`${newYear}-${selectedMonth.split('-')[1]}`);
                   }} className="text-[10px] opacity-40 hover:opacity-100 hover:text-black focus:outline-none transition-opacity px-2 py-0.5 leading-none cursor-pointer">▼</button>
                 </div>
-                <div className="flex gap-1.5 overflow-x-auto pb-2 custom-scrollbar hide-scrollbar-on-mobile items-center flex-1" id="year-scroll-container">
+                <div className="flex gap-1.5 overflow-x-auto pt-1 pb-2.5 px-1 -mx-1 custom-scrollbar hide-scrollbar-on-mobile items-center flex-1" id="year-scroll-container">
                 {Array.from({ length: 5 }).map((_, i) => {
                   const targetYear = `${parseInt(selectedYear) - 2 + i}`;
                   const isSelected = selectedYear === targetYear;
@@ -4437,8 +4525,13 @@ alter table system_settings disable row level security;
                       key={targetYear}
                       id={isSelected ? 'active-year-tab' : undefined}
                       onClick={() => setSelectedYear(targetYear)}
-                      className={`text-[10px] px-4 py-2 whitespace-nowrap border rounded-xl transition-all duration-200 focus:outline-none cursor-pointer font-sans font-bold ${isSelected ? 'bg-[#1A1A1A] text-white border-transparent shadow-sm scale-110' : 'bg-white border-[#1A1A1A]/10 text-[#1A1A1A]/85 hover:bg-[#1A1A1A]/5 hover:border-[#1A1A1A]/30'}`}
+                      className={`text-[10px] px-4 py-2 whitespace-nowrap border rounded-xl transition-all duration-200 focus:outline-none cursor-pointer font-sans font-bold inline-flex items-center justify-center gap-1.5 ${
+                        isSelected 
+                          ? 'bg-[#1A1A1A] text-white border-[#1A1A1A] shadow-[2.5px_2.5px_0px_0px_rgba(26,26,26,0.2)] -translate-x-[1px] -translate-y-[1px]' 
+                          : 'bg-white border-[#1A1A1A]/10 text-[#1A1A1A]/85 hover:bg-[#1A1A1A]/5 hover:border-[#1A1A1A]/30 hover:-translate-y-[0.5px] hover:shadow-[1px_1px_0px_0px_rgba(26,26,26,0.1)]'
+                      }`}
                     >
+                      {isSelected && <span className="w-1.5 h-1.5 bg-[#10B981] rounded-full shrink-0 animate-pulse"></span>}
                       {targetYear}年
                     </button>
                   )
@@ -5369,7 +5462,7 @@ alter table system_settings disable row level security;
                 onRestore={restoreTracking}
                 onDeletePermanently={deleteTrackingPermanently}
                 onEdit={(t) => { setEditingTrackingId(t.id); setTrackingForm(t); setTrackingError(''); setIsTrackingModalOpen(true); }}
-                onAdd={() => { setEditingTrackingId(null); setTrackingForm({ customerName: '', status: 'followup', product: '', cityManager: '', projectManager: '', expectedContractAmount: 0, actualContractAmount: 0, contactName: '', contactPhone: '', createdAt: format(new Date(), 'yyyy-MM-dd') }); setTrackingError(''); setIsTrackingModalOpen(true); }}
+                onAdd={() => { setEditingTrackingId(null); setTrackingForm({ customerName: '', status: 'followup', product: '', cityManager: '', projectManager: '', expectedContractAmount: 0, actualContractAmount: 0, contactName: '', contactPhone: '', createdAt: format(new Date(), 'yyyy-MM-dd'), terminationReason: '' }); setTrackingError(''); setIsTrackingModalOpen(true); }}
                 onAddFollowup={(t) => {
                    setEditingTrackingId(t.id);
                    setFollowupForm({ date: format(new Date(), 'yyyy-MM-dd'), content: '' });
@@ -5466,21 +5559,21 @@ alter table system_settings disable row level security;
                     return (
                       <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full min-w-[280px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
                         <div className="flex justify-between items-start relative z-10 w-full mb-1">
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block max-w-[80%] leading-snug">本年度累计利润 (万)</span>
+                          <span className="text-[10px] font-extrabold text-zinc-550 uppercase tracking-widest block max-w-[80%] leading-snug">本年度累计利润 (万)</span>
                           <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
                             <Coins className="w-4 h-4" />
                           </span>
                         </div>
                         <div className="flex items-baseline gap-2 relative z-10">
-                          <span className={`text-3.5xl font-serif italic ${statusColor} tracking-tight leading-none`}>{currentYearActualProfit}</span>
-                          <span className="text-[10px] font-mono text-zinc-400 leading-none">/ 目标 {annualTargetProfit}</span>
+                          <span className={`text-3xl sm:text-3.5xl font-mono font-black tracking-tight ${statusColor} leading-none antialiased`}>{currentYearActualProfit}</span>
+                          <span className="text-[10px] font-mono text-zinc-500 font-semibold leading-none">/ 目标 {annualTargetProfit}</span>
                         </div>
                         
                         {/* Progress indicator */}
                         <div className="flex flex-col gap-1 w-full mt-2">
-                          <div className="flex justify-between items-center text-[9px] font-mono font-bold text-zinc-400">
+                          <div className="flex justify-between items-center text-[10px] font-mono font-bold text-zinc-500">
                             <span>年完成比例</span>
-                            <span className={statusColor}>{yearPercentage}%</span>
+                            <span className={`${statusColor} font-bold`}>{yearPercentage}%</span>
                           </div>
                           <div className="w-full bg-zinc-100/80 h-1.5 rounded-full overflow-hidden">
                             <div 
@@ -5530,21 +5623,21 @@ alter table system_settings disable row level security;
                     return (
                       <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full min-w-[280px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
                         <div className="flex justify-between items-start relative z-10 w-full mb-1">
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block max-w-[80%] leading-snug">当月利润完成 (万)</span>
+                          <span className="text-[10px] font-extrabold text-zinc-550 uppercase tracking-widest block max-w-[80%] leading-snug">当月利润完成 (万)</span>
                           <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
                             <Wallet className="w-4 h-4" />
                           </span>
                         </div>
                         <div className="flex items-baseline gap-2 relative z-10">
-                          <span className={`text-3.5xl font-serif italic ${statusColor} tracking-tight leading-none`}>{currentMonthActualProfit}</span>
-                          <span className="text-[10px] font-mono text-zinc-400 leading-none">/ 目标 {currentMonthTargetProfit}</span>
+                          <span className={`text-3xl sm:text-3.5xl font-mono font-black tracking-tight ${statusColor} leading-none antialiased`}>{currentMonthActualProfit}</span>
+                          <span className="text-[10px] font-mono text-zinc-500 font-semibold leading-none">/ 目标 {currentMonthTargetProfit}</span>
                         </div>
                         
                         {/* Progress indicator */}
                         <div className="flex flex-col gap-1 w-full mt-2">
-                          <div className="flex justify-between items-center text-[9px] font-mono font-bold text-zinc-400">
+                          <div className="flex justify-between items-center text-[10px] font-mono font-bold text-zinc-500">
                             <span>当月指标进度</span>
-                            <span className={statusColor}>{monthPercentage}%</span>
+                            <span className={`${statusColor} font-bold`}>{monthPercentage}%</span>
                           </div>
                           <div className="w-full bg-zinc-100/80 h-1.5 rounded-full overflow-hidden">
                             <div 
@@ -5594,21 +5687,21 @@ alter table system_settings disable row level security;
                     return (
                       <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full min-w-[280px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
                         <div className="flex justify-between items-start relative z-10 w-full mb-1">
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block max-w-[80%] leading-snug">当月合同完成 (万)</span>
+                          <span className="text-[10px] font-extrabold text-zinc-550 uppercase tracking-widest block max-w-[80%] leading-snug">当月合同完成 (万)</span>
                           <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
                             <FileText className="w-4 h-4" />
                           </span>
                         </div>
                         <div className="flex items-baseline gap-2 relative z-10">
-                          <span className={`text-3.5xl font-serif italic ${statusColor} tracking-tight leading-none`}>{currentMonthActualContract}</span>
-                          <span className="text-[10px] font-mono text-zinc-400 leading-none">/ 目标 {currentMonthTargetContract}</span>
+                          <span className={`text-3xl sm:text-3.5xl font-mono font-black tracking-tight ${statusColor} leading-none antialiased`}>{currentMonthActualContract}</span>
+                          <span className="text-[10px] font-mono text-zinc-500 font-semibold leading-none">/ 目标 {currentMonthTargetContract}</span>
                         </div>
                         
                         {/* Progress indicator */}
                         <div className="flex flex-col gap-1 w-full mt-2">
-                          <div className="flex justify-between items-center text-[9px] font-mono font-bold text-zinc-400">
+                          <div className="flex justify-between items-center text-[10px] font-mono font-bold text-zinc-500">
                             <span>合同签署进度</span>
-                            <span className={statusColor}>{monthPercentage}%</span>
+                            <span className={`${statusColor} font-bold`}>{monthPercentage}%</span>
                           </div>
                           <div className="w-full bg-zinc-100/80 h-1.5 rounded-full overflow-hidden">
                             <div 
@@ -5653,21 +5746,21 @@ alter table system_settings disable row level security;
                     return (
                       <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full min-w-[280px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
                         <div className="flex justify-between items-start relative z-10 w-full mb-1">
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block max-w-[80%] leading-snug">当月回款完成 (万)</span>
+                          <span className="text-[10px] font-extrabold text-zinc-550 uppercase tracking-widest block max-w-[80%] leading-snug">当月回款完成 (万)</span>
                           <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
                             <TrendingUp className="w-4 h-4" />
                           </span>
                         </div>
                         <div className="flex items-baseline gap-2 relative z-10">
-                          <span className={`text-3.5xl font-serif italic ${statusColor} tracking-tight leading-none`}>{currentMonthActualCollection}</span>
-                          <span className="text-[10px] font-mono text-zinc-400 leading-none">/ 目标 {currentMonthTargetCollection}</span>
+                          <span className={`text-3xl sm:text-3.5xl font-mono font-black tracking-tight ${statusColor} leading-none antialiased`}>{currentMonthActualCollection}</span>
+                          <span className="text-[10px] font-mono text-zinc-500 font-semibold leading-none">/ 目标 {currentMonthTargetCollection}</span>
                         </div>
                         
                         {/* Progress indicator */}
                         <div className="flex flex-col gap-1 w-full mt-2">
-                          <div className="flex justify-between items-center text-[9px] font-mono font-bold text-zinc-400">
+                          <div className="flex justify-between items-center text-[10px] font-mono font-bold text-zinc-500">
                             <span>款项收回进度</span>
-                            <span className={statusColor}>{collectionPercentage}%</span>
+                            <span className={`${statusColor} font-bold`}>{collectionPercentage}%</span>
                           </div>
                           <div className="w-full bg-zinc-100/80 h-1.5 rounded-full overflow-hidden">
                             <div 
@@ -5693,39 +5786,39 @@ alter table system_settings disable row level security;
                 <div className="flex sm:grid sm:grid-cols-2 md:grid-cols-3 gap-4 px-4 sm:px-0 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory scroll-smooth pb-2 -mx-4 sm:mx-0">
                   
                   {/* Lead Clients */}
-                  <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[104px] relative overflow-hidden group shadow-[0_4px_16px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.04)] transition-all duration-300 w-full min-w-[245px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                  <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[104px] relative overflow-hidden group shadow-[0_4px_16px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.04)] transition-all duration-300 w-full min-w-[245px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer antialiased">
                     <div className="flex justify-between items-start w-full">
-                      <span className="text-[11px] font-medium text-zinc-400">潜在客户库</span>
+                      <span className="text-[11px] font-bold tracking-wider text-zinc-500">潜在客户库</span>
                       <span className="w-6 h-6 rounded-lg bg-zinc-50 border border-zinc-100/75 flex items-center justify-center text-zinc-400">
                         <Users className="w-3.5 h-3.5" />
                       </span>
                     </div>
                     <div className="flex items-baseline gap-1.5 mt-1">
-                      <span className="text-2.5xl font-serif italic text-zinc-800 tracking-tight">{yearLeadClients}</span>
-                      <span className="text-[9px] font-mono text-zinc-400 font-bold">/ {yearTargetLeadClients} 目标</span>
+                      <span className="text-2.5xl font-mono font-extrabold text-zinc-800 tracking-tight antialiased">{yearLeadClients}</span>
+                      <span className="text-[9px] font-mono text-zinc-500 font-bold">/ {yearTargetLeadClients} 目标</span>
                     </div>
                     <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
-                      <span className="text-[9px] font-mono text-zinc-400">年度推进指数</span>
-                      <span className="text-[9px] font-mono font-bold text-zinc-600">
+                      <span className="text-[9px] font-mono text-zinc-500 font-medium">年度推进指数</span>
+                      <span className="text-[9px] font-mono font-bold text-zinc-700">
                         {yearTargetLeadClients > 0 ? Math.round((yearLeadClients / yearTargetLeadClients) * 100) : 0}%
                       </span>
                     </div>
                   </div>
                   
                   {/* Active Clients */}
-                  <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[104px] relative overflow-hidden group shadow-[0_4px_16px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.04)] transition-all duration-300 w-full min-w-[245px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                  <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[104px] relative overflow-hidden group shadow-[0_4px_16px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.04)] transition-all duration-300 w-full min-w-[245px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer antialiased">
                     <div className="flex justify-between items-start w-full">
-                      <span className="text-[11px] font-medium text-zinc-400">已开发推进中</span>
+                      <span className="text-[11px] font-bold tracking-wider text-zinc-500">已开发推进中</span>
                       <span className="w-6 h-6 rounded-lg bg-amber-50/55 border border-amber-100/30 flex items-center justify-center text-amber-600">
                         <TrendingUp className="w-3.5 h-3.5" />
                       </span>
                     </div>
                     <div className="flex items-baseline gap-1.5 mt-1">
-                      <span className="text-2.5xl font-serif italic text-amber-600 tracking-tight">{yearActiveClients}</span>
-                      <span className="text-[9px] font-mono text-zinc-400 font-bold">/ {yearTargetActiveClients} 目标</span>
+                      <span className="text-2.5xl font-mono font-extrabold text-amber-600 tracking-tight antialiased">{yearActiveClients}</span>
+                      <span className="text-[9px] font-mono text-zinc-500 font-bold">/ {yearTargetActiveClients} 目标</span>
                     </div>
                     <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
-                      <span className="text-[9px] font-mono text-zinc-400">活跃推进效率</span>
+                      <span className="text-[9px] font-mono text-zinc-500 font-medium">活跃推进效率</span>
                       <span className="text-[9px] font-mono font-bold text-amber-600">
                         {yearTargetActiveClients > 0 ? Math.round((yearActiveClients / yearTargetActiveClients) * 100) : 0}%
                       </span>
@@ -5736,21 +5829,21 @@ alter table system_settings disable row level security;
                   {(() => {
                     const isExceeded = yearTargetLostClients > 0 && yearLostClients > yearTargetLostClients;
                     return (
-                      <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[104px] relative overflow-hidden group shadow-[0_4px_16px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.04)] transition-all duration-300 w-full min-w-[245px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                      <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[104px] relative overflow-hidden group shadow-[0_4px_16px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.04)] transition-all duration-300 w-full min-w-[245px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer antialiased">
                         <div className="flex justify-between items-start w-full">
-                          <span className="text-[11px] font-medium text-zinc-400 font-sans">客户流失控制</span>
+                          <span className="text-[11px] font-bold tracking-wider text-zinc-500 font-sans">客户流失控制</span>
                           <span className={`w-6 h-6 rounded-lg flex items-center justify-center ${isExceeded ? 'bg-rose-50 border border-rose-100/30 text-rose-600 animate-pulse' : 'bg-zinc-50 border border-zinc-100/75 text-zinc-400'}`}>
                             <UserX className="w-3.5 h-3.5" />
                           </span>
                         </div>
                         <div className="flex items-baseline gap-1.5 mt-1">
-                          <span className={`text-2.5xl font-serif italic tracking-tight ${isExceeded ? 'text-rose-600 font-extrabold' : 'text-zinc-800'}`}>
+                          <span className={`text-2.5xl font-mono font-extrabold tracking-tight antialiased ${isExceeded ? 'text-rose-600 font-black' : 'text-zinc-800'}`}>
                             {yearLostClients}
                           </span>
-                          <span className="text-[9px] font-mono text-zinc-400 font-bold">/ {yearTargetLostClients} 上限</span>
+                          <span className="text-[9px] font-mono text-zinc-500 font-bold">/ {yearTargetLostClients} 上限</span>
                         </div>
                         <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
-                          <span className="text-[9px] font-mono text-zinc-400">风险预警状况</span>
+                          <span className="text-[9px] font-mono text-zinc-500 font-medium">风险预警状况</span>
                           <span className={`text-[9px] font-mono font-bold ${isExceeded ? 'text-rose-600' : 'text-emerald-600'}`}>
                             {isExceeded ? '已超出规划阀值' : '流失率在控制内'}
                           </span>
@@ -5767,7 +5860,7 @@ alter table system_settings disable row level security;
                 
                 {/* Chart 1: 月度目标完成趋势 */}
                 <div className="bg-white/95 backdrop-blur-md p-5 sm:p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] flex flex-col">
-                  <h3 id="chart-profit-title" className="text-[11px] uppercase tracking-widest font-bold mb-5 text-zinc-500 flex items-center gap-2">
+                  <h3 id="chart-profit-title" className="text-[11px] uppercase tracking-widest font-extrabold mb-5 text-zinc-500 flex items-center gap-2">
                     <span className="w-1.5 h-1.5 bg-zinc-950 rounded-full" aria-hidden="true" />
                     月度利润趋势分析 ({CURRENT_YEAR}年 / 万)
                   </h3>
@@ -5775,15 +5868,17 @@ alter table system_settings disable row level security;
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={profitTrendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }} role="img" aria-label="月度利润趋势分析面积图">
                         <CartesianGrid strokeDasharray="4 4" stroke="#1A1A1A" strokeOpacity={0.03} vertical={false} />
-                        <XAxis dataKey="name" fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#1A1A1A', opacity: 0.5}} />
-                        <YAxis fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#1A1A1A', opacity: 0.5}} />
+                        <XAxis dataKey="name" fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#27272A', opacity: 0.85, fontWeight: 600}} />
+                        <YAxis fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#27272A', opacity: 0.85, fontWeight: 600}} />
                         <Tooltip 
                           contentStyle={{
                             backgroundColor: '#FFFFFF',
                             border: 'none',
                             borderRadius: '12px',
-                            boxShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.05)',
+                            boxShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.07)',
                             fontSize: '11px',
+                            fontFamily: 'monospace',
+                            fontWeight: 605,
                             padding: '10px 14px'
                           }} 
                         />
@@ -5808,14 +5903,14 @@ alter table system_settings disable row level security;
 
                 {/* Chart 2: 研发推进 & 任务分布 */}
                 <div className="bg-white/95 backdrop-blur-md p-5 sm:p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] flex flex-col">
-                  <h3 id="chart-task-title" className="text-[11px] uppercase tracking-widest font-bold mb-5 text-zinc-500 flex items-center gap-2">
+                  <h3 id="chart-task-title" className="text-[11px] uppercase tracking-widest font-extrabold mb-5 text-zinc-500 flex items-center gap-2">
                     <span className="w-1.5 h-1.5 bg-zinc-950 rounded-full" aria-hidden="true" />
                     月度需求大盘分布
                   </h3>
                   <div className="h-64 w-full flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-zinc-950/20" role="figure" aria-labelledby="chart-task-title" tabIndex={0}>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart role="img" aria-label="月度需求统计饼图">
-                        <text x="50%" y="45%" textAnchor="middle" dominantBaseline="middle" className="fill-zinc-900 font-serif italic text-3xl font-bold">
+                        <text x="50%" y="45%" textAnchor="middle" dominantBaseline="middle" className="fill-zinc-900 font-sans text-3.5xl font-black tracking-tight select-none">
                           {activeMonthReqs.length}
                         </text>
                         <text x="50%" y="54%" textAnchor="middle" dominantBaseline="middle" className="fill-zinc-400 font-bold uppercase tracking-widest text-[9px]">
@@ -5844,12 +5939,14 @@ alter table system_settings disable row level security;
                             backgroundColor: '#FFFFFF',
                             border: 'none',
                             borderRadius: '12px',
-                            boxShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.05)',
+                            boxShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.07)',
                             fontSize: '11px',
+                            fontFamily: 'monospace',
+                            fontWeight: 605,
                             padding: '10px 14px'
                           }} 
                         />
-                        <Legend wrapperStyle={{ fontSize: '10px', opacity: 0.7, paddingTop: '10px' }} iconType="circle" />
+                        <Legend wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: 600, opacity: 0.85, paddingTop: '10px' }} iconType="circle" />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
@@ -5857,7 +5954,7 @@ alter table system_settings disable row level security;
 
                 {/* Chart 3: 月度利润统计 (Bar Chart, spanning full-width for gorgeous balance) */}
                 <div className="bg-white/95 backdrop-blur-md p-5 sm:p-6 lg:col-span-2 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] flex flex-col">
-                  <h3 id="chart-outcome-title" className="text-[11px] uppercase tracking-widest font-bold mb-5 text-zinc-500 flex items-center gap-2">
+                  <h3 id="chart-outcome-title" className="text-[11px] uppercase tracking-widest font-extrabold mb-5 text-zinc-500 flex items-center gap-2">
                     <span className="w-1.5 h-1.5 bg-zinc-950 rounded-full" aria-hidden="true" />
                     月度累计利润效益比 ({CURRENT_YEAR}年 / 万)
                   </h3>
@@ -5865,20 +5962,22 @@ alter table system_settings disable row level security;
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={profitTrendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }} role="img" aria-label="月度利润统计柱状图">
                         <CartesianGrid strokeDasharray="4 4" stroke="#1A1A1A" strokeOpacity={0.03} vertical={false} />
-                        <XAxis dataKey="name" fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#1A1A1A', opacity: 0.5}} />
-                        <YAxis fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#1A1A1A', opacity: 0.5}} allowDecimals={false} />
+                        <XAxis dataKey="name" fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#27272A', opacity: 0.85, fontWeight: 600}} />
+                        <YAxis fontSize={10} fontFamily="monospace" axisLine={false} tickLine={false} tick={{fill: '#27272A', opacity: 0.85, fontWeight: 600}} allowDecimals={false} />
                         <Tooltip 
                           contentStyle={{
                             backgroundColor: '#FFFFFF',
                             border: 'none',
                             borderRadius: '12px',
-                            boxShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.05)',
+                            boxShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.07)',
                             fontSize: '11px',
+                            fontFamily: 'monospace',
+                            fontWeight: 605,
                             padding: '10px 14px'
                           }} 
                           cursor={{fill: '#1a1a1a', opacity: 0.02}} 
                         />
-                        <Legend wrapperStyle={{ fontSize: '10px', opacity: 0.7, paddingTop: '10px' }} iconType="circle" />
+                        <Legend wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: 600, opacity: 0.85, paddingTop: '10px' }} iconType="circle" />
                         <Bar dataKey="target" fill="#64748b" name="目标利润" radius={[4, 4, 0, 0]} maxBarSize={32} />
                         <Bar dataKey="actual" fill="#10b981" name="实际利润" radius={[4, 4, 0, 0]} maxBarSize={32} />
                       </BarChart>
@@ -6851,6 +6950,18 @@ alter table system_settings disable row level security;
                       {Object.entries(statusLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
               </div>
+              {trackingForm.status === 'terminated' && (
+                <div className="col-span-2 mt-2">
+                    <label className="block text-[10px] uppercase font-bold tracking-wider text-stone-550 mb-1.5">作废理由 <span className="text-red-500">*</span></label>
+                    <textarea 
+                      value={trackingForm.terminationReason || ''} 
+                      onChange={(e) => setTrackingForm({...trackingForm, terminationReason: e.target.value})} 
+                      placeholder="请输入作废此项目跟踪记录的具体原因/说明"
+                      className="w-full bg-stone-50 border border-[#1A1A1A]/10 outline-none p-2.5 text-xs h-20 resize-none rounded"
+                      required
+                    />
+                </div>
+              )}
             </div>
             {trackingError && (
               <div className="mt-4 text-red-500 text-xs font-bold">{trackingError}</div>
@@ -6868,6 +6979,10 @@ alter table system_settings disable row level security;
               <button 
                 onClick={() => {
                   /* Basic Validation */
+                  if (trackingForm.status === 'terminated' && !(trackingForm.terminationReason || '').trim()) {
+                    setTrackingError('项目作废时必须登记作废理由');
+                    return;
+                  }
                   if (trackingForm.contactPhone && !/^1\d{10}$/.test(trackingForm.contactPhone)) { 
                     setTrackingError('请输入正确的11位手机号码'); 
                     return; 
@@ -6999,6 +7114,19 @@ alter table system_settings disable row level security;
               {/* Left Column: Detailed Info */}
               <div className={`w-full md:w-[35%] lg:w-[30%] border-b md:border-b-0 md:border-r border-[#1A1A1A]/10 p-5 md:p-8 bg-white space-y-6 md:space-y-8 shrink-0 md:h-full overflow-y-auto custom-scrollbar ${mobileDetailTab === 'info' ? 'block' : 'hidden md:block'}`}>
                 
+                {/* 作废理由 */}
+                {selectedTrackingDetail.status === 'terminated' && (
+                  <div className="p-4 bg-[#FFF2F2] border-l-4 border-red-600 rounded-sm shadow-xs">
+                    <h4 className="text-[10px] uppercase tracking-widest font-bold text-red-600 mb-1.5 flex items-center gap-1.5">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-500"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                      项目已作废
+                    </h4>
+                    <p className="text-xs text-red-800 leading-relaxed font-serif italic border-t border-red-100/50 pt-1.5 mt-1.5">
+                      “ {selectedTrackingDetail.terminationReason || '未登记具体说明理由'} ”
+                    </p>
+                  </div>
+                )}
+
                 {/* 金额核算 */}
                 <div className="p-4 sm:p-5 bg-stone-50 border border-[#1A1A1A]/5 rounded shadow-xs relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl -mr-6 -mt-6"></div>
@@ -7224,10 +7352,20 @@ alter table system_settings disable row level security;
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
               确认作废项目
             </h3>
-            <p className="text-sm opacity-80 mb-6 leading-relaxed">
-              您即将作废此项目跟踪记录。标为作废后，代表该项目不再继续跟进。<br/><br/>
-              <b>此操作不可逆，请确认是否继续。</b>
+            <p className="text-xs opacity-70 mb-4 leading-relaxed">
+              您即将作废此项目跟踪记录。标为作废后，代表该项目不再继续跟进。<b>此操作不可逆，请在下方登记作废具体理由。</b>
             </p>
+
+            <div className="mb-5">
+              <label className="block text-[10px] uppercase font-bold tracking-wider text-stone-500 mb-1.5">作废说明 / 理由 <span className="text-red-500">*</span></label>
+              <textarea
+                value={terminationReasonInput}
+                onChange={(e) => setTerminationReasonInput(e.target.value)}
+                placeholder="例如：客户预算不足、竞品低价中标、沟通不顺、项目取消等"
+                className="w-full h-20 p-2.5 text-xs border border-[#1A1A1A]/10 focus:border-[#1A1A1A] outline-none resize-none bg-stone-50 rounded"
+              />
+            </div>
+
             <div className="flex justify-end gap-3 mt-4">
               <button 
                 onClick={() => { setIsTerminateTrackingModalOpen(false); setTrackingToTerminate(null); }}
@@ -7237,7 +7375,12 @@ alter table system_settings disable row level security;
               </button>
               <button 
                 onClick={confirmTerminateTracking}
-                className="px-4 py-2 text-xs font-bold uppercase tracking-widest bg-red-600 text-white hover:bg-red-700 transition-colors"
+                disabled={!terminationReasonInput.trim()}
+                className={`px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${
+                  terminationReasonInput.trim() 
+                    ? 'bg-red-600 text-white hover:bg-red-700 cursor-pointer' 
+                    : 'bg-red-300 text-white cursor-not-allowed'
+                }`}
               >
                 确认作废
               </button>
