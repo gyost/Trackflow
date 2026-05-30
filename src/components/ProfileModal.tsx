@@ -20,7 +20,7 @@ export default function ProfileModal({ onClose, currentUser, setCurrentUser }: P
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-end sm:items-center overflow-y-auto p-0 pt-10 sm:p-4">
-      <div className="bg-white max-w-sm w-full p-6 sm:p-8 sm:border border-[#1A1A1A] shadow-[8px_8px_0px_#1A1A1A] relative selection:bg-[#1A1A1A] selection:text-white mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+      <div className="bg-white max-w-sm w-full p-6 sm:p-8 sm:border border-[#1A1A1A] shadow-[8px_8px_0px_#1A1A1A] relative selection:bg-[#1A1A1A] selection:text-white mt-auto sm:mt-0 rounded-t-2xl sm:rounded-2xl">
         <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
         <button 
           onClick={onClose}
@@ -63,7 +63,7 @@ export default function ProfileModal({ onClose, currentUser, setCurrentUser }: P
           <div className="pt-6">
             <button 
               onClick={handleSave}
-              className="w-full bg-[#1A1A1A] text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-black transition-colors"
+              className="w-full bg-[#1A1A1A] text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-black transition-colors rounded-xl"
             >
               保存信息
             </button>

@@ -306,7 +306,7 @@ export default function TrackFlowIntro({ onClose }: TrackFlowIntroProps) {
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, index)}
-                  className={`bg-white border-2 p-6 lg:p-7 relative overflow-hidden transition-colors transition-shadow duration-200 shadow-[4px_4px_0px_#1A1A1A] cursor-grab active:cursor-grabbing select-none group ${
+                  className={`bg-white border-2 p-6 lg:p-7 relative overflow-hidden transition-colors transition-shadow duration-200 shadow-[4px_4px_0px_#1A1A1A] cursor-grab active:cursor-grabbing select-none group rounded-2xl ${
                     isHoveredAsDropTarget ? 'border-amber-500 bg-amber-50/20 translate-x-1 translate-y-1 shadow-none' : 'border-[#1A1A1A] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_#1A1A1A]'
                   } ${
                     index === 0 ? 'lg:col-span-6' : index === 1 ? 'lg:col-span-4' : 'lg:col-span-12 lg:col-span-4'

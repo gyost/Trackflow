@@ -33,6 +33,7 @@ import ProfileModal from './components/ProfileModal';
 import Logo from './components/Logo';
 import TrackFlowIntro from './components/TrackFlowIntro';
 import { Compass } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 function pruneDuplicates<T extends { id: any }>(arr: T[]): T[] {
   if (!Array.isArray(arr)) return [];
@@ -57,7 +58,7 @@ const TaskProgressInput = React.memo(({ task, onUpdate, disabled = false }: { ta
 
   return (
     <div 
-      className={`flex items-center gap-0.5 shrink-0 bg-[#EBE9E4] px-1 py-0.5 border border-[#1A1A1A]/10 ${disabled ? 'opacity-80 cursor-not-allowed select-none' : ''}`}
+      className={`flex items-center gap-0.5 shrink-0 bg-[#EBE9E4] px-1.5 py-0.5 border border-[#1A1A1A]/10 rounded-md ${disabled ? 'opacity-80 cursor-not-allowed select-none' : ''}`}
       onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
@@ -152,7 +153,7 @@ const TaskItemCard = React.memo(({
   };
 
   return (
-    <div className={`border-l-2 ${isCompleted ? 'border-[#1A1A1A]/30 opacity-60 bg-[#1A1A1A]/5' : 'border-[#1A1A1A] bg-white/70'} p-3 hover:bg-[#1A1A1A]/10 transition-colors flex items-start gap-3`}>
+    <div className={`border-l-2 ${isCompleted ? 'border-[#1A1A1A]/30 opacity-60 bg-[#1A1A1A]/5' : 'border-[#1A1A1A] bg-white/70'} p-4 hover:bg-[#1A1A1A]/10 transition-colors flex items-start gap-3 rounded-2xl border border-black/5 shadow-[0_2px_8px_rgba(0,0,0,0.02)]`}>
       <div className="pt-0.5">
         <input 
           type="checkbox" 
@@ -170,7 +171,7 @@ const TaskItemCard = React.memo(({
         <div className="flex justify-between items-start gap-2 mb-2">
           <p className={`text-sm font-bold leading-snug ${isCompleted ? 'line-through' : ''}`}>
             {task.title}
-            {task.projectName && <span className="ml-2 text-[10px] bg-[#1A1A1A]/10 px-1.5 py-0.5 text-[#1A1A1A]/80 border border-[#1A1A1A]/20 font-normal tracking-wide inline-block">{task.projectName}</span>}
+            {task.projectName && <span className="ml-2 text-[10px] bg-[#1A1A1A]/10 px-1.5 py-0.5 text-[#1A1A1A]/80 border border-[#1A1A1A]/20 rounded-md font-normal tracking-wide inline-block">{task.projectName}</span>}
           </p>
           
           <TaskProgressInput 
@@ -181,7 +182,7 @@ const TaskItemCard = React.memo(({
         </div>
         
         {task.outcome && (
-          <div className="mt-2 mb-2 bg-[#1A1A1A]/5 p-2 border border-[#1A1A1A]/10">
+          <div className="mt-2 mb-2 bg-[#1A1A1A]/5 p-2.5 border border-[#1A1A1A]/10 rounded-xl">
             <p className="text-[10px] font-bold opacity-60 uppercase mb-1">产出成果</p>
             <div 
               className="text-xs opacity-80 font-serif line-clamp-2 [&>p]:m-0"
@@ -248,7 +249,7 @@ const MemberTaskCard = React.memo(({
   const prunedTasks = React.useMemo(() => pruneDuplicates(memberTasks), [memberTasks]);
 
   return (
-    <div className="bg-[#EBE9E4]/30 border border-[#1A1A1A]/10 p-5 sm:p-6 transition-colors hover:bg-[#EBE9E4]/60">
+    <div className="bg-[#EBE9E4]/30 border border-[#1A1A1A]/10 p-5 sm:p-6 transition-colors hover:bg-[#EBE9E4]/60 rounded-2xl">
       <div className="flex flex-col lg:flex-row gap-6">
         
         {/* Left Sidebar (Avatar, Name, Stats) */}
@@ -4515,7 +4516,7 @@ alter table system_settings disable row level security;
           <div className="mb-10 lg:mb-auto flex-1">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-[11px] uppercase tracking-[0.2em] font-extrabold flex items-center text-[#1A1A1A]/80">
-                <span className="w-2.5 h-2.5 bg-[#1A1A1A] mr-3 rounded-sm scale-90"></span> {currentView === 'dashboard' ? `${selectedQuarter.split('-')[0]}年 ${selectedQuarter.split('-')[1]} 核心目标` : currentView === 'requirements' ? `${reqTimeFrame === 'month' ? selectedMonth.split('-')[0] + '年' + selectedMonth.split('-')[1] + '月' : reqTimeFrame === 'quarter' ? selectedQuarter.split('-')[0] + '年 ' + selectedQuarter.split('-')[1] : selectedYear + '年'} 需求统计` : `${selectedMonth.split('-')[0]}年${selectedMonth.split('-')[1]}月 目标`}
+                <span className="w-2.5 h-2.5 bg-[#1A1A1A] mr-3 rounded-full scale-90"></span> {currentView === 'dashboard' ? `${selectedQuarter.split('-')[0]}年 ${selectedQuarter.split('-')[1]} 核心目标` : currentView === 'requirements' ? `${reqTimeFrame === 'month' ? selectedMonth.split('-')[0] + '年' + selectedMonth.split('-')[1] + '月' : reqTimeFrame === 'quarter' ? selectedQuarter.split('-')[0] + '年 ' + selectedQuarter.split('-')[1] : selectedYear + '年'} 需求统计` : `${selectedMonth.split('-')[0]}年${selectedMonth.split('-')[1]}月 目标`}
               </h2>
               <div className="flex items-center gap-2">
                 {currentView === 'requirements' && (
@@ -5379,18 +5380,18 @@ alter table system_settings disable row level security;
                           >
                             <div className="flex flex-col sm:flex-row sm:justify-between items-start gap-2 mb-3 relative z-10">
                               <div className="flex gap-1.5 flex-wrap">
-                                <span className={`text-[8px] px-1.5 py-0.5 rounded-sm font-bold uppercase ${
+                                <span className={`text-[8px] px-1.5 py-0.5 rounded-md font-bold uppercase ${
                                   req.priority === 'high' ? 'bg-red-50 text-red-600 border border-red-200' : 
                                   req.priority === 'medium' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 
                                   'bg-gray-50 text-gray-500 border border-gray-200'
                                 }`}>
                                   {req.priority === 'high' ? 'P0' : req.priority === 'medium' ? 'P1' : 'P2'}
                                 </span>
-                                <span className="text-[8px] px-1.5 py-0.5 rounded-sm font-bold uppercase bg-[#1A1A1A]/5 border border-[#1A1A1A]/10 opacity-70">
+                                <span className="text-[8px] px-1.5 py-0.5 rounded-md font-bold uppercase bg-[#1A1A1A]/5 border border-[#1A1A1A]/10 opacity-70">
                                   {req.source === 'customer' ? (req.customerName || '客户') : req.source === 'marketing' ? '市场' : req.source === 'product' ? '规划' : req.source === 'internal' ? (req.internalSourceDetail || '内部') : '技术'}
                                 </span>
                               </div>
-                              <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity self-end sm:self-auto flex-wrap justify-end items-center bg-white/50 backdrop-blur-sm sm:bg-transparent rounded-sm p-1 sm:p-0">
+                              <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity self-end sm:self-auto flex-wrap justify-end items-center bg-white/50 backdrop-blur-sm sm:bg-transparent rounded-md p-1 sm:p-0">
                                 {(isSystemAdmin || currentUser.id === req.submitterId) && (
                                   <select 
                                     value={req.status}
@@ -5399,7 +5400,7 @@ alter table system_settings disable row level security;
                                       e.stopPropagation();
                                       updateRequirementStatus(req.id, e.target.value as RequirementStatus);
                                     }}
-                                    className="text-[10px] bg-white sm:bg-transparent outline-none cursor-pointer font-bold uppercase hover:bg-black/5 py-1.5 px-2 focus:bg-white border border-[#1A1A1A]/10 sm:border-transparent focus:border-[#1A1A1A]/20 rounded-sm"
+                                    className="text-[10px] bg-white sm:bg-transparent outline-none cursor-pointer font-bold uppercase hover:bg-black/5 py-1.5 px-2 focus:bg-white border border-[#1A1A1A]/10 sm:border-transparent focus:border-[#1A1A1A]/20 rounded-md"
                                   >
                                     <option value="backlog">待评</option>
                                     <option value="reviewing">评审</option>
@@ -5469,28 +5470,28 @@ alter table system_settings disable row level security;
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs font-mono uppercase tracking-widest opacity-60">第{currentWeekNum}周 / {format(weekStart, 'MM月dd日')} - {format(weekEnd, 'MM月dd日')}</span>
                       {isSameWeek(new Date(), currentWeekDate, { weekStartsOn: 1 }) && (
-                        <span className="text-[9px] bg-[#1A1A1A] text-white px-1.5 py-0.5 rounded-sm font-bold uppercase tracking-wider">本周</span>
+                        <span className="text-[9px] bg-[#1A1A1A] text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">本周</span>
                       )}
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-1 bg-[#1A1A1A]/5 p-1 rounded-sm border border-[#1A1A1A]/10">
+                  <div className="flex items-center gap-1 bg-[#1A1A1A]/5 p-1 rounded-full border border-[#1A1A1A]/10">
                     <button 
                       onClick={() => setCurrentWeekDate(subWeeks(currentWeekDate, 1))}
-                      className="p-1.5 hover:bg-[#1A1A1A]/10 transition-colors rounded-sm"
+                      className="p-1.5 hover:bg-[#1A1A1A]/10 transition-colors rounded-full"
                       title="上周"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m15 18-6-6 6-6"/></svg>
                     </button>
                     <button 
                       onClick={() => setCurrentWeekDate(new Date())}
-                      className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border-x border-[#1A1A1A]/10 hover:bg-[#1A1A1A]/10 transition-colors"
+                      className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border-x border-[#1A1A1A]/10 hover:bg-[#1A1A1A]/10 transition-colors rounded-full"
                     >
                       返回本周
                     </button>
                     <button 
                       onClick={() => setCurrentWeekDate(addWeeks(currentWeekDate, 1))}
-                      className="p-1.5 hover:bg-[#1A1A1A]/10 transition-colors rounded-sm"
+                      className="p-1.5 hover:bg-[#1A1A1A]/10 transition-colors rounded-full"
                       title="下周"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m9 18 6-6-6-6"/></svg>
@@ -5498,7 +5499,7 @@ alter table system_settings disable row level security;
                   </div>
                 </div>
                 <div className="flex items-center gap-4 mb-5">
-                  <span className="text-[10px] px-2 py-0.5 border border-[#1A1A1A] font-bold tracking-widest">市场开拓序列</span>
+                  <span className="text-[10px] px-3 py-1 bg-[#1A1A1A]/5 border border-[#1A1A1A]/10 rounded-full font-bold tracking-widest">市场开拓序列</span>
                   <div className="h-[1px] flex-1 bg-[#1A1A1A] opacity-10"></div>
                 </div>
                 <TaskDepartmentGroups
@@ -5529,28 +5530,28 @@ alter table system_settings disable row level security;
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs font-mono uppercase tracking-widest opacity-60">第{currentWeekNum}周 / {format(weekStart, 'MM月dd日')} - {format(weekEnd, 'MM月dd日')}</span>
                       {isSameWeek(new Date(), currentWeekDate, { weekStartsOn: 1 }) && (
-                        <span className="text-[9px] bg-[#1A1A1A] text-white px-1.5 py-0.5 rounded-sm font-bold uppercase tracking-wider">本周</span>
+                        <span className="text-[9px] bg-[#1A1A1A] text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">本周</span>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 bg-[#1A1A1A]/5 p-1 rounded-sm border border-[#1A1A1A]/10">
+                  <div className="flex items-center gap-1 bg-[#1A1A1A]/5 p-1 rounded-full border border-[#1A1A1A]/10">
                     <button 
                       onClick={() => setCurrentWeekDate(subWeeks(currentWeekDate, 1))}
-                      className="p-1.5 hover:bg-[#1A1A1A]/10 transition-colors rounded-sm"
+                      className="p-1.5 hover:bg-[#1A1A1A]/10 transition-colors rounded-full"
                       title="上周"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m15 18-6-6 6-6"/></svg>
                     </button>
                     <button 
                       onClick={() => setCurrentWeekDate(new Date())}
-                      className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border-x border-[#1A1A1A]/10 hover:bg-[#1A1A1A]/10 transition-colors"
+                      className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border-x border-[#1A1A1A]/10 hover:bg-[#1A1A1A]/10 transition-colors rounded-full"
                     >
                       返回本周
                     </button>
                     <button 
                       onClick={() => setCurrentWeekDate(addWeeks(currentWeekDate, 1))}
-                      className="p-1.5 hover:bg-[#1A1A1A]/10 transition-colors rounded-sm"
+                      className="p-1.5 hover:bg-[#1A1A1A]/10 transition-colors rounded-full"
                       title="下周"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m9 18 6-6-6-6"/></svg>
@@ -5558,7 +5559,7 @@ alter table system_settings disable row level security;
                   </div>
                 </div>
                 <div className="flex items-center gap-4 mb-5">
-                  <span className="text-[10px] px-2 py-0.5 border border-[#1A1A1A] font-bold tracking-widest">产品研发序列</span>
+                  <span className="text-[10px] px-3 py-1 bg-[#1A1A1A]/5 border border-[#1A1A1A]/10 rounded-full font-bold tracking-widest">产品研发序列</span>
                   <div className="h-[1px] flex-1 bg-[#1A1A1A] opacity-10"></div>
                 </div>
                 <TaskDepartmentGroups
@@ -6031,55 +6032,73 @@ alter table system_settings disable row level security;
                 </div>
 
                 {/* Chart 2: 研发推进 & 任务分布 */}
-                <div className="bg-white/95 backdrop-blur-md p-5 sm:p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] flex flex-col">
-                  <h3 id="chart-task-title" className="text-[11px] uppercase tracking-widest font-extrabold mb-5 text-zinc-500 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-zinc-950 rounded-full" aria-hidden="true" />
-                    月度需求大盘分布
-                  </h3>
-                  <div className="h-64 w-full flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-zinc-950/20" role="figure" aria-labelledby="chart-task-title" tabIndex={0}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart role="img" aria-label="月度需求统计饼图">
-                        <text x="50%" y="45%" textAnchor="middle" dominantBaseline="middle" className="fill-zinc-900 font-sans text-3.5xl font-black tracking-tight select-none">
-                          {activeMonthReqs.length}
-                        </text>
-                        <text x="50%" y="54%" textAnchor="middle" dominantBaseline="middle" className="fill-zinc-400 font-bold uppercase tracking-widest text-[9px]">
-                          需求总计
-                        </text>
-                        <Pie 
-                          data={pieData} 
-                          dataKey="value" 
-                          nameKey="name" 
-                          cx="50%" 
-                          cy="48%" 
-                          outerRadius={85} 
-                          innerRadius={58}
-                          paddingAngle={3}
-                          label={({ name, percent }) => percent > 0.05 ? `${name} ${(percent * 100).toFixed(0)}%` : ''}
-                          labelLine={false}
-                          stroke="#FFFFFF"
-                          strokeWidth={2}
-                        >
-                          {pieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip 
-                          contentStyle={{
-                            backgroundColor: '#FFFFFF',
-                            border: 'none',
-                            borderRadius: '12px',
-                            boxShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.07)',
-                            fontSize: '11px',
-                            fontFamily: 'monospace',
-                            fontWeight: 605,
-                            padding: '10px 14px'
-                          }} 
-                        />
-                        <Legend wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: 600, opacity: 0.85, paddingTop: '10px' }} iconType="circle" />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+                <AnimatePresence mode="popLayout">
+                  <motion.div 
+                    key={`demand-distribution-${selectedMonth}-${activeMonthReqs.length}`}
+                    initial={{ opacity: 0, scale: 0.97, y: 12 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.98, y: -12 }}
+                    transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                    className="bg-white/95 backdrop-blur-md p-5 sm:p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] flex flex-col"
+                  >
+                    <h3 id="chart-task-title" className="text-[11px] uppercase tracking-widest font-extrabold mb-5 text-zinc-500 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-zinc-950 rounded-full animate-pulse" aria-hidden="true" />
+                      月度需求大盘分布
+                    </h3>
+                    <div className="h-64 w-full flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-zinc-950/20" role="figure" aria-labelledby="chart-task-title" tabIndex={0}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart role="img" aria-label="月度需求统计饼图">
+                          <text x="50%" y="45%" textAnchor="middle" dominantBaseline="middle" className="fill-zinc-900 font-sans text-3.5xl font-black tracking-tight select-none">
+                            {activeMonthReqs.length}
+                          </text>
+                          <text x="50%" y="54%" textAnchor="middle" dominantBaseline="middle" className="fill-zinc-400 font-bold uppercase tracking-widest text-[9px]">
+                            需求总计
+                          </text>
+                          <Pie 
+                            data={pieData} 
+                            dataKey="value" 
+                            nameKey="name" 
+                            cx="50%" 
+                            cy="48%" 
+                            outerRadius={85} 
+                            innerRadius={58}
+                            paddingAngle={3}
+                            label={({ name, percent }) => percent > 0.05 ? `${name} ${(percent * 100).toFixed(0)}%` : ''}
+                            labelLine={false}
+                            stroke="#FFFFFF"
+                            strokeWidth={2}
+                            isAnimationActive={true}
+                            animationDuration={1000}
+                            animationBegin={0}
+                            animationEasing="ease-out"
+                          >
+                            {pieData.map((entry, index) => (
+                              <Cell 
+                                key={`cell-${index}`} 
+                                fill={entry.color} 
+                                style={{ outline: 'none' }}
+                                className="cursor-pointer transition-all duration-300 hover:opacity-90 origin-center"
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{
+                              backgroundColor: '#FFFFFF',
+                              border: 'none',
+                              borderRadius: '12px',
+                              boxShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.07)',
+                              fontSize: '11px',
+                              fontFamily: 'monospace',
+                              fontWeight: 605,
+                              padding: '10px 14px'
+                            }} 
+                          />
+                          <Legend wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: 600, opacity: 0.85, paddingTop: '10px' }} iconType="circle" />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
 
                 {/* Chart 3: 月度利润统计 (Bar Chart, spanning full-width for gorgeous balance) */}
                 <div className="bg-white/95 backdrop-blur-md p-5 sm:p-6 lg:col-span-2 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] flex flex-col">
@@ -6178,7 +6197,7 @@ alter table system_settings disable row level security;
       {/* Release Goal Modal */}
       {isReleaseGoalModalOpen && (
         <div className="fixed inset-0 bg-[#1A1A1A]/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
-          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-2xl">
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <button 
               onClick={() => setIsReleaseGoalModalOpen(false)}
@@ -6301,7 +6320,7 @@ alter table system_settings disable row level security;
       {/* Goal Setting Modal */}
       {isGoalModalOpen && (
         <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
-          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-2xl">
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <button 
@@ -6427,7 +6446,7 @@ alter table system_settings disable row level security;
       {/* Edit Target Modal */}
       {isEditModalOpen && editingPlan && (
         <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
-          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-2xl">
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <button 
@@ -6473,7 +6492,7 @@ alter table system_settings disable row level security;
       {/* Actual Progress Modal */}
       {isActualModalOpen && editingPlan && (
         <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
-          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-2xl">
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <button 
@@ -6522,7 +6541,7 @@ alter table system_settings disable row level security;
       {/* Add Task Modal */}
       {isTaskModalOpen && (
         <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
-          <div className="bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-md h-[90dvh] sm:h-auto max-h-[90dvh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-none relative">
+          <div className="bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-md h-[90dvh] sm:h-auto max-h-[90dvh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-2xl relative">
             <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2 z-50"></div>
             
             {/* Header */}
@@ -6675,7 +6694,7 @@ alter table system_settings disable row level security;
       {/* Add Outcome Modal */}
       {isOutcomeModalOpen && (
         <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
-          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="bg-[#F7F6F2] pt-8 p-4 sm:p-8 min-h-[50vh] max-w-md w-full border-t sm:border border-[#1A1A1A] shadow-2xl relative h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-2xl">
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <button 
@@ -6776,7 +6795,7 @@ alter table system_settings disable row level security;
       {/* Add Requirement Modal */}
       {isRequirementModalOpen && (
         <div className="fixed inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
-          <div className="bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-md h-[90dvh] sm:h-auto max-h-[90dvh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-none relative">
+          <div className="bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-md h-[90dvh] sm:h-auto max-h-[90dvh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-2xl relative">
             <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2 z-50"></div>
             
             {/* Header */}
@@ -6942,7 +6961,7 @@ alter table system_settings disable row level security;
             className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm"
             onClick={() => setIsRequirementRecycleBinOpen(false)}
           />
-          <div className="relative bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-3xl h-[100dvh] sm:h-[80vh] max-h-[100dvh] sm:max-h-[80vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-sm">
+          <div className="relative bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-3xl h-[100dvh] sm:h-[80vh] max-h-[100dvh] sm:max-h-[80vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-2xl">
             <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2 z-50"></div>
             <div className="flex justify-between items-center px-6 sm:px-8 py-5 pt-8 sm:pt-6 border-b border-[#1A1A1A]/5 bg-black/[0.02]">
               <div className="flex items-center gap-3">
@@ -6967,11 +6986,11 @@ alter table system_settings disable row level security;
               ) : (
                 <div className="grid grid-cols-1 gap-4">
                   {pruneDuplicates(requirements.filter(r => r.deleted)).map((req) => (
-                    <div key={req.id} className="border border-[#1A1A1A]/10 p-5 bg-white flex justify-between items-center group">
+                    <div key={req.id} className="border border-[#1A1A1A]/10 p-5 bg-white flex justify-between items-center group rounded-2xl">
                       <div className="flex-1 pr-8">
                         <div className="flex items-center gap-3 mb-2">
                            <span className="text-[8px] font-mono opacity-40 uppercase tracking-widest">{req.deletedAt}</span>
-                           <span className="text-[8px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded-sm font-bold uppercase ring-1 ring-red-100">已删除</span>
+                           <span className="text-[8px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded-md font-bold uppercase ring-1 ring-red-100">已删除</span>
                         </div>
                         <h4 className="text-sm font-bold mb-1 opacity-80">{req.title}</h4>
                         <p className="text-[10px] opacity-40 line-clamp-1 italic font-serif">{(req.description || "").replace(/<[^>]*>/g, " ")}</p>
@@ -7030,7 +7049,7 @@ alter table system_settings disable row level security;
       {isTrackingModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
           <div className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm" onClick={() => { setIsTrackingModalOpen(false); setTrackingError(''); }} />
-          <div className="relative bg-white pt-8 sm:pt-6 sm:border border-[#1A1A1A]/10 w-full sm:max-w-lg p-4 sm:p-8 shadow-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:rounded-sm overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="relative bg-white pt-8 sm:pt-6 sm:border border-[#1A1A1A]/10 w-full sm:max-w-lg p-4 sm:p-8 shadow-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:rounded-2xl overflow-y-auto custom-scrollbar mt-auto sm:mt-0 rounded-t-2xl sm:rounded-2xl">
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <h3 className="text-2xl font-serif italic mb-6">{editingTrackingId ? '编辑项目' : '新增项目'}</h3>
@@ -7136,7 +7155,7 @@ alter table system_settings disable row level security;
       {isFollowupModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-10 sm:p-4">
           <div className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm" onClick={closeFollowupModal} />
-          <div className="relative bg-white pt-8 sm:pt-6 sm:border border-[#1A1A1A]/10 w-full sm:max-w-2xl p-4 sm:p-8 shadow-2xl flex flex-col h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:rounded-sm mt-auto sm:mt-0 rounded-t-2xl sm:rounded-none">
+          <div className="relative bg-white pt-8 sm:pt-6 sm:border border-[#1A1A1A]/10 w-full sm:max-w-2xl p-4 sm:p-8 shadow-2xl flex flex-col h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:rounded-2xl mt-auto sm:mt-0 rounded-t-2xl sm:rounded-2xl">
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
           <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2"></div>
             <h3 className="text-2xl font-serif italic mb-6 shrink-0">{editingFollowupId ? '编辑跟进记录' : '添加跟进记录'}</h3>
@@ -7184,7 +7203,7 @@ alter table system_settings disable row level security;
       {isTrackingDetailModalOpen && selectedTrackingDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center sm:p-6 lg:p-8">
           <div className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm" onClick={() => setIsTrackingDetailModalOpen(false)} />
-          <div className="relative bg-white sm:border border-[#1A1A1A]/10 w-full sm:max-w-5xl h-[100dvh] sm:h-full max-h-[100dvh] sm:max-h-[90vh] shadow-xl sm:shadow-2xl flex flex-col animate-in zoom-in-95 sm:zoom-in-100 duration-300 sm:rounded-sm overflow-hidden">
+          <div className="relative bg-white sm:border border-[#1A1A1A]/10 w-full sm:max-w-5xl h-[100dvh] sm:h-full max-h-[100dvh] sm:max-h-[90vh] shadow-xl sm:shadow-2xl flex flex-col animate-in zoom-in-95 sm:zoom-in-100 duration-300 sm:rounded-2xl overflow-hidden">
             
             {/* Header Area */}
             <div className="px-6 md:px-8 py-5 border-b border-[#1A1A1A]/10 bg-white flex flex-col shrink-0 relative">
@@ -7245,7 +7264,7 @@ alter table system_settings disable row level security;
                 
                 {/* 作废理由 */}
                 {selectedTrackingDetail.status === 'terminated' && (
-                  <div className="p-4 bg-[#FFF2F2] border-l-4 border-red-600 rounded-sm shadow-xs">
+                  <div className="p-4 bg-[#FFF2F2] border-l-4 border-red-600 rounded-xl shadow-xs">
                     <h4 className="text-[10px] uppercase tracking-widest font-bold text-red-600 mb-1.5 flex items-center gap-1.5">
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-500"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
                       项目已作废
@@ -7369,7 +7388,7 @@ alter table system_settings disable row level security;
                  </div>
 
                  {(!selectedTrackingDetail.followupRecords || selectedTrackingDetail.followupRecords.length === 0) ? (
-                   <div className="py-16 md:py-24 flex flex-col items-center justify-center border border-[#1A1A1A]/10 border-dashed bg-white/50 rounded-sm">
+                   <div className="py-16 md:py-24 flex flex-col items-center justify-center border border-[#1A1A1A]/10 border-dashed bg-white/50 rounded-2xl">
                       <div className="w-12 h-12 rounded-full bg-[#1A1A1A]/5 flex items-center justify-center mb-4">
                         <svg className="w-6 h-6 opacity-30 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -7439,7 +7458,7 @@ alter table system_settings disable row level security;
             className="absolute inset-0 bg-[#1A1A1A]/40 backdrop-blur-xs"
             onClick={() => setConfirmAction(null)}
           />
-          <div className="relative bg-white pt-8 sm:pt-6 p-8 max-w-sm w-full border border-[#1A1A1A]/10 shadow-2xl animate-in zoom-in-95 duration-200 sm:rounded-sm">
+          <div className="relative bg-white pt-8 sm:pt-6 p-8 max-w-sm w-full border border-[#1A1A1A]/10 shadow-2xl animate-in zoom-in-95 duration-200 sm:rounded-2xl">
             <h3 className="text-xl font-bold mb-4 text-[#1A1A1A] flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
               {confirmAction.title}
@@ -7525,7 +7544,7 @@ alter table system_settings disable row level security;
             className="absolute inset-0 bg-[#1A1A1A]/50 backdrop-blur-sm"
             onClick={() => { setIsRejectRequirementModalOpen(false); setReqToReject(null); setRejectReason(''); }}
           />
-          <div className="relative bg-[#F7F6F2] p-6 pt-8 sm:p-8 pb-[calc(env(safe-area-inset-bottom)+20px)] sm:pb-8 max-w-sm w-full border border-[#1A1A1A] shadow-2xl rounded-t-2xl sm:rounded-none">
+          <div className="relative bg-[#F7F6F2] p-6 pt-8 sm:p-8 pb-[calc(env(safe-area-inset-bottom)+20px)] sm:pb-8 max-w-sm w-full border border-[#1A1A1A] shadow-2xl rounded-t-2xl sm:rounded-2xl">
             <h3 className="text-lg font-serif italic mb-6">请输入驳回原因</h3>
             <textarea
               value={rejectReason}
@@ -7560,7 +7579,7 @@ alter table system_settings disable row level security;
             className="absolute inset-0 bg-[#F7F6F2]/80 backdrop-blur-sm"
             onClick={() => setIsRequirementDetailModalOpen(false)}
           />
-          <div className="relative bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-2xl h-[90dvh] sm:h-auto max-h-[90dvh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-none">
+          <div className="relative bg-[#F7F6F2] sm:border border-[#1A1A1A]/10 w-full sm:max-w-2xl h-[90dvh] sm:h-auto max-h-[90dvh] sm:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-300 mt-auto sm:mt-0 rounded-t-3xl sm:rounded-2xl">
             <div className="w-12 h-1.5 bg-[#1A1A1A]/20 rounded-full mx-auto sm:hidden absolute top-3 left-1/2 -translate-x-1/2 z-50"></div>
             <div className="flex justify-between items-center px-6 sm:px-8 py-5 pt-8 sm:pt-5 border-b border-[#1A1A1A]/5 bg-black/[0.02] shrink-0">
               <div className="flex items-center gap-3">
@@ -7585,10 +7604,10 @@ alter table system_settings disable row level security;
                   <h2 className="text-2xl sm:text-3xl font-serif italic leading-tight text-[#1A1A1A]">{selectedRequirement.title}</h2>
                 </div>
                 
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-6 py-6 px-6 bg-[#F7F6F2]/50 border border-[#1A1A1A]/5 rounded-sm">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-6 py-6 px-6 bg-[#F7F6F2]/50 border border-[#1A1A1A]/5 rounded-xl">
                   <div>
                     <span className="block text-[9px] uppercase tracking-widest font-bold opacity-40 mb-2">项目状态</span>
-                    <span className="text-[11px] font-bold px-2 py-1 bg-[#1A1A1A] text-white shadow-sm inline-block">
+                    <span className="text-[11px] font-bold px-2.5 py-1 bg-[#1A1A1A] text-white shadow-sm inline-block rounded-md">
                       {
                         selectedRequirement.status === 'backlog' ? '待评审' :
                         selectedRequirement.status === 'reviewing' ? '评审中' :
@@ -7689,10 +7708,10 @@ alter table system_settings disable row level security;
                           <div className="absolute left-[3px] top-5 w-[1px] h-full bg-[#1A1A1A]/10" />
                         )}
                         <div className="w-2 h-2 rounded-full border border-[#1A1A1A] mt-1.5 bg-white relative z-10" />
-                        <div className="flex-1 bg-black/[0.02] border border-[#1A1A1A]/10 p-4 rounded-sm">
+                        <div className="flex-1 bg-black/[0.02] border border-[#1A1A1A]/10 p-4 rounded-xl">
                           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
                             <span className="text-[11px] font-bold text-[#1A1A1A]">
-                              阶段流转至：<span className="bg-white border border-[#1A1A1A]/20 px-1.5 py-0.5 ml-1 inline-block shadow-sm">
+                              阶段流转至：<span className="bg-white border border-[#1A1A1A]/20 px-2 py-0.5 ml-1 inline-block shadow-sm rounded-md">
                               {
                                 entry.status === 'backlog' ? '待评审' :
                                 entry.status === 'reviewing' ? '评审中' :
