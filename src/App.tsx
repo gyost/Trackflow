@@ -657,6 +657,26 @@ const ProjectTrackingView = ({
     return () => clearTimeout(timer);
   }, [year, yearsList]);
 
+  // Mobile horizontal monthly slider automatic centering/scroll alignment
+  React.useEffect(() => {
+    if (month > 0) {
+      const timer = setTimeout(() => {
+        const pill = document.getElementById(`mobile-month-pill-${month}`);
+        const container = document.getElementById('mobile-month-slider');
+        if (pill && container) {
+          const pillOffset = pill.offsetLeft;
+          const pillWidth = pill.clientWidth;
+          const containerWidth = container.clientWidth;
+          container.scrollTo({
+            left: pillOffset - (containerWidth / 2) + (pillWidth / 2),
+            behavior: 'smooth'
+          });
+        }
+      }, 120);
+      return () => clearTimeout(timer);
+    }
+  }, [month]);
+
   const handleYearScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
     const index = Math.round(container.scrollTop / 32);
@@ -890,9 +910,55 @@ const ProjectTrackingView = ({
 
   return (
     <div className="flex flex-col w-full h-full bg-[#F7F6F2] text-[#1A1A1A] overflow-hidden">
-      {/* Sleek Header & Metric Row (Unified & Compact) */}
-      <div className="bg-[#F7F6F2] border-b border-[#1A1A1A]/10 px-4 sm:px-8 py-4 sm:py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-8 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 w-full md:w-auto">
+      {/* Mobile Clean Header (Removed fantasy greetings & avatar, corrected title name to 项目跟踪) */}
+      <div className="md:hidden flex items-center justify-between px-5 pt-5 pb-2 bg-[#F7F6F2] shrink-0 select-none">
+        <h2 className="text-[22px] font-sans font-black tracking-tight text-zinc-900">
+          项目跟踪
+        </h2>
+        {/* Year Select Dropdown integrated seamlessly into the header */}
+        <div className="relative shrink-0 flex items-center">
+          <select 
+            value={year} 
+            onChange={(e) => setYear(Number(e.target.value))}
+            className="bg-zinc-100 hover:bg-zinc-205 text-zinc-800 text-[12px] font-bold pl-3 pr-7 py-1 rounded-full outline-none cursor-pointer appearance-none shadow-sm min-h-[30px]"
+          >
+            {yearsList.map(y => (
+              <option key={y} value={y}>{y}年</option>
+            ))}
+          </select>
+          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500 text-[9px]">▼</span>
+        </div>
+      </div>
+
+      {/* Mobile Horizontal Month Timeline (Restrict sliding only to months) */}
+      <div className="md:hidden bg-[#F7F6F2] border-b border-black/[0.04] shrink-0">
+        <div 
+          id="mobile-month-slider"
+          className="flex items-center px-5 py-2.5 overflow-x-auto hide-scrollbar gap-3 scroll-smooth select-none"
+        >
+          {Array.from({length: 12}, (_, i) => i + 1).map(m => {
+            const isSelected = month === m;
+            return (
+              <button
+                key={m}
+                id={`mobile-month-pill-${m}`}
+                onClick={() => setMonth(m)}
+                className={`py-1.5 px-[15px] text-[12.5px] font-bold transition-all duration-200 select-none cursor-pointer text-nowrap shrink-0 rounded-full ${
+                  isSelected
+                    ? 'bg-[#1A73E8] text-white shadow-[0_4px_12px_rgba(26,115,232,0.35)]'
+                    : 'text-zinc-400 hover:text-zinc-650'
+                }`}
+              >
+                {m}月
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Sleek Header & Metric Row (Unified & Compact) - Desktop Only for header content */}
+      <div className="hidden md:flex bg-[#F7F6F2] border-b border-[#1A1A1A]/10 px-8 py-5 items-center justify-between gap-8 shrink-0">
+        <div className="flex items-center gap-6 w-auto">
           <div>
             <div className="flex items-center gap-2.5">
               <span className="w-2.5 h-2.5 bg-gradient-to-tr from-[#1A1A1A] to-[#404040] rounded-full shadow-[0_0_8px_rgba(0,0,0,0.25)]"></span>
@@ -901,7 +967,7 @@ const ProjectTrackingView = ({
             <p className="text-[9px] opacity-40 uppercase tracking-widest font-mono mt-0.5">Pipeline sales & conversion tracker</p>
           </div>
           
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             {/* 年份选择 (Sleek Vertical Scroll Snap Picker) */}
             <div className="relative flex items-center bg-white border border-black/[0.06] rounded-xl shadow-sm h-9 px-1 shrink-0 select-none hover:border-black/[0.12] transition-colors">
               <button
@@ -983,8 +1049,8 @@ const ProjectTrackingView = ({
           </div>
         </div>
 
-        {/* Global Metrics & Status Filter Tags integrated in line */}
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+        {/* Global Metrics for Desktop only */}
+        <div className="flex flex-wrap items-center gap-3 w-auto">
           {/* Card 1: 客户总数 */}
           <div className="flex-1 sm:flex-none min-w-[100px] bg-white border border-black/[0.06] rounded-xl px-4 py-2.5 shadow-sm">
             <div className="text-[9px] uppercase font-bold tracking-wider text-[#1A1A1A]/40 mb-1 font-mono">客户总数</div>
@@ -1023,16 +1089,67 @@ const ProjectTrackingView = ({
         </div>
       </div>
 
+      {/* Mobile Bento-Style Colorful Stats Cards (借鉴附图数据卡片样式：饱满圆角、图标底纹、亮眼淡彩底色、左下特大数字) */}
+      <div className="grid grid-cols-2 gap-3.5 px-5 py-3 shrink-0 md:hidden bg-[#F7F6F2] select-none">
+        {/* Card 1: 客户总数 (天蓝色 E8F4FE) */}
+        <div className="bg-[#E8F4FE] rounded-[24px] p-4 flex flex-col justify-between shadow-[0_4px_16px_rgba(26,115,232,0.04)] h-[106px] relative overflow-hidden transition-all active:scale-[0.97]">
+          <div className="flex items-center gap-1.5 text-sky-800/70 font-sans font-bold text-[11px] tracking-wide uppercase">
+            <Users className="w-3.5 h-3.5 text-sky-600/90" strokeWidth={2.5} />
+            <span>客户总数</span>
+          </div>
+          <div className="font-sans text-[26px] font-black text-slate-800 tracking-tight leading-none mb-1">
+            {filtered.length}
+            <span className="text-[10.5px] font-black text-sky-800/40 ml-1">户</span>
+          </div>
+        </div>
+
+        {/* Card 2: 预期合同额 (粉红/柔橙色 FCE8E6) */}
+        <div className="bg-[#FCE8E6] rounded-[24px] p-4 flex flex-col justify-between shadow-[0_4px_16px_rgba(220,38,38,0.03)] h-[106px] relative overflow-hidden transition-all active:scale-[0.97]">
+          <div className="flex items-center gap-1.5 text-rose-800/70 font-sans font-bold text-[11px] tracking-wide uppercase">
+            <Coins className="w-3.5 h-3.5 text-rose-500/90" strokeWidth={2.5} />
+            <span>预期金额</span>
+          </div>
+          <div className="font-sans text-[26px] font-black text-rose-950 tracking-tight leading-none mb-1">
+            ¥{(totalExpectedAmount / 10000).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+            <span className="text-[10.5px] font-black text-rose-800/40 ml-1">万</span>
+          </div>
+        </div>
+
+        {/* Card 3: 已达成转化 (薄荷绿 E6F4EA) */}
+        <div className="bg-[#E6F4EA] rounded-[24px] p-4 flex flex-col justify-between shadow-[0_4px_16px_rgba(16,185,129,0.03)] h-[106px] relative overflow-hidden transition-all active:scale-[0.97]">
+          <div className="flex items-center gap-1.5 text-emerald-800/70 font-sans font-bold text-[11px] tracking-wide uppercase">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500/90" strokeWidth={2.5} />
+            <span>已达成转化</span>
+          </div>
+          <div className="font-sans text-[26px] font-black text-emerald-950 tracking-tight leading-none mb-1">
+            ¥{(totalAmount / 10000).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+            <span className="text-[10.5px] font-black text-emerald-800/40 ml-1">万</span>
+          </div>
+        </div>
+
+        {/* Card 4: 业绩转化率 (柔淡黄 FEF7E0) */}
+        <div className="bg-[#FEF7E0] rounded-[24px] p-4 flex flex-col justify-between shadow-[0_4px_16px_rgba(217,119,6,0.03)] h-[106px] relative overflow-hidden transition-all active:scale-[0.97]">
+          <div className="flex items-center gap-1.5 text-amber-800/70 font-sans font-bold text-[11px] tracking-wide uppercase">
+            <TrendingUp className="w-3.5 h-3.5 text-amber-500/90" strokeWidth={2.5} />
+            <span>业绩转化率</span>
+          </div>
+          <div className="font-sans text-[24px] font-black text-amber-950 tracking-tight leading-none mb-1">
+            {conversionRate.toFixed(1)}
+            <span className="text-[10.5px] font-black text-amber-800/40 ml-1">%</span>
+          </div>
+        </div>
+      </div>
+
       {/* Main Content Area */}
       <div className="flex-1 p-4 sm:p-6 max-w-[1600px] mx-auto w-full flex flex-col min-h-0">
         {/* Tool Bar */}
-        <div className="flex flex-col gap-5 mb-6 sm:mb-8 shrink-0 bg-white/40 p-4 sm:p-6 rounded-2xl border border-[#1A1A1A]/5 backdrop-blur-md">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:gap-5 mb-5 sm:mb-8 shrink-0 sm:bg-white/40 sm:p-6 bg-transparent p-0 sm:rounded-2xl sm:border border-none sm:backdrop-blur-md">
+          <div className="flex flex-col sm:flex-row md:items-center justify-between gap-4 px-4 sm:px-0">
             
             {/* Left: Beautiful Custom Search Input */}
             <div className="w-full md:w-[320px]">
-              <div className="flex items-center bg-white border border-[#1A1A1A]/12 hover:border-[#1A1A1A]/20 focus-within:border-[#1A73E8] focus-within:ring-4 focus-within:ring-[#1A73E8]/10 rounded-xl px-3.5 py-2.5 w-full transition-all duration-250 shadow-[0_2px_8px_rgba(0,0,0,0.03)] group">
-                <Search className="w-4 h-4 opacity-40 group-focus-within:opacity-80 group-focus-within:text-[#1A73E8] transition-all" strokeWidth={2.5} />
+              <div className="flex items-center bg-white border border-black/[0.06] hover:border-black/[0.12] focus-within:border-[#1A1A1A]/30 rounded-2xl h-11 px-4 w-full transition-all duration-250 shadow-[0_2px_12px_rgba(0,0,0,0.02)] group">
+                <Search className="w-4 h-4 opacity-40 group-focus-within:opacity-80 group-focus-within:text-[#1A1A1A] transition-all" strokeWidth={2.5} />
                 <input 
                   placeholder="搜索项目、客户或负责人..." 
                   value={searchTerm} 
@@ -1042,19 +1159,19 @@ const ProjectTrackingView = ({
               </div>
             </div>
 
-            {/* Right: Modern Actions Suite (Visible on both desktop & mobile) */}
-            <div className="flex flex-wrap items-center gap-2 mt-1 md:mt-0">
+            {/* Right: Modern Actions Suite (Visible on both desktop & mobile, but simplified on mobile) */}
+            <div className="flex flex-wrap items-center gap-3">
               
-              {/* Action: Add Project - Primary Black styled with Icon */}
+              {/* Action: Add Project - Primary Black styled with Icon - HIDDEN on mobile in favor of FAB */}
               <button 
                 onClick={onAdd} 
-                className="flex-1 sm:flex-none justify-center bg-[#1A1A1A] text-white px-4 h-9 text-[11px] font-bold rounded-lg hover:bg-black transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
+                className="hidden sm:flex flex-none justify-center bg-[#1A1A1A] text-white px-5 h-[40px] sm:h-9 text-[12px] sm:text-[11px] font-bold rounded-2xl sm:rounded-lg hover:bg-black transition-all items-center gap-1.5 active:scale-95 shadow-[0_4px_12px_rgba(0,0,0,0.06)] sm:shadow-sm cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
                 <span>新增项目</span>
               </button>
 
-              {/* Action: Export CSV - Elegant White Outlined */}
+              {/* Action: Export CSV - Elegant White Outlined - HIDDEN on mobile */}
               <button 
                 onClick={() => {
                    if (filtered.length === 0) return;
@@ -1107,14 +1224,14 @@ const ProjectTrackingView = ({
                    document.body.removeChild(link);
                    URL.revokeObjectURL(url);
                 }} 
-                className="flex-1 sm:flex-none justify-center bg-white border border-black/[0.08] hover:border-black/[0.15] text-[#1A1A1A]/85 px-3.5 h-9 text-[11px] font-semibold rounded-lg hover:bg-zinc-50 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
+                className="hidden sm:flex sm:flex-none justify-center bg-white border border-black/[0.08] hover:border-black/[0.15] text-[#1A1A1A]/85 px-3.5 h-9 text-[11px] font-semibold rounded-lg hover:bg-zinc-50 transition-all items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
                 title="导出下方筛选的数据为 CSV"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-zinc-500" strokeWidth={2} />
                 <span>导出数据</span>
               </button>
               
-              {/* Action: Download Template - Outlined Minimal */}
+              {/* Action: Download Template - Outlined Minimal - HIDDEN on mobile */}
               <button 
                 onClick={() => {
                   const headers = ['客户名称', '状态', '合作意向/产品', '市场负责人', '项目负责人', '预期(万)', '已达成(万)', '联系人', '联系电话'];
@@ -1133,17 +1250,17 @@ const ProjectTrackingView = ({
                   document.body.removeChild(link);
                   URL.revokeObjectURL(url);
                 }} 
-                className="flex-1 sm:flex-none justify-center bg-white border border-black/[0.08] hover:border-black/[0.15] text-[#1A1A1A]/85 px-3.5 h-9 text-[11px] font-semibold rounded-lg hover:bg-zinc-50 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
+                className="hidden sm:flex sm:flex-none justify-center bg-white border border-black/[0.08] hover:border-black/[0.15] text-[#1A1A1A]/85 px-3.5 h-9 text-[11px] font-semibold rounded-lg hover:bg-zinc-50 transition-all items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
                 title="下载标准导入 CSV 格式模板"
               >
                 <Download className="w-3.5 h-3.5 text-zinc-500" strokeWidth={2} />
                 <span>下载模板</span>
               </button>
 
-              {/* Action: Import Data - Minimal Outlined to match rest */}
+              {/* Action: Import Data - Minimal Outlined to match rest - HIDDEN on mobile */}
               <button 
                 onClick={() => fileInputRef.current?.click()} 
-                className="flex-1 sm:flex-none justify-center bg-white border border-black/[0.08] hover:border-black/[0.15] text-[#1A1A1A]/85 px-3.5 h-9 text-[11px] font-semibold rounded-lg hover:bg-zinc-50 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
+                className="hidden sm:flex sm:flex-none justify-center bg-white border border-black/[0.08] hover:border-black/[0.15] text-[#1A1A1A]/85 px-3.5 h-9 text-[11px] font-semibold rounded-lg hover:bg-zinc-50 transition-all items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5 text-zinc-500" strokeWidth={2} />
                 <span>导入数据</span>
@@ -1160,14 +1277,14 @@ const ProjectTrackingView = ({
           </div>
 
           {/* Sub-bar: Touch-friendly horizontal filter swipe row for both desktop & mobile */}
-          <div className="border-t border-[#1A1A1A]/5 pt-3 mt-1">
+          <div className="sm:border-t sm:border-[#1A1A1A]/5 sm:pt-3 mt-1 px-4 sm:px-0">
             <div className="flex overflow-x-auto hide-scrollbar snap-x snap-mandatory gap-2 pb-1 shrink-0 -mx-4 sm:-mx-0 px-4 sm:px-0">
               <button 
                 onClick={() => setFilterStatus('all')}
-                className={`px-4 py-2 text-[11px] font-bold rounded-full transition-all duration-200 cursor-pointer text-nowrap select-none shrink-0 snap-start active:scale-95 ${
+                className={`px-5 py-2.5 sm:px-4 sm:py-2 text-[11px] font-bold rounded-full transition-all duration-200 cursor-pointer text-nowrap select-none shrink-0 snap-start active:scale-95 ${
                   filterStatus === 'all' 
                     ? 'bg-[#1A1A1A] text-white shadow-sm' 
-                    : 'bg-[#1A1A1A]/5 text-[#1A1A1A]/60 hover:bg-[#1A1A1A]/10'
+                    : 'bg-black/[0.04] text-[#1A1A1A]/60 hover:bg-black/[0.08]'
                 }`}
               >
                 全部阶段
@@ -1178,10 +1295,10 @@ const ProjectTrackingView = ({
                   <button 
                     key={st}
                     onClick={() => setFilterStatus(st)}
-                    className={`px-4 py-2 text-[11px] font-bold rounded-full transition-all duration-200 cursor-pointer text-nowrap select-none shrink-0 snap-start active:scale-95 flex items-center gap-1.5 ${
+                    className={`px-5 py-2.5 sm:px-4 sm:py-2 text-[11px] font-bold rounded-full transition-all duration-200 cursor-pointer text-nowrap select-none shrink-0 snap-start active:scale-95 flex items-center gap-1.5 ${
                       filterStatus === st 
                         ? 'bg-[#1A1A1A] text-white shadow-sm' 
-                        : 'bg-[#1A1A1A]/5 text-[#1A1A1A]/60 hover:bg-[#1A1A1A]/10'
+                        : 'bg-black/[0.04] text-[#1A1A1A]/60 hover:bg-black/[0.08]'
                     }`}
                   >
                     <span>{statusLabels[st]}</span>
@@ -1347,7 +1464,7 @@ const ProjectTrackingView = ({
                </div>
                
                {/* Mobile Card Layout */}
-               <div className="md:hidden flex flex-col gap-4.5 pb-[calc(110px+env(safe-area-inset-bottom))]">
+               <div className="md:hidden flex flex-col gap-4 pb-[calc(110px+env(safe-area-inset-bottom))]">
                  {filtered.map((t, i) => (
                    <div 
                      key={t.id} 
@@ -1391,31 +1508,31 @@ const ProjectTrackingView = ({
                      )}
                      
                      {/* Metrics Ribbon */}
-                     <div className="grid grid-cols-2 bg-[#1A1A1A]/[0.012] border border-black/[0.02] rounded-xl p-3">
+                     <div className="grid grid-cols-2 rounded-2xl border border-black/[0.03] bg-[#FAFAF9]/60 p-4 relative">
                         <div className="flex-1">
-                           <div className="text-[9px] opacity-40 mb-1 font-bold tracking-widest uppercase">预期合同额</div>
-                           <div className="font-mono text-[14px] font-bold text-[#1A1A1A]/85">
+                           <div className="text-[11px] font-bold text-zinc-400">预期合同额</div>
+                           <div className="font-mono text-[16px] font-bold text-zinc-900">
                              {t.expectedContractAmount > 0 ? `¥${(t.expectedContractAmount / 10000).toLocaleString()}万` : '—'}
                            </div>
                         </div>
                         <div className="hidden"></div>
-                        <div className="flex-1 border-l border-black/[0.035] pl-4">
-                           <div className="text-[9px] opacity-40 mb-1 font-bold tracking-widest uppercase">实际达成额</div>
-                           <div className="font-mono text-[14px] font-bold text-emerald-600">
+                        <div className="flex-1 border-l border-black/[0.05] pl-5">
+                           <div className="text-[11px] font-bold text-zinc-400">实际达成额</div>
+                           <div className="font-mono text-[16px] font-bold text-emerald-500">
                              {t.actualContractAmount > 0 ? `¥${(t.actualContractAmount / 10000).toLocaleString()}万` : '—'}
                            </div>
                         </div>
                      </div>
                      
                      {/* Footer Info */}
-                     <div className="flex items-center justify-between text-[10px] font-mono opacity-45">
+                     <div className="flex items-center justify-between text-[11px] font-sans text-zinc-500 mt-1.5 px-0.5">
                         <div className="flex items-center gap-1">
-                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                           <span>跟进: {t.lastFollowupDate || '首轮未录入'}</span>
+                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-60 text-zinc-400"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                           <span>跟进：{t.lastFollowupDate || '首轮未录入'}</span>
                         </div>
                         <div className="font-semibold flex items-center gap-1 text-[#1A1A1A]/60">
-                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                           <span>{(t.cityManager || t.projectManager) ? `${t.cityManager || ''} ${t.projectManager || ''}`.trim() : '未分派'}</span>
+                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-60 text-zinc-400"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                           <span className="font-bold text-zinc-650 bg-zinc-50 px-2 py-0.5 rounded-[6px] border border-zinc-100 flex items-center gap-1">{(t.cityManager || t.projectManager) ? `${t.cityManager || ''} ${t.projectManager || ''}`.trim() : '未分派'}</span>
                         </div>
                      </div>
 
@@ -1426,7 +1543,7 @@ const ProjectTrackingView = ({
                             <button 
                               onClick={() => handleRestoreClick(t)} 
                               disabled={loadingAction !== null}
-                              className="px-3.5 py-1.5 text-[10.5px] font-bold rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 transition-all cursor-pointer select-none active:scale-95 min-h-[36px] flex items-center justify-center gap-1"
+                              className="px-4 text-[11.5px] h-[40px] font-bold rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 transition-all cursor-pointer select-none active:scale-95 flex items-center justify-center gap-1.5 shrink-0"
                             >
                               <RotateCcw className="w-3.5 h-3.5" strokeWidth={2.5} />
                               <span>恢复</span>
@@ -1435,7 +1552,7 @@ const ProjectTrackingView = ({
                             <button 
                               onClick={() => handleAction(t.id, 'details', () => onViewDetails(t))} 
                               disabled={loadingAction !== null}
-                              className="px-3 py-1.5 text-[10.5px] font-medium rounded-lg bg-[#1A1A1A]/5 hover:bg-[#1A1A1A]/10 text-zinc-750 border border-black/5 transition-all cursor-pointer select-none active:scale-95 min-h-[36px] flex items-center justify-center gap-1"
+                              className="px-4 text-[11.5px] h-[40px] font-bold rounded-full bg-[#F4F4F3] hover:bg-[#EBECEB] text-zinc-700 border border-black/[0.01] transition-all cursor-pointer select-none active:scale-95 flex items-center justify-center gap-1.5 shrink-0"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                               <span>详情</span>
@@ -1444,7 +1561,7 @@ const ProjectTrackingView = ({
                             <button 
                               onClick={() => handleDeletePermanentlyClick(t)} 
                               disabled={loadingAction !== null}
-                              className="px-3 py-1.5 text-[10.5px] font-medium rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50/50 transition-all cursor-pointer select-none active:scale-95 min-h-[36px] flex items-center justify-center gap-1"
+                              className="px-4 text-[11.5px] h-[40px] font-bold rounded-full text-zinc-400 hover:text-rose-600 hover:bg-rose-50/20 transition-all cursor-pointer select-none active:scale-95 flex items-center justify-center gap-1.5 shrink-0"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                               <span>删除</span>
@@ -1455,10 +1572,10 @@ const ProjectTrackingView = ({
                             <button 
                               onClick={() => handleAction(t.id, 'followup', () => onAddFollowup(t))} 
                               disabled={loadingAction !== null || t.status === 'archived'}
-                              className={`px-3.5 py-1.5 text-[10.5px] font-bold rounded-lg transition-all cursor-pointer select-none active:scale-95 min-h-[36px] flex items-center justify-center gap-1 ${
+                              className={`px-4 h-[40px] text-[11.5px] font-bold rounded-full transition-all cursor-pointer select-none active:scale-95 flex items-center justify-center gap-1.5 shrink-0 ${
                                 t.status === 'archived'
                                   ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
-                                  : 'bg-[#1A1A1A] hover:bg-black text-white shadow-[0_2px_6px_rgba(0,0,0,0.06)]'
+                                  : 'bg-[#1A1A1A] hover:bg-black text-white shadow-[0_3px_10px_rgba(0,0,0,0.08)]'
                               }`}
                             >
                               {loadingAction?.id === t.id && loadingAction?.type === 'followup' ? (
@@ -1472,10 +1589,10 @@ const ProjectTrackingView = ({
                             <button 
                               onClick={() => handleAction(t.id, 'edit', () => onEdit(t))} 
                               disabled={loadingAction !== null || t.status === 'archived'}
-                              className={`px-3 py-1.5 text-[10.5px] font-medium rounded-lg transition-all cursor-pointer select-none active:scale-95 min-h-[36px] flex items-center justify-center gap-1 ${
+                              className={`px-4 h-[40px] text-[11.5px] font-bold rounded-full transition-all cursor-pointer select-none active:scale-95 flex items-center justify-center gap-1.5 shrink-0 ${
                                 t.status === 'archived'
                                   ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
-                                  : 'bg-[#1A1A1A]/5 hover:bg-[#1A1A1A]/10 text-zinc-700 border border-black/5'
+                                  : 'bg-[#F4F4F3] hover:bg-[#EBECEB] text-zinc-700 border border-black/[0.01]'
                               }`}
                             >
                               {loadingAction?.id === t.id && loadingAction?.type === 'edit' ? (
@@ -1489,10 +1606,10 @@ const ProjectTrackingView = ({
                             <button 
                               onClick={() => handleAction(t.id, 'delete', () => onDelete(t.id))} 
                               disabled={loadingAction !== null || t.status === 'archived'}
-                              className={`px-3 py-1.5 text-[10.5px] font-medium rounded-lg transition-all cursor-pointer select-none active:scale-95 min-h-[36px] flex items-center justify-center gap-1 ${
+                              className={`px-4 h-[40px] text-[11.5px] font-bold rounded-full transition-all cursor-pointer select-none active:scale-95 flex items-center justify-center gap-1.5 shrink-0 ${
                                 t.status === 'archived'
                                   ? 'bg-[#1A1A1A]/5 text-[#1A1A1A]/30 cursor-not-allowed'
-                                  : 'text-zinc-400 hover:text-rose-600 hover:bg-rose-50/50'
+                                  : 'text-zinc-400 hover:text-rose-650 hover:bg-rose-50/20'
                               }`}
                             >
                               {loadingAction?.id === t.id && loadingAction?.type === 'delete' ? (
@@ -1512,6 +1629,16 @@ const ProjectTrackingView = ({
           )}
         </div>
       </div>
+
+      {/* Mobile Floating Action Add Button (FAB) - Consistent with Demand page style */}
+      <button
+        onClick={onAdd}
+        id="mobile-billing-project-add-fab"
+        className="md:hidden fixed bottom-[calc(85px+env(safe-area-inset-bottom))] right-4 z-40 bg-zinc-800 text-white w-14 h-14 rounded-[22px] shadow-[0_8px_30px_rgb(0,0,0,0.2)] flex items-center justify-center active:scale-95 transition-transform cursor-pointer select-none"
+        title="新增项目"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      </button>
 
       {localConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => !isConfirmLoading && setLocalConfirm(null)}>
@@ -5329,10 +5456,10 @@ alter table system_settings disable row level security;
                       </div>
                     </div>
                   ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
             {/* Marketing Section */}
             {currentView === 'marketing' && (
               <div>
@@ -5525,7 +5652,7 @@ alter table system_settings disable row level security;
 
               {/* SECTION 1: 核心财务毛利分析 (Digital Metrics Board) */}
               <div className="flex flex-col gap-4 w-full max-w-[1280px] mx-auto">
-                <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 px-4 sm:px-0 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory scroll-smooth pb-2 -mx-4 sm:mx-0">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 px-4 sm:px-0">
                   
                   {/* 1. Year to Date Profit */}
                   {(() => {
@@ -5557,25 +5684,25 @@ alter table system_settings disable row level security;
                     }
 
                     return (
-                      <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full min-w-[280px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                      <div className="bg-white/95 backdrop-blur-md p-3.5 sm:p-5 flex flex-col justify-between h-[116px] sm:h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full sm:min-w-0 rounded-2xl active:scale-[0.99] cursor-pointer">
                         <div className="flex justify-between items-start relative z-10 w-full mb-1">
-                          <span className="text-[10px] font-extrabold text-zinc-550 uppercase tracking-widest block max-w-[80%] leading-snug">本年度累计利润 (万)</span>
-                          <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
-                            <Coins className="w-4 h-4" />
+                          <span className="text-[10px] font-extrabold text-zinc-550 uppercase tracking-widest block max-w-[80%] leading-none sm:leading-snug">年累计利润 (万)</span>
+                          <span className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
+                            <Coins className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           </span>
                         </div>
-                        <div className="flex items-baseline gap-2 relative z-10">
-                          <span className={`text-3xl sm:text-3.5xl font-mono font-black tracking-tight ${statusColor} leading-none antialiased`}>{currentYearActualProfit}</span>
-                          <span className="text-[10px] font-mono text-zinc-500 font-semibold leading-none">/ 目标 {annualTargetProfit}</span>
+                        <div className="flex items-baseline gap-1 relative z-10">
+                          <span className={`text-2xl xs:text-2.5xl sm:text-3.5xl font-mono font-black tracking-tight ${statusColor} leading-none antialiased`}>{currentYearActualProfit}</span>
+                          <span className="text-[9px] sm:text-[10px] font-mono text-zinc-500 font-semibold leading-none">/ {annualTargetProfit}</span>
                         </div>
                         
                         {/* Progress indicator */}
-                        <div className="flex flex-col gap-1 w-full mt-2">
-                          <div className="flex justify-between items-center text-[10px] font-mono font-bold text-zinc-500">
+                        <div className="flex flex-col gap-1 w-full mt-1.5 sm:mt-2">
+                          <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-mono font-bold text-zinc-500">
                             <span>年完成比例</span>
                             <span className={`${statusColor} font-bold`}>{yearPercentage}%</span>
                           </div>
-                          <div className="w-full bg-zinc-100/80 h-1.5 rounded-full overflow-hidden">
+                          <div className="w-full bg-zinc-100/80 h-1 sm:h-1.5 rounded-full overflow-hidden">
                             <div 
                               className={`h-full ${barColor} transition-all duration-1000 ease-out`}
                               style={{ width: `${Math.min(100, yearProfitRatio * 100)}%` }}
@@ -5621,25 +5748,25 @@ alter table system_settings disable row level security;
                     }
                     
                     return (
-                      <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full min-w-[280px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                      <div className="bg-white/95 backdrop-blur-md p-3.5 sm:p-5 flex flex-col justify-between h-[116px] sm:h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full sm:min-w-0 rounded-2xl active:scale-[0.99] cursor-pointer">
                         <div className="flex justify-between items-start relative z-10 w-full mb-1">
-                          <span className="text-[10px] font-extrabold text-zinc-550 uppercase tracking-widest block max-w-[80%] leading-snug">当月利润完成 (万)</span>
-                          <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
-                            <Wallet className="w-4 h-4" />
+                          <span className="text-[10px] font-extrabold text-zinc-550 uppercase tracking-widest block max-w-[80%] leading-none sm:leading-snug">当月利润 (万)</span>
+                          <span className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
+                            <Wallet className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           </span>
                         </div>
-                        <div className="flex items-baseline gap-2 relative z-10">
-                          <span className={`text-3xl sm:text-3.5xl font-mono font-black tracking-tight ${statusColor} leading-none antialiased`}>{currentMonthActualProfit}</span>
-                          <span className="text-[10px] font-mono text-zinc-500 font-semibold leading-none">/ 目标 {currentMonthTargetProfit}</span>
+                        <div className="flex items-baseline gap-1 relative z-10">
+                          <span className={`text-2xl xs:text-2.5xl sm:text-3.5xl font-mono font-black tracking-tight ${statusColor} leading-none antialiased`}>{currentMonthActualProfit}</span>
+                          <span className="text-[9px] sm:text-[10px] font-mono text-zinc-500 font-semibold leading-none">/ {currentMonthTargetProfit}</span>
                         </div>
                         
                         {/* Progress indicator */}
-                        <div className="flex flex-col gap-1 w-full mt-2">
-                          <div className="flex justify-between items-center text-[10px] font-mono font-bold text-zinc-500">
+                        <div className="flex flex-col gap-1 w-full mt-1.5 sm:mt-2">
+                          <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-mono font-bold text-zinc-500">
                             <span>当月指标进度</span>
                             <span className={`${statusColor} font-bold`}>{monthPercentage}%</span>
                           </div>
-                          <div className="w-full bg-zinc-100/80 h-1.5 rounded-full overflow-hidden">
+                          <div className="w-full bg-zinc-100/80 h-1 sm:h-1.5 rounded-full overflow-hidden">
                             <div 
                               className={`h-full ${barColor} transition-all duration-1000 ease-out`} 
                               style={{ width: `${Math.min(100, monthProfitRatio * 100)}%` }}
@@ -5685,25 +5812,25 @@ alter table system_settings disable row level security;
                     }
                     
                     return (
-                      <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full min-w-[280px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                      <div className="bg-white/95 backdrop-blur-md p-3.5 sm:p-5 flex flex-col justify-between h-[116px] sm:h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full sm:min-w-0 rounded-2xl active:scale-[0.99] cursor-pointer">
                         <div className="flex justify-between items-start relative z-10 w-full mb-1">
-                          <span className="text-[10px] font-extrabold text-zinc-550 uppercase tracking-widest block max-w-[80%] leading-snug">当月合同完成 (万)</span>
-                          <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
-                            <FileText className="w-4 h-4" />
+                          <span className="text-[10px] font-extrabold text-zinc-550 uppercase tracking-widest block max-w-[80%] leading-none sm:leading-snug">当月合同 (万)</span>
+                          <span className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
+                            <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           </span>
                         </div>
-                        <div className="flex items-baseline gap-2 relative z-10">
-                          <span className={`text-3xl sm:text-3.5xl font-mono font-black tracking-tight ${statusColor} leading-none antialiased`}>{currentMonthActualContract}</span>
-                          <span className="text-[10px] font-mono text-zinc-500 font-semibold leading-none">/ 目标 {currentMonthTargetContract}</span>
+                        <div className="flex items-baseline gap-1 relative z-10">
+                          <span className={`text-2xl xs:text-2.5xl sm:text-3.5xl font-mono font-black tracking-tight ${statusColor} leading-none antialiased`}>{currentMonthActualContract}</span>
+                          <span className="text-[9px] sm:text-[10px] font-mono text-zinc-500 font-semibold leading-none">/ {currentMonthTargetContract}</span>
                         </div>
                         
                         {/* Progress indicator */}
-                        <div className="flex flex-col gap-1 w-full mt-2">
-                          <div className="flex justify-between items-center text-[10px] font-mono font-bold text-zinc-500">
+                        <div className="flex flex-col gap-1 w-full mt-1.5 sm:mt-2">
+                          <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-mono font-bold text-zinc-500">
                             <span>合同签署进度</span>
                             <span className={`${statusColor} font-bold`}>{monthPercentage}%</span>
                           </div>
-                          <div className="w-full bg-zinc-100/80 h-1.5 rounded-full overflow-hidden">
+                          <div className="w-full bg-zinc-100/80 h-1 sm:h-1.5 rounded-full overflow-hidden">
                             <div 
                               className={`h-full ${barColor} transition-all duration-1000 ease-out`} 
                               style={{ width: `${Math.min(100, monthContractRatio * 100)}%` }}
@@ -5744,25 +5871,25 @@ alter table system_settings disable row level security;
                     }
                     
                     return (
-                      <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full min-w-[280px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer">
+                      <div className="bg-white/95 backdrop-blur-md p-3.5 sm:p-5 flex flex-col justify-between h-[116px] sm:h-[124px] relative overflow-hidden group shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02),0_12px_36px_-6px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.05)] transition-all duration-300 w-full sm:min-w-0 rounded-2xl active:scale-[0.99] cursor-pointer">
                         <div className="flex justify-between items-start relative z-10 w-full mb-1">
-                          <span className="text-[10px] font-extrabold text-zinc-550 uppercase tracking-widest block max-w-[80%] leading-snug">当月回款完成 (万)</span>
-                          <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
-                            <TrendingUp className="w-4 h-4" />
+                          <span className="text-[10px] font-extrabold text-zinc-550 uppercase tracking-widest block max-w-[80%] leading-none sm:leading-snug">当月回款 (万)</span>
+                          <span className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105 duration-300`}>
+                            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           </span>
                         </div>
-                        <div className="flex items-baseline gap-2 relative z-10">
-                          <span className={`text-3xl sm:text-3.5xl font-mono font-black tracking-tight ${statusColor} leading-none antialiased`}>{currentMonthActualCollection}</span>
-                          <span className="text-[10px] font-mono text-zinc-500 font-semibold leading-none">/ 目标 {currentMonthTargetCollection}</span>
+                        <div className="flex items-baseline gap-1 relative z-10">
+                          <span className={`text-2xl xs:text-2.5xl sm:text-3.5xl font-mono font-black tracking-tight ${statusColor} leading-none antialiased`}>{currentMonthActualCollection}</span>
+                          <span className="text-[9px] sm:text-[10px] font-mono text-zinc-500 font-semibold leading-none">/ {currentMonthTargetCollection}</span>
                         </div>
                         
                         {/* Progress indicator */}
-                        <div className="flex flex-col gap-1 w-full mt-2">
-                          <div className="flex justify-between items-center text-[10px] font-mono font-bold text-zinc-500">
+                        <div className="flex flex-col gap-1 w-full mt-1.5 sm:mt-2">
+                          <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-mono font-bold text-zinc-500">
                             <span>款项收回进度</span>
                             <span className={`${statusColor} font-bold`}>{collectionPercentage}%</span>
                           </div>
-                          <div className="w-full bg-zinc-100/80 h-1.5 rounded-full overflow-hidden">
+                          <div className="w-full bg-zinc-100/80 h-1 sm:h-1.5 rounded-full overflow-hidden">
                             <div 
                               className={`h-full ${barColor} transition-all duration-1000 ease-out`}
                               style={{ width: `${Math.min(100, collectionRatio * 100)}%` }}
@@ -5776,14 +5903,16 @@ alter table system_settings disable row level security;
                 </div>
               </div>
 
+
+
               {/* SECTION 2: 潜在客户与漏斗累计目标 (Client Stats Row) */}
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-2 px-4 sm:px-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">客群转化动态与漏斗 (年度累计)</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/60">客群转化动态与漏斗 (年度累计)</span>
                 </div>
                 
-                <div className="flex sm:grid sm:grid-cols-2 md:grid-cols-3 gap-4 px-4 sm:px-0 overflow-x-auto hide-scrollbar-on-mobile snap-x snap-mandatory scroll-smooth pb-2 -mx-4 sm:mx-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 px-4 sm:px-0">
                   
                   {/* Lead Clients */}
                   <div className="bg-white/95 backdrop-blur-md p-5 flex flex-col justify-between h-[104px] relative overflow-hidden group shadow-[0_4px_16px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.04)] transition-all duration-300 w-full min-w-[245px] sm:min-w-0 shrink-0 snap-center rounded-2xl active:scale-[0.99] cursor-pointer antialiased">
