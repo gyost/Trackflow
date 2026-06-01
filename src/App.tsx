@@ -571,21 +571,7 @@ const ProjectTrackingView = ({
     if (isNaN(cDate.getTime())) return false;
     const cYear = cDate.getFullYear();
     const cMonth = cDate.getMonth() + 1;
-
-    // 检查签约日期是否在选定月份/年份中
-    let isSignedInSelectedMonth = false;
-    if (t.signedDate) {
-      const sDate = new Date(t.signedDate);
-      if (!isNaN(sDate.getTime())) {
-        const sYear = sDate.getFullYear();
-        const sMonth = sDate.getMonth() + 1;
-        if (month === 0) {
-          isSignedInSelectedMonth = sYear === year;
-        } else {
-          isSignedInSelectedMonth = sYear === year && sMonth === month;
-        }
-      }
-    }
+    const mCreate = cYear * 12 + cMonth;
 
     // 检查是否有选定月份/年份中的跟进记录
     let hasFollowupInSelectedMonth = false;
@@ -605,13 +591,64 @@ const ProjectTrackingView = ({
     }
 
     if (month === 0) {
-      // 全年筛选：创建时间、签约时间或跟进时间在该年份之内的项目
-      return cYear === year || isSignedInSelectedMonth || hasFollowupInSelectedMonth;
+      if (t.status === 'terminated' || t.status === 'archived') {
+        let endDateVal = t.updatedAt || t.createdAt || '';
+        if (t.status === 'archived' && t.signedDate) {
+          endDateVal = t.signedDate;
+        }
+        const eDate = new Date(endDateVal);
+        const eYear = !isNaN(eDate.getTime()) ? eDate.getFullYear() : cYear;
+        return (cYear <= year && year <= eYear) || hasFollowupInSelectedMonth;
+      }
+      return cYear <= year || hasFollowupInSelectedMonth;
     } else {
-      // 按月筛选：创建时间、签约时间或跟进时间在该月份之内的项目
-      return (cYear === year && cMonth === month) || isSignedInSelectedMonth || hasFollowupInSelectedMonth;
+      const mSelect = year * 12 + month;
+      if (t.status === 'terminated' || t.status === 'archived') {
+        let endDateVal = t.updatedAt || t.createdAt || '';
+        if (t.status === 'archived' && t.signedDate) {
+          endDateVal = t.signedDate;
+        }
+        const eDate = new Date(endDateVal);
+        const eYear = !isNaN(eDate.getTime()) ? eDate.getFullYear() : cYear;
+        const eMonth = !isNaN(eDate.getTime()) ? eDate.getMonth() + 1 : cMonth;
+        const mEnd = Math.max(mCreate, eYear * 12 + eMonth);
+        return (mCreate <= mSelect && mSelect <= mEnd) || hasFollowupInSelectedMonth;
+      }
+      return mCreate <= mSelect || hasFollowupInSelectedMonth;
     }
   });
+
+  const newProjectsInMonth = monthTrackings.filter(t => {
+    const cdt = t.createdAt || t.updatedAt;
+    if (!cdt) return false;
+    const cDate = new Date(cdt);
+    if (isNaN(cDate.getTime())) return false;
+    const cYear = cDate.getFullYear();
+    const cMonth = cDate.getMonth() + 1;
+    if (month === 0) {
+      return cYear === year;
+    } else {
+      return cYear === year && cMonth === month;
+    }
+  });
+  const newProjectsCount = newProjectsInMonth.length;
+
+  const cumulativeProjectsList = trackings.filter(t => {
+    const cdt = t.createdAt || t.updatedAt;
+    if (!cdt) return false;
+    const cDate = new Date(cdt);
+    if (isNaN(cDate.getTime())) return false;
+    const cYear = cDate.getFullYear();
+    const cMonth = cDate.getMonth() + 1;
+    const mCreate = cYear * 12 + cMonth;
+    if (month === 0) {
+      return cYear <= year;
+    } else {
+      const mSelect = year * 12 + month;
+      return mCreate <= mSelect;
+    }
+  });
+  const cumulativeCount = new Set(cumulativeProjectsList.map(t => t.id)).size;
 
   let filtered = pruneDuplicates(monthTrackings.filter(t => {
     return (filterStatus === 'all' || t.status === filterStatus) && 
@@ -1052,12 +1089,12 @@ const ProjectTrackingView = ({
 
         {/* Global Metrics for Desktop only */}
         <div className="flex flex-wrap items-center gap-3 w-auto">
-          {/* Card 1: 客户总数 */}
+          {/* Card 1: 当月新增项目数 */}
           <div className="flex-1 sm:flex-none min-w-[100px] bg-white border border-black/[0.06] rounded-xl px-4 py-2.5 shadow-sm">
-            <div className="text-[9px] uppercase font-bold tracking-wider text-[#1A1A1A]/40 mb-1 font-mono">客户总数</div>
+            <div className="text-[9px] uppercase font-bold tracking-wider text-[#1A1A1A]/40 mb-1 font-mono">当月新增项目数</div>
             <div className="text-xl font-extrabold text-[#1A1A1A] flex items-baseline gap-0.5 font-sans">
-              {filtered.length} 
-              <span className="text-[10px] font-medium text-[#1A1A1A]/40 ml-0.5">户</span>
+              {newProjectsCount} 
+              <span className="text-[10px] font-medium text-[#1A1A1A]/40 ml-0.5">个</span>
             </div>
           </div>
 
@@ -1079,12 +1116,12 @@ const ProjectTrackingView = ({
             </div>
           </div>
 
-          {/* Card 4: 业绩转化率 */}
-          <div className="flex-1 sm:flex-none min-w-[115px] bg-purple-500/[0.03] border border-purple-500/15 rounded-xl px-4 py-2.5 shadow-sm">
-            <div className="text-[9px] uppercase font-bold tracking-wider text-purple-800/50 mb-1 font-mono">业绩转化率</div>
-            <div className="text-xl font-extrabold text-purple-700 flex items-baseline gap-0.5 font-sans">
-              {conversionRate.toFixed(1)}
-              <span className="text-[10px] font-bold text-purple-700/60 ml-0.5">%</span>
+          {/* Card 4: 累积项目总数 */}
+          <div className="flex-1 sm:flex-none min-w-[115px] bg-[#FEF7E0]/40 border border-amber-500/15 rounded-xl px-4 py-2.5 shadow-sm">
+            <div className="text-[9px] uppercase font-bold tracking-wider text-amber-800/60 mb-1 font-mono">累积项目总数</div>
+            <div className="text-xl font-extrabold text-[#D97706] flex items-baseline gap-0.5 font-sans">
+              {cumulativeCount}
+              <span className="text-[10px] font-bold text-amber-600/60 ml-0.5">个</span>
             </div>
           </div>
         </div>
@@ -1092,15 +1129,15 @@ const ProjectTrackingView = ({
 
       {/* Mobile Bento-Style Colorful Stats Cards (借鉴附图数据卡片样式：饱满圆角、图标底纹、亮眼淡彩底色、左下特大数字) */}
       <div className="grid grid-cols-2 gap-3.5 px-5 py-3 shrink-0 md:hidden bg-[#F7F6F2] select-none">
-        {/* Card 1: 客户总数 (天蓝色 E8F4FE) */}
+        {/* Card 1: 当月新增项目 (天蓝色 E8F4FE) */}
         <div className="bg-[#E8F4FE] rounded-[24px] p-4 flex flex-col justify-between shadow-[0_4px_16px_rgba(26,115,232,0.04)] h-[106px] relative overflow-hidden transition-all active:scale-[0.97]">
           <div className="flex items-center gap-1.5 text-sky-800/70 font-sans font-bold text-[11px] tracking-wide uppercase">
             <Users className="w-3.5 h-3.5 text-sky-600/90" strokeWidth={2.5} />
-            <span>客户总数</span>
+            <span>当月新增项目</span>
           </div>
           <div className="font-sans text-[26px] font-black text-slate-800 tracking-tight leading-none mb-1">
-            {filtered.length}
-            <span className="text-[10.5px] font-black text-sky-800/40 ml-1">户</span>
+            {newProjectsCount}
+            <span className="text-[10.5px] font-black text-sky-800/40 ml-1">个</span>
           </div>
         </div>
 
@@ -1128,15 +1165,15 @@ const ProjectTrackingView = ({
           </div>
         </div>
 
-        {/* Card 4: 业绩转化率 (柔淡黄 FEF7E0) */}
+        {/* Card 4: 累积项目总数 (柔淡黄 FEF7E0) */}
         <div className="bg-[#FEF7E0] rounded-[24px] p-4 flex flex-col justify-between shadow-[0_4px_16px_rgba(217,119,6,0.03)] h-[106px] relative overflow-hidden transition-all active:scale-[0.97]">
           <div className="flex items-center gap-1.5 text-amber-800/70 font-sans font-bold text-[11px] tracking-wide uppercase">
             <TrendingUp className="w-3.5 h-3.5 text-amber-500/90" strokeWidth={2.5} />
-            <span>业绩转化率</span>
+            <span>累积项目总数</span>
           </div>
-          <div className="font-sans text-[24px] font-black text-amber-950 tracking-tight leading-none mb-1">
-            {conversionRate.toFixed(1)}
-            <span className="text-[10.5px] font-black text-amber-800/40 ml-1">%</span>
+          <div className="font-sans text-[26px] font-black text-amber-950 tracking-tight leading-none mb-1">
+            {cumulativeCount}
+            <span className="text-[10.5px] font-black text-amber-800/40 ml-1">个</span>
           </div>
         </div>
       </div>
