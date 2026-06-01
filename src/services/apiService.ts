@@ -631,8 +631,21 @@ export const apiService = {
       }
       ensureConfigured();
 
-      const { error } = await supabase.from('project_trackings').upsert(await injectOrgId(toSnakeCase(trackData), 'project_trackings'));
-      if (error) throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
+      const payload = await injectOrgId(toSnakeCase(trackData), 'project_trackings');
+      const { error } = await supabase.from('project_trackings').upsert(payload);
+      if (error) {
+        const errMsg = error.message || JSON.stringify(error);
+        if (errMsg.includes('termination_reason') || errMsg.includes('schema cache') || errMsg.includes('column')) {
+          console.warn('[Schema Sync Warning] termination_reason column not found in project_trackings table. Performing self-healing fallback save without this field.');
+          const healedPayload = { ...payload };
+          delete healedPayload.termination_reason;
+          const retry = await supabase.from('project_trackings').upsert(healedPayload);
+          if (!retry.error) {
+            return;
+          }
+        }
+        throw new Error(error.message?.includes('security policy') ? 'Supabase 权限拒绝 (RLS受阻): 请前往 Supabase Dashboard 选择 Authentication -> Policies，关闭表的 Row Level Security (RLS) 或添加允许匿名访问的策略。详情: ' + error.message : error.message || JSON.stringify(error));
+      }
     }, '保存销售项目跟进信息');
   },
 
